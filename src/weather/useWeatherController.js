@@ -22,7 +22,8 @@ export default function useWeatherController() {
   const actions = useMemo(() => {
     function showStatus(message, isError = false) {
       clearTimeout(statusTimerRef.current);
-      setStatus({ message, isError });
+      // id가 바뀌면 토스트를 새로 그려, 연달아 복사해도 올라오는 애니메이션이 다시 나온다
+      setStatus({ message, isError, id: Date.now() });
       // 오류는 다음 동작까지 남겨 두고, 일반 안내는 잠시 뒤 사라진다
       if (!isError) statusTimerRef.current = setTimeout(() => setStatus(null), 6000);
     }

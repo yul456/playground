@@ -1,18 +1,31 @@
+/* 카드와 같은 색이면 아래 예보 목록에 묻혀 보여서 반대 색으로 띄운다 */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: 32px;
   transform: translateX(-50%);
-  width: min(688px, calc(100% - 32px));
-  margin: 0;
-  padding: 14px 18px;
+  width: max-content;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 16px 24px;
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--bg);
   /* 지도 컨트롤(z-index 1000)보다 위에 뜨게 한다 */
   z-index: 2000;
-  font-size: 0.9rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  font-size: 1rem;
+  font-weight: 500;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  animation: toast-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
-.toast[hidden] { display: none; }
-.toast.error { border-color: #ef4444; color: #ef4444; }
+.toast.error { background: #dc2626; color: #fff; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 24px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
 
 .loading-bar {
   position: fixed;
@@ -71,6 +84,9 @@
 .map-placeholder p { margin: 0; }
 .map-placeholder .hint { color: var(--muted); font-size: 0.85rem; }
 .map-placeholder button { margin-top: 12px; }
+
+.leaflet-popup-pane { transition: opacity 0.15s; }
+.map.moving .leaflet-popup-pane { opacity: 0; pointer-events: none; }
 
 /* Leaflet 팝업은 다크 모드에서도 흰 바탕이라 글자색을 고정한다 */
 .marker-popup { color: #1c2733; font-family: inherit; }

@@ -61,6 +61,7 @@ export default function WeatherMap({ view, onPick, onSkip, onCopy }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const lastOpenedRef = useRef(null);
   // Leaflet 이벤트 안에서 항상 최신 값을 쓰도록 ref에 담는다
   const latest = useRef({ view, onPick, onCopy });
   latest.current = { view, onPick, onCopy };
@@ -80,6 +81,10 @@ export default function WeatherMap({ view, onPick, onSkip, onCopy }) {
       const marker = L.marker([lat, lon], { icon: pinIcon })
         .addTo(map)
         .bindPopup(() => buildPopup(latest.current.view, latest.current.onCopy), { minWidth: 220 });
+      // 지도를 끌거나 확대·축소하는 동안에는 핀 메뉴를 숨겼다가, 움직임이 끝나면(관성 이동 포함) 다시 보여준다
+      const container = map.getContainer();
+      map.on("dragstart zoomstart", () => container.classList.add("moving"));
+      map.on("moveend", () => container.classList.remove("moving"));
       map.on("click", (e) => {
         marker.closePopup();
         marker.setLatLng(e.latlng);
@@ -87,19 +92,24 @@ export default function WeatherMap({ view, onPick, onSkip, onCopy }) {
       });
       mapRef.current = map;
       markerRef.current = marker;
-      return;
+    } else {
+      markerRef.current.setLatLng([lat, lon]);
+      // 지도에서 직접 고른 위치는 사용자가 맞춰 둔 배율을 유지한다
+      if (kind === "picked") mapRef.current.panTo([lat, lon]);
+      else mapRef.current.setView([lat, lon], MAP_ZOOM);
     }
 
-    markerRef.current.setLatLng([lat, lon]);
-    // 지도에서 직접 고른 위치는 사용자가 맞춰 둔 배율을 유지한다
-    if (kind === "picked") mapRef.current.panTo([lat, lon]);
-    else mapRef.current.setView([lat, lon], MAP_ZOOM);
+    // 현재 위치나 지도에서 고른 위치는 지역명까지 받아 온 뒤 핀 메뉴를 바로 열어 준다.
+    // 새로고침으로 같은 위치를 다시 받을 때는 열지 않는다
+    if (kind !== "default" && !lastOpenedRef.current?.equals([lat, lon])) markerRef.current.openPopup();
+    lastOpenedRef.current = L.latLng(lat, lon);
   }, [view]);
 
   useEffect(() => () => {
     mapRef.current?.remove();
     mapRef.current = null;
     markerRef.current = null;
+    lastOpenedRef.current = null;
   }, []);
 
   return (

@@ -20,8 +20,11 @@ export default function App() {
     <>
       {/* 로딩·안내는 화면 위에 떠 있게 해 지도·날씨 위치가 밀리지 않게 한다 */}
       <div className={`loading-bar${locating || requests > 0 ? " active" : ""}`} aria-hidden="true" />
-      <div className={`card toast${status?.isError ? " error" : ""}`} role="status" aria-live="polite" hidden={!status}>
-        {status?.message}
+      {/* 화면 낭독기가 알림을 읽도록 바깥 영역은 그대로 두고 안쪽 토스트만 새로 그린다 */}
+      <div role="status" aria-live="polite">
+        {status && (
+          <div key={status.id} className={`toast${status.isError ? " error" : ""}`}>{status.message}</div>
+        )}
       </div>
 
       <main className={`container${requests > 0 ? " loading-weather" : ""}`}>
