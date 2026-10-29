@@ -1,0 +1,75 @@
+/* 모든 기능 페이지가 함께 쓰는 색상·기본 스타일 */
+:root {
+  --bg: #eef3f9;
+  --card: #ffffff;
+  --text: #1c2733;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --border: #dbe3ee;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1720;
+    --card: #1a2430;
+    --text: #e6edf5;
+    --muted: #94a3b8;
+    --accent: #60a5fa;
+    --border: #2a3644;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px;
+}
+
+h1 { margin: 0; font-size: 1.6rem; }
+h2 { font-size: 1.1rem; margin: 28px 0 12px; }
+.subtitle { margin: 4px 0 20px; color: var(--muted); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+button {
+  font: inherit;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 18px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.back-link:hover { color: var(--accent); }
+
+footer { margin-top: 32px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+footer a { color: inherit; }

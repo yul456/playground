@@ -1,72 +1,3 @@
-:root {
-  --bg: #eef3f9;
-  --card: #ffffff;
-  --text: #1c2733;
-  --muted: #64748b;
-  --accent: #2563eb;
-  --border: #dbe3ee;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1720;
-    --card: #1a2430;
-    --text: #e6edf5;
-    --muted: #94a3b8;
-    --accent: #60a5fa;
-    --border: #2a3644;
-  }
-}
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-  line-height: 1.5;
-}
-
-.container {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 32px 16px;
-}
-
-h1 { margin: 0; font-size: 1.6rem; }
-h2 { font-size: 1.1rem; margin: 28px 0 12px; }
-.subtitle { margin: 4px 0 20px; color: var(--muted); }
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
-}
-
-.hidden { display: none; }
-
-button {
-  font: inherit;
-  border: 0;
-  border-radius: 10px;
-  padding: 10px 18px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-}
-button.secondary {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--border);
-  margin-top: 16px;
-}
-
-#status.error { border-color: #ef4444; color: #ef4444; }
-
-/* 지도 컨트롤(z-index 1000)보다 위에 뜨게 한다 */
 .toast {
   position: fixed;
   left: 50%;
@@ -75,10 +6,13 @@ button.secondary {
   width: min(688px, calc(100% - 32px));
   margin: 0;
   padding: 14px 18px;
+  /* 지도 컨트롤(z-index 1000)보다 위에 뜨게 한다 */
   z-index: 2000;
   font-size: 0.9rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
+.toast[hidden] { display: none; }
+.toast.error { border-color: #ef4444; color: #ef4444; }
 
 .loading-bar {
   position: fixed;
@@ -107,9 +41,6 @@ button.secondary {
   to { left: 100%; }
 }
 
-#weather { transition: opacity 0.2s; }
-body.loading-weather #weather { opacity: 0.55; }
-
 .map-card { padding: 12px; }
 .map-header {
   display: flex;
@@ -120,10 +51,10 @@ body.loading-weather #weather { opacity: 0.55; }
   color: var(--muted);
   font-size: 0.9rem;
 }
-.map-header button { margin: 0; padding: 6px 12px; white-space: nowrap; }
+.map-header button { padding: 6px 12px; white-space: nowrap; }
+
 .map-wrap { position: relative; }
-#map { height: 440px; border-radius: 10px; }
-/* 위치가 정해지기 전까지 지도 자리를 같은 크기로 채워 둔다 */
+.map { height: 440px; border-radius: 10px; }
 .map-placeholder {
   position: absolute;
   inset: 0;
@@ -137,7 +68,6 @@ body.loading-weather #weather { opacity: 0.55; }
   text-align: center;
   z-index: 1000;
 }
-.map-placeholder.hidden { display: none; }
 .map-placeholder p { margin: 0; }
 .map-placeholder .hint { color: var(--muted); font-size: 0.85rem; }
 .map-placeholder button { margin-top: 12px; }
@@ -170,6 +100,9 @@ body.loading-weather #weather { opacity: 0.55; }
 .popup-actions button:disabled { color: #94a3b8; cursor: default; background: #fff; }
 .leaflet-container .popup-actions a.naver { color: #03a94d; }
 .leaflet-container .popup-actions a.kakao { color: #3c1e1e; background: #fee500; border-color: #fee500; }
+
+.weather { transition: opacity 0.2s; }
+.loading-weather .weather { opacity: 0.55; }
 
 .location { font-weight: 600; font-size: 1.1rem; }
 .current-main { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
@@ -204,11 +137,10 @@ body.loading-weather #weather { opacity: 0.55; }
 .daily .range { font-variant-numeric: tabular-nums; }
 .daily .range .min { color: var(--muted); }
 
-footer { margin-top: 32px; color: var(--muted); font-size: 0.8rem; text-align: center; }
-footer a { color: inherit; }
+.refresh { margin-top: 16px; }
 
 @media (max-width: 420px) {
   .details { grid-template-columns: repeat(2, 1fr); }
   /* 휴대폰에서는 날씨 카드가 화면 안에 조금 보이도록 지도를 낮춘다 */
-  #map { height: 340px; }
+  .map { height: 340px; }
 }
