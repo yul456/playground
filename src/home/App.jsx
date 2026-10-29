@@ -1,4 +1,5 @@
 // 첫 화면에 보여줄 기능 목록. 새 기능 페이지를 만들면 여기와 vite.config.js에 추가한다
+// path: 이 repo 안의 기능 폴더, url: 별도 repo로 분리한 기능의 전체 주소
 const FEATURES = [
   {
     path: "weather/",
@@ -18,8 +19,8 @@ export default function App() {
 
       <ul className="feature-list">
         {FEATURES.map((feature) => (
-          <li key={feature.path}>
-            <a className="card feature-card" href={`${import.meta.env.BASE_URL}${feature.path}`}>
+          <li key={feature.url ?? feature.path}>
+            <a className="card feature-card" href={feature.url ?? `${import.meta.env.BASE_URL}${feature.path}`}>
               <span className="feature-icon" aria-hidden="true">{feature.icon}</span>
               <span>
                 <span className="feature-title">{feature.title}</span>

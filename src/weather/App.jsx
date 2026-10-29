@@ -1,3 +1,4 @@
+import { HUB_URL } from "../shared/site.js";
 import CurrentWeather from "./CurrentWeather.jsx";
 import DailyForecast from "./DailyForecast.jsx";
 import WeatherMap from "./WeatherMap.jsx";
@@ -24,7 +25,7 @@ export default function App() {
       </div>
 
       <main className={`container${requests > 0 ? " loading-weather" : ""}`}>
-        <a className="back-link" href={import.meta.env.BASE_URL}>← Playground</a>
+        <a className="back-link" href={HUB_URL}>← Playground</a>
         <header>
           <h1>내 위치 날씨</h1>
           <p className="subtitle">위치 권한을 허용하면 현재 위치의 날씨를 보여줍니다.</p>
