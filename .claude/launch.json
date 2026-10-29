@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "static",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8000"],
-      "port": 8000
+      "name": "dev",
+      "runtimeExecutable": "zsh",
+      "runtimeArgs": ["-lc", "npm run dev"],
+      "port": 5500
     }
   ]
 }

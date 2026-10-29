@@ -4,21 +4,33 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>내 위치 날씨</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="loading-bar" class="loading-bar" aria-hidden="true"></div>
+  <div id="status" class="card toast hidden" role="status" aria-live="polite"></div>
   <main class="container">
     <header>
       <h1>내 위치 날씨</h1>
       <p class="subtitle">위치 권한을 허용하면 현재 위치의 날씨를 보여줍니다.</p>
     </header>
 
-    <section id="prompt" class="card">
-      <p>브라우저의 위치 정보를 사용해 날씨를 조회합니다.</p>
-      <button id="locate-btn" type="button">내 위치 날씨 보기</button>
+    <section id="map-card" class="card map-card">
+      <div class="map-header">
+        <span>지도를 클릭하면 그 위치의 날씨를, 핀을 누르면 복사·길찾기 메뉴를 보여줍니다.</span>
+        <button id="locate-btn" type="button" class="secondary">📍 내 위치로</button>
+      </div>
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div id="map-placeholder" class="map-placeholder">
+          <p>현재 위치를 확인하는 중…</p>
+          <p class="hint">위치 권한 요청이 뜨면 허용해 주세요.</p>
+          <button id="skip-locate-btn" type="button" class="secondary">기본 위치로 보기</button>
+        </div>
+      </div>
     </section>
-
-    <section id="status" class="card hidden" role="status" aria-live="polite"></section>
 
     <section id="weather" class="hidden">
       <div class="card current">
@@ -45,9 +57,12 @@
 
     <footer>
       날씨 데이터: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
+      · 지도: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
     </footer>
   </main>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -29,7 +29,7 @@ body {
 }
 
 .container {
-  max-width: 560px;
+  max-width: 720px;
   margin: 0 auto;
   padding: 32px 16px;
 }
@@ -65,6 +65,111 @@ button.secondary {
 }
 
 #status.error { border-color: #ef4444; color: #ef4444; }
+
+/* 지도 컨트롤(z-index 1000)보다 위에 뜨게 한다 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(688px, calc(100% - 32px));
+  margin: 0;
+  padding: 14px 18px;
+  z-index: 2000;
+  font-size: 0.9rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.loading-bar.active { opacity: 1; }
+.loading-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: var(--accent);
+  animation: loading-slide 1.1s ease-in-out infinite;
+}
+@keyframes loading-slide {
+  from { left: -40%; }
+  to { left: 100%; }
+}
+
+#weather { transition: opacity 0.2s; }
+body.loading-weather #weather { opacity: 0.55; }
+
+.map-card { padding: 12px; }
+.map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 4px 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.map-header button { margin: 0; padding: 6px 12px; white-space: nowrap; }
+.map-wrap { position: relative; }
+#map { height: 440px; border-radius: 10px; }
+/* 위치가 정해지기 전까지 지도 자리를 같은 크기로 채워 둔다 */
+.map-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 10px;
+  background: var(--bg);
+  text-align: center;
+  z-index: 1000;
+}
+.map-placeholder.hidden { display: none; }
+.map-placeholder p { margin: 0; }
+.map-placeholder .hint { color: var(--muted); font-size: 0.85rem; }
+.map-placeholder button { margin-top: 12px; }
+
+/* Leaflet 팝업은 다크 모드에서도 흰 바탕이라 글자색을 고정한다 */
+.marker-popup { color: #1c2733; font-family: inherit; }
+.popup-title { font-weight: 600; font-size: 0.95rem; }
+.popup-coords { color: #64748b; font-size: 0.8rem; margin: 2px 0 10px; }
+.popup-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.popup-actions button,
+.popup-actions a {
+  display: block;
+  padding: 7px 8px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #1c2733;
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.popup-actions button:hover,
+.popup-actions a:hover { background: #f1f5f9; }
+.popup-actions button:disabled { color: #94a3b8; cursor: default; background: #fff; }
+.leaflet-container .popup-actions a.naver { color: #03a94d; }
+.leaflet-container .popup-actions a.kakao { color: #3c1e1e; background: #fee500; border-color: #fee500; }
 
 .location { font-weight: 600; font-size: 1.1rem; }
 .current-main { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
@@ -104,4 +209,6 @@ footer a { color: inherit; }
 
 @media (max-width: 420px) {
   .details { grid-template-columns: repeat(2, 1fr); }
+  /* 휴대폰에서는 날씨 카드가 화면 안에 조금 보이도록 지도를 낮춘다 */
+  #map { height: 340px; }
 }
