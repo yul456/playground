@@ -4,6 +4,7 @@
 
 - 사이트: https://yul456.github.io/playground/
 - 날씨: https://yul456.github.io/playground/weather/
+- 사다리 타기: https://yul456.github.io/playground/ladder/
 
 ## 실행
 
@@ -23,10 +24,12 @@ npm run preview    # 빌드 결과를 5500 포트에서 확인
 ```
 index.html              첫 화면(기능 목록) 입구
 weather/index.html      날씨 기능 입구
+ladder/index.html       사다리 타기 입구
 src/
   shared/               모든 기능이 함께 쓰는 것 (base.css, site.js)
   home/                 첫 화면. FEATURES 배열에 기능 카드를 둔다
   weather/              날씨 기능
+  ladder/               사다리 타기
 scripts/
   check-boundaries.mjs  기능 폴더 경계 검사 (npm run build 전에 자동 실행)
 vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 목록
@@ -35,6 +38,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 기능 | 폴더 | 이 기능만 쓰는 패키지 |
 |---|---|---|
 | 날씨 | `src/weather/`, `weather/` | `leaflet` |
+| 사다리 타기 | `src/ladder/`, `ladder/` | 없음 |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.
 

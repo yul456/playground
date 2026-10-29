@@ -1,0 +1,220 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.toolbar button { padding: 8px 14px; }
+button:disabled { opacity: 0.45; cursor: default; }
+
+.stepper { display: flex; align-items: center; gap: 6px; margin-right: 12px; }
+.stepper button { width: 34px; padding: 6px 0; }
+.stepper-label { color: var(--muted); font-size: 0.9rem; margin-right: 2px; }
+.stepper-value { min-width: 2.6em; text-align: center; font-weight: 600; }
+
+.custom-note { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.9rem; }
+button.link {
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.9rem;
+  text-decoration: underline;
+}
+.toolbar .start { margin-left: auto; }
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* 이름 칸·결과 칸과 사다리 세로줄이 같은 간격이 되도록 칸 사이 여백 없이 나눈다 */
+.cells {
+  display: grid;
+  grid-template-columns: repeat(var(--count), 1fr);
+}
+.cell {
+  min-width: 0;
+  margin: 0 2px;
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+input.cell:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.cell.player {
+  border: 2px solid var(--color);
+  color: var(--text);
+  background: var(--card);
+}
+.cell.player:not(:disabled):hover { background: color-mix(in srgb, var(--color) 12%, var(--card)); }
+.cell.player:disabled { opacity: 1; background: color-mix(in srgb, var(--color) 18%, var(--card)); }
+
+/* 당첨 칸은 금색 테두리로 구분한다 */
+.cell.win { border-color: #f59e0b; color: #b45309; font-weight: 600; }
+.cell.result { transition: background 0.2s, border-color 0.2s; }
+
+.swaps { margin-top: 6px; }
+.swap {
+  justify-self: center;
+  width: min(100%, 40px);
+  padding: 2px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.swap:hover { color: var(--accent); border-color: var(--accent); }
+.cell.result.arrived {
+  border: 2px solid var(--color);
+  background: color-mix(in srgb, var(--color) 18%, var(--card));
+  font-weight: 600;
+}
+
+.board-wrap { position: relative; margin: 4px 0; }
+.ladder-board svg { display: block; }
+.pole { stroke: var(--border); stroke-width: 4; stroke-linecap: round; }
+.rung { stroke: var(--muted); stroke-width: 3; stroke-linecap: round; }
+.trace {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation-name: trace-draw;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes trace-draw {
+  to { stroke-dashoffset: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* animationend가 와야 결과가 표시되므로 애니메이션을 없애지 않고 아주 짧게 한다 */
+  .trace { animation-duration: 1ms !important; }
+}
+
+.board-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.summary h2 { margin: 0 0 12px; }
+
+/* 당첨/꽝 모드: 두 묶음으로 나눠 보여준다 */
+.win-lose { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.group { padding: 14px; border-radius: 12px; background: var(--bg); }
+.group h3 { margin: 0 0 10px; font-size: 1rem; }
+.group.win { background: color-mix(in srgb, #f59e0b 14%, var(--card)); border: 1px solid #f59e0b; }
+.group-count { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
+.group .empty { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chips li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--color);
+  background: var(--card);
+  font-size: 0.9rem;
+}
+.group.win .chips li { font-weight: 600; }
+
+/* 직접 입력한 결과 모드: 이름 → 결과 목록 */
+.result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.result-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-left: 4px solid var(--color);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.result-list .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-list .arrow { color: var(--muted); }
+.result-list .value { font-weight: 600; margin-left: auto; }
+
+/* 축하: 색종이 + 가운데 문구 */
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3000;
+}
+.confetti span {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  to { transform: translate(var(--drift), 105vh) rotate(calc(var(--rotate) + 720deg)); }
+}
+
+.celebration {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  z-index: 3001;
+  min-width: 260px;
+  max-width: calc(100% - 32px);
+  padding: 24px 32px;
+  border-radius: 20px;
+  background: var(--card);
+  border: 2px solid #f59e0b;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25);
+  text-align: center;
+  cursor: pointer;
+  animation: celebration-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+.celebration-emoji { font-size: 3rem; line-height: 1; }
+.celebration-title { margin-top: 8px; font-size: 1.5rem; font-weight: 700; }
+.celebration-names { margin-top: 4px; color: #b45309; font-weight: 600; word-break: keep-all; }
+@keyframes celebration-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
+  .celebration { animation: none; }
+}
+
+@media (max-width: 420px) {
+  .cell { font-size: 0.75rem; padding: 6px 2px; margin: 0 1px; }
+  .toggle { margin-left: 0; }
+  .toolbar .start { margin-left: 0; width: 100%; }
+  .win-lose { grid-template-columns: 1fr; }
+}

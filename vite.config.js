@@ -15,6 +15,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, "index.html"),
         weather: resolve(import.meta.dirname, "weather/index.html"),
+        ladder: resolve(import.meta.dirname, "ladder/index.html"),
       },
     },
   },

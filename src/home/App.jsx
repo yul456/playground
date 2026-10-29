@@ -7,6 +7,12 @@ const FEATURES = [
     title: "날씨",
     description: "현재 위치나 지도에서 고른 곳의 날씨와 7일 예보를 봅니다.",
   },
+  {
+    path: "ladder/",
+    icon: "🪜",
+    title: "사다리 타기",
+    description: "이름과 결과를 넣고 사다리를 타서 누가 뭐가 나오는지 정합니다.",
+  },
 ];
 
 export default function App() {
