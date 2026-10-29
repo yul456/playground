@@ -13,6 +13,12 @@ const FEATURES = [
     title: "사다리 타기",
     description: "이름과 결과를 넣고 사다리를 타서 누가 뭐가 나오는지 정합니다.",
   },
+  {
+    path: "golf/",
+    icon: "⛳",
+    title: "골프 스코어카드",
+    description: "홀마다 타수를 적고 타당·스킨스·니어리스트 내기를 정산합니다.",
+  },
 ];
 
 export default function App() {
