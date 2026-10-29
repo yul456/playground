@@ -218,3 +218,5 @@ input.cell:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .toolbar .start { margin-left: 0; width: 100%; }
   .win-lose { grid-template-columns: 1fr; }
 }
+
+.custom-title { margin: 16px 0 10px; font-size: 1rem; }

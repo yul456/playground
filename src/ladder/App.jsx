@@ -13,8 +13,8 @@ const LOSE = "꽝";
 const defaultName = (i) => `참가자${i + 1}`;
 const winLoseResults = (count, winners) => Array.from({ length: count }, (_, i) => (i < winners ? WIN : LOSE));
 const countWinners = (results) => results.filter((r) => r.trim() === WIN).length;
-// 결과 칸이 모두 당첨/꽝이면 당첨/꽝 모드. 하나라도 직접 바꾸면 어느 게 당첨인지 모르므로 단순 결과 모드로 보여준다
-const isWinLose = (results) => results.every((r) => r.trim() === WIN || r.trim() === LOSE);
+// 결과 칸 하나하나가 당첨, 꽝(빈칸 포함), 직접 입력한 문구 중 하나다
+const isWinLoseValue = (result) => [WIN, LOSE].includes(result.trim() || LOSE);
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 // 인원수가 바뀌어도 이미 입력한 값은 남기고, 늘어난 칸만 기본값으로 채운다
@@ -32,6 +32,12 @@ function withWinnerCount(list, winners) {
     else if (diff < 0 && next[i] === WIN) { next[i] = LOSE; diff++; }
   }
   return next;
+}
+
+// 당첨 개수를 고를 수 있는 범위. 당첨/꽝 칸 안에서만 고르고, 모든 칸이 당첨/꽝이면 꽝이 하나는 남게 한다
+function winnerRange(results) {
+  const cells = results.filter(isWinLoseValue).length;
+  return { min: cells ? 1 : 0, max: cells === results.length ? cells - 1 : cells };
 }
 
 function Stepper({ label, value, unit, min, max, onChange }) {
@@ -59,8 +65,10 @@ export default function App() {
   const [celebration, setCelebration] = useState(null);
 
   const playing = rungs !== null;
-  const winLose = isWinLose(results);
+  const hasWinLose = results.some(isWinLoseValue);
+  const customCount = results.filter((r) => !isWinLoseValue(r)).length;
   const winners = countWinners(results);
+  const range = winnerRange(results);
   const paths = useMemo(
     () => (rungs ? names.map((_, i) => tracePath(rungs, i)) : []),
     [rungs, names],
@@ -74,6 +82,7 @@ export default function App() {
   const allFinished = playing && finished.length === count;
   const resultOf = (player) => results[paths[player].end];
   const sortedFinished = [...finished].sort((a, b) => a - b);
+  const customFinished = sortedFinished.filter((p) => !isWinLoseValue(resultOf(p)));
 
   useEffect(() => {
     if (!celebration) return;
@@ -86,14 +95,28 @@ export default function App() {
     setCount(n);
     setNames((list) => resize(list, n, defaultName));
     setResults((list) => {
-      // 늘어난 칸은 꽝으로 채우고, 당첨/꽝 모드면 당첨이 0개나 전부가 되지 않게만 맞춘다
+      // 늘어난 칸은 꽝으로 채우고, 당첨 개수가 고를 수 있는 범위를 벗어나지 않게만 맞춘다
       const resized = resize(list, n, () => LOSE);
-      return isWinLose(resized) ? withWinnerCount(resized, clamp(countWinners(resized), 1, n - 1)) : resized;
+      const { min, max } = winnerRange(resized);
+      return withWinnerCount(resized, clamp(countWinners(resized), min, max));
     });
   }
 
+  // 당첨 ↔ 꽝을 바꾸고, 직접 입력한 문구는 꽝으로 되돌린다
   function toggleResult(index) {
-    setResults((list) => list.map((r, i) => (i === index ? (r.trim() === WIN ? LOSE : WIN) : r)));
+    setResults((list) => list.map((r, i) => {
+      if (i !== index) return r;
+      if (!isWinLoseValue(r)) return LOSE;
+      return r.trim() === WIN ? LOSE : WIN;
+    }));
+  }
+
+  // 직접 입력한 문구만 꽝으로 바꾸고 당첨 자리는 그대로 둔다. 당첨이 없어지면 하나는 둔다
+  function resetCustomResults() {
+    setResults((list) => {
+      const next = list.map((r) => (isWinLoseValue(r) ? r : LOSE));
+      return withWinnerCount(next, Math.max(1, countWinners(next)));
+    });
   }
 
   function updateAt(setter, index, value) {
@@ -129,7 +152,8 @@ export default function App() {
 
   function onTraceEnd(player) {
     setFinished((list) => (list.includes(player) ? list : [...list, player]));
-    if (winLose && resultOf(player).trim() === WIN) {
+    // 직접 입력한 문구가 섞여 있어도 당첨 칸에 도착하면 축하한다
+    if (resultOf(player).trim() === WIN) {
       // 축하가 떠 있는 동안 다른 당첨자가 도착하면 이름을 더하고 색종이를 다시 뿌린다
       const name = names[player];
       setCelebration((prev) => ({ id: Date.now(), names: prev ? [...prev.names, name] : [name] }));
@@ -144,7 +168,7 @@ export default function App() {
         <p className="subtitle">
           {playing
             ? "위쪽 이름을 누르면 사다리를 타고 내려갑니다."
-            : "이름을 입력하고 사다리를 만드세요. ⇅ 버튼으로 당첨/꽝 자리를 바꾸고, 결과 칸을 직접 고치면 입력한 결과로 진행합니다."}
+            : "이름을 입력하고 사다리를 만드세요. ⇅ 버튼으로 당첨/꽝을 바꾸고, 결과 칸에 원하는 문구를 직접 쓸 수도 있습니다."}
         </p>
       </header>
 
@@ -163,19 +187,20 @@ export default function App() {
           ) : (
             <>
               <Stepper label="인원" value={count} unit="명" min={MIN_PLAYERS} max={MAX_PLAYERS} onChange={changeCount} />
-              {winLose ? (
+              {hasWinLose && (
                 <Stepper
                   label="당첨"
                   value={winners}
                   unit="개"
-                  min={1}
-                  max={count - 1}
-                  onChange={(k) => setResults((list) => withWinnerCount(list, clamp(k, 1, count - 1)))}
+                  min={range.min}
+                  max={range.max}
+                  onChange={(k) => setResults((list) => withWinnerCount(list, clamp(k, range.min, range.max)))}
                 />
-              ) : (
+              )}
+              {customCount > 0 && (
                 <div className="custom-note">
-                  <span>직접 입력한 결과</span>
-                  <button type="button" className="link" onClick={() => setResults(winLoseResults(count, 1))}>
+                  <span>직접 입력 {customCount}칸</span>
+                  <button type="button" className="link" onClick={resetCustomResults}>
                     당첨/꽝으로 되돌리기
                   </button>
                 </div>
@@ -234,7 +259,7 @@ export default function App() {
                 key={i}
                 className={[
                   "cell result",
-                  winLose && result === WIN ? "win" : "",
+                  result.trim() === WIN ? "win" : "",
                   arrivals[i] !== undefined ? "arrived" : "",
                 ].join(" ")}
                 style={arrivals[i] !== undefined ? { "--color": COLORS[arrivals[i]] } : undefined}
@@ -245,7 +270,7 @@ export default function App() {
             ) : (
               <input
                 key={i}
-                className={`cell${winLose && result.trim() === WIN ? " win" : ""}`}
+                className={`cell${result.trim() === WIN ? " win" : ""}`}
                 value={result}
                 onChange={(e) => updateAt(setResults, i, e.target.value)}
                 placeholder={LOSE}
@@ -255,20 +280,24 @@ export default function App() {
             )))}
           </div>
 
-          {!playing && winLose && (
+          {!playing && (
             <div className="cells swaps">
-              {results.map((result, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className="swap"
-                  onClick={() => toggleResult(i)}
-                  title="당첨/꽝 바꾸기"
-                  aria-label={`${i + 1}번 결과를 ${result.trim() === WIN ? LOSE : WIN}(으)로 바꾸기`}
-                >
-                  ⇅
-                </button>
-              ))}
+              {results.map((result, i) => {
+                const custom = !isWinLoseValue(result);
+                const next = custom || result.trim() === WIN ? LOSE : WIN;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className="swap"
+                    onClick={() => toggleResult(i)}
+                    title={custom ? "꽝으로 되돌리기" : "당첨/꽝 바꾸기"}
+                    aria-label={`${i + 1}번 결과를 ${next}(으)로 바꾸기`}
+                  >
+                    {custom ? "↺" : "⇅"}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -277,13 +306,13 @@ export default function App() {
       {finished.length > 0 && (
         <section className="card summary">
           <h2>{allFinished ? "결과" : `결과 (${finished.length}/${count})`}</h2>
-          {winLose ? (
+          {hasWinLose && (
             <div className="win-lose">
               {[
                 { key: "win", title: "🎉 당첨", value: WIN },
                 { key: "lose", title: "꽝", value: LOSE },
               ].map((group) => {
-                const members = sortedFinished.filter((p) => resultOf(p).trim() === group.value);
+                const members = sortedFinished.filter((p) => (resultOf(p).trim() || LOSE) === group.value);
                 return (
                   <div key={group.key} className={`group ${group.key}`}>
                     <h3>{group.title} <span className="group-count">{members.length}명</span></h3>
@@ -300,16 +329,20 @@ export default function App() {
                 );
               })}
             </div>
-          ) : (
-            <ul className="result-list">
-              {sortedFinished.map((player) => (
-                <li key={player} style={{ "--color": COLORS[player] }}>
-                  <span className="name">{names[player]}</span>
-                  <span className="arrow">→</span>
-                  <span className="value">{resultOf(player)}</span>
-                </li>
-              ))}
-            </ul>
+          )}
+          {customFinished.length > 0 && (
+            <>
+              {hasWinLose && <h3 className="custom-title">그 밖의 결과</h3>}
+              <ul className="result-list">
+                {customFinished.map((player) => (
+                  <li key={player} style={{ "--color": COLORS[player] }}>
+                    <span className="name">{names[player]}</span>
+                    <span className="arrow">→</span>
+                    <span className="value">{resultOf(player)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </section>
       )}
