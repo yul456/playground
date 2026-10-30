@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { HUB_URL } from "../shared/site.js";
 import HoleEntry from "./HoleEntry.jsx";
+import PhotoImport from "./PhotoImport.jsx";
 import Scorecard from "./Scorecard.jsx";
 import Settlement from "./Settlement.jsx";
 import Setup from "./Setup.jsx";
@@ -13,7 +14,7 @@ const TABS = [
 ];
 
 export default function App() {
-  const { round, update, setScore, setHole, setPlayerCount, newRound } = useRound();
+  const { round, update, setScore, setHole, setPlayerCount, importScan, newRound } = useRound();
   const [tab, setTab] = useState("score");
 
   return (
@@ -41,6 +42,7 @@ export default function App() {
 
       {tab === "score" && (
         <>
+          <PhotoImport players={round.players} onApply={importScan} />
           <HoleEntry round={round} setScore={setScore} setHole={setHole} />
           <Scorecard round={round} setScore={setScore} onPickHole={(h) => { setHole(h); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
         </>

@@ -229,3 +229,44 @@ button.danger { background: #dc2626; }
 .picker-option.selected { border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
 .picker-name { font-size: 0.75rem; color: var(--muted); }
 .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+
+/* 사진으로 입력 */
+.photo-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.photo-head p { margin: 4px 0 0; }
+.file-button {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.file-button.disabled { opacity: 0.5; cursor: default; }
+.scan-progress { margin: 12px 0 0; font-size: 0.9rem; color: var(--muted); }
+.scan-error { margin: 12px 0 0; color: #dc2626; }
+.photo-preview { margin: 8px 0 12px; }
+.photo-preview summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
+.photo-preview img { display: block; max-width: 100%; max-height: 70vh; margin-top: 8px; border-radius: 8px; }
+
+.review-table { border-collapse: collapse; font-size: 0.85rem; }
+.review-table th, .review-table td { padding: 2px; text-align: center; }
+.review-table thead th { color: var(--muted); font-weight: 500; }
+.review-table tbody th { position: sticky; left: 0; background: var(--card); z-index: 1; }
+.review-table select { max-width: 7em; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; font-size: 0.8rem; }
+.review-input {
+  width: 2.6em;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.review-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.review-input.unsure { background: #fef3c7; border-color: #f59e0b; color: #1c2733; }
+.review-checks { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 4px; font-size: 0.85rem; }
+.review-checks .ok { color: #16a34a; }
+.review-checks .warn { color: #b45309; }
+.review-actions { display: flex; justify-content: flex-end; gap: 8px; }

@@ -42,7 +42,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 |---|---|---|
 | 날씨 | `src/weather/`, `weather/` | `leaflet` |
 | 사다리 타기 | `src/ladder/`, `ladder/` | 없음 |
-| 골프 스코어카드 | `src/golf/`, `golf/` | 없음 |
+| 골프 스코어카드 | `src/golf/`, `golf/` | 없음 (사진 인식은 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드) |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.
 

@@ -86,6 +86,19 @@ export default function useRound() {
       // 없어진 참가자가 받은 특별상은 지운다
       awards: r.awards.filter((a) => a.winner < count),
     })),
+    // 사진에서 읽은 파·타수를 넣는다. 사진에 있는 홀만 바꾸고, 참가자가 모자라면 늘린다
+    importScan: ({ pars, rows }) => setRound((r) => {
+      const count = Math.max(r.players.length, ...rows.map((row) => row.target + 1));
+      const scores = Array.from({ length: count }, (_, i) => [...(r.scores[i] ?? emptyScores())]);
+      for (const row of rows) row.strokes.forEach((v, h) => { scores[row.target][h] = v; });
+      return withParFilled({
+        ...r,
+        players: Array.from({ length: count }, (_, i) => r.players[i] ?? defaultName(i)),
+        pars: r.pars.map((p, h) => pars[h] ?? p),
+        scores,
+        hole: 0,
+      });
+    }),
     newRound: () => setRound((r) => createRound(r)),
   };
 }
