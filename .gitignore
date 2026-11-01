@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 
 # JetBrains IDE (PhpStorm 등) 개인 설정
 .idea/
+
+# 골프 사진 인식 시험 카드: 개인 스코어카드라 이 컴퓨터에만 둔다 (CLAUDE.md 참고)
+local-tests/
