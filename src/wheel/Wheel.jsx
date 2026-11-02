@@ -22,13 +22,16 @@ function slicePath(i, count) {
 
 // 돌림판. 원판만 돌고 바늘(맨 위)과 가운데 돌리기 버튼은 제자리에 있다.
 // rotation은 멈춰 있을 때의 각도, spin({ from, to, duration })이 있으면 from에서 to까지 돌린 뒤 onSpinEnd를 부른다.
+// 도는 동안 칸 경계가 바늘을 지날 때마다 onTick을 부른다 (딸깍 소리).
 // highlight 칸이 있으면 나머지 칸을 흐리게 해 뽑힌 칸이 보이게 한다
-export default function Wheel({ labels, rotation, spin, highlight, canSpin, onSpin, onSpinEnd }) {
+export default function Wheel({ labels, rotation, spin, highlight, canSpin, onSpin, onSpinEnd, onTick }) {
   const discRef = useRef(null);
   const pointerRef = useRef(null);
-  // 애니메이션 도중에 바뀌어도 마지막 함수를 부르도록 ref에 담는다
+  // 애니메이션 도중에 바뀌어도(소리를 끄고 켜는 등) 마지막 함수를 부르도록 ref에 담는다
   const onSpinEndRef = useRef(onSpinEnd);
   onSpinEndRef.current = onSpinEnd;
+  const onTickRef = useRef(onTick);
+  onTickRef.current = onTick;
   const count = labels.length;
   const size = labelSize(count);
   const maxWidth = (LABEL_END - HUB - 6) / size;
@@ -52,6 +55,7 @@ export default function Wheel({ labels, rotation, spin, highlight, canSpin, onSp
       if (slice !== lastSlice) {
         lastSlice = slice;
         if (!calm) pointer.animate?.(POINTER_TICK, { duration: 140, easing: "ease-out" });
+        onTickRef.current?.();
       }
       if (t < 1) frame = requestAnimationFrame(step);
       else onSpinEndRef.current();

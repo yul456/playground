@@ -34,6 +34,7 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
 
 - 결과는 돌리기 전에 `randomIndex`(crypto, 나머지 편향 없음)로 먼저 뽑고, 바늘이 그 칸 안쪽(경계 15% 밖)에 멈추도록 `spinTarget`으로 회전 각도를 정한다. 회전 애니메이션이 결과를 정하지 않는다.
 - 회전은 CSS transition이 아니라 requestAnimationFrame으로 매 프레임 원판 각도를 바꾼다. 실제 돌림판처럼 처음에 빨라졌다가 천천히 멈추는 움직임(`spinProgress`)은 CSS 곡선 하나로 만들 수 없다. 돌리는 동안 React는 다시 그리지 않고, 끝나면 멈춘 각도를 상태에 넣는다.
+- 딸깍 소리는 파일 없이 Web Audio로 만든다(`tickSound.js`). 브라우저는 사용자가 누르기 전에는 소리를 막으므로 AudioContext는 돌리기 버튼이나 소리 켜기를 누른 그때 만들고 깨운다(`unlockSound`). 잠든(suspended) 동안 예약한 소리는 깨어날 때 한꺼번에 나므로 running일 때만 소리를 낸다.
 
 ## 날씨 기능 주의점
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Confetti from "../shared/Confetti.jsx";
 import { HUB_URL } from "../shared/site.js";
+import { playTick, unlockSound } from "./tickSound.js";
 import Wheel from "./Wheel.jsx";
 import { MAX_ITEMS, MIN_ITEMS, randomIndex, spinTarget } from "./wheel.js";
 
@@ -20,11 +21,12 @@ const MAX_HISTORY = 100;
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (typeof saved?.text === "string") return { text: saved.text, removePicked: Boolean(saved.removePicked) };
+    // sound는 나중에 더한 설정이라 그 전에 저장한 값에는 없다. 없으면 켠다
+    if (typeof saved?.text === "string") return { text: saved.text, removePicked: Boolean(saved.removePicked), sound: saved.sound !== false };
   } catch {
     // 저장소를 못 쓰는 환경(사생활 보호 모드 등)이면 기본값으로 시작한다
   }
-  return { text: PRESETS[0].items.join("\n"), removePicked: false };
+  return { text: PRESETS[0].items.join("\n"), removePicked: false, sound: true };
 }
 
 // 한 줄에 하나씩. 빈 줄과 앞뒤 공백은 뺀다
@@ -32,7 +34,7 @@ const linesOf = (text) => text.split("\n").map((line) => line.trim()).filter(Boo
 
 export default function App() {
   const [settings, setSettings] = useState(load);
-  const { text, removePicked } = settings;
+  const { text, removePicked, sound } = settings;
   const lines = linesOf(text);
   const items = lines.slice(0, MAX_ITEMS);
   // 이번에 돌림판에서 뺀 항목(items 번호). 목록을 고치면 비운다
@@ -69,6 +71,7 @@ export default function App() {
 
   function startSpin() {
     if (!canSpin) return;
+    if (sound) unlockSound();
     // 결과는 돌리기 전에 먼저 뽑고, 원판은 그 칸에 멈추도록 돌린다
     const winner = randomIndex(next.length);
     // 움직임 줄이기를 켠 사람에게는 짧게 돈다
@@ -103,6 +106,12 @@ export default function App() {
     setResult(null);
   }
 
+  function changeSound(on) {
+    // 돌아가는 도중에 켜도 바로 소리가 나도록 누른 그때 소리를 깨운다
+    if (on) unlockSound();
+    setSettings((s) => ({ ...s, sound: on }));
+  }
+
   let hint = "가운데 버튼을 눌러 돌려 보세요.";
   if (items.length < MIN_ITEMS) hint = `항목을 ${MIN_ITEMS}개 이상 넣어 주세요.`;
   else if (next.length < MIN_ITEMS) hint = "남은 항목이 하나뿐입니다. 모두 다시 넣고 돌려 주세요.";
@@ -124,6 +133,7 @@ export default function App() {
           canSpin={canSpin}
           onSpin={startSpin}
           onSpinEnd={finishSpin}
+          onTick={sound ? playTick : undefined}
         />
         <p className="wheel-result" role="status">
           {spin ? "돌아가는 중…" : result ? <>🎉 <strong key={result.id}>{result.label}</strong></> : hint}
@@ -138,6 +148,10 @@ export default function App() {
               onChange={(e) => setSettings((s) => ({ ...s, removePicked: e.target.checked }))}
             />
             뽑힌 항목은 다음 판에서 빼기
+          </label>
+          <label>
+            <input type="checkbox" checked={sound} onChange={(e) => changeSound(e.target.checked)} />
+            딸깍 소리
           </label>
           {leftOut > 0 && (
             <span>
