@@ -1,0 +1,22 @@
+/* 색종이 (Confetti.jsx) */
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3000;
+}
+.confetti span {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  to { transform: translate(var(--drift), 105vh) rotate(calc(var(--rotate) + 720deg)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
+}

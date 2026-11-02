@@ -163,26 +163,7 @@ input.cell:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .result-list .arrow { color: var(--muted); }
 .result-list .value { font-weight: 600; margin-left: auto; }
 
-/* 축하: 색종이 + 가운데 문구 */
-.confetti {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 3000;
-}
-.confetti span {
-  position: absolute;
-  top: -20px;
-  border-radius: 2px;
-  animation-name: confetti-fall;
-  animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
-  animation-fill-mode: forwards;
-}
-@keyframes confetti-fall {
-  to { transform: translate(var(--drift), 105vh) rotate(calc(var(--rotate) + 720deg)); }
-}
-
+/* 축하: 가운데 문구 (색종이는 shared/Confetti.jsx) */
 .celebration {
   position: fixed;
   left: 50%;
@@ -208,7 +189,6 @@ input.cell:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .confetti { display: none; }
   .celebration { animation: none; }
 }
 

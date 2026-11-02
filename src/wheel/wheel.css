@@ -1,0 +1,106 @@
+.card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+.card h2 small { margin-left: 6px; color: var(--muted); font-size: 0.85rem; font-weight: 400; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+/* 돌림판 */
+.wheel-card { display: flex; flex-direction: column; align-items: center; }
+.wheel { position: relative; width: min(100%, 440px); aspect-ratio: 1; margin-top: 10px; }
+.wheel-disc { width: 100%; height: 100%; }
+.wheel-disc svg { display: block; width: 100%; height: 100%; }
+.wheel-rim { fill: none; stroke: #1c2733; stroke-width: 4; }
+.wheel-empty { fill: var(--bg); }
+.wheel-disc path { stroke: #fff; stroke-width: 0.8; transition: opacity 0.3s; }
+.wheel-disc path.dim { opacity: 0.35; }
+.wheel-label { fill: #fff; font-weight: 700; paint-order: stroke; stroke: rgba(0, 0, 0, 0.3); stroke-width: 0.8px; }
+/* 맨 위에서 원판을 가리키는 바늘 */
+.wheel-pointer {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 15px solid transparent;
+  border-right: 15px solid transparent;
+  border-top: 30px solid #f59e0b;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+  /* 칸 경계를 지날 때 윗변을 축으로 튕긴다 */
+  transform-origin: 50% 0;
+}
+.wheel-spin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 25%;
+  height: 25%;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: 4px solid #1c2733;
+  border-radius: 50%;
+  background: #fff;
+  color: #1c2733;
+  font-size: clamp(0.85rem, 3.6vw, 1.15rem);
+  font-weight: 800;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.3);
+}
+.wheel-spin:hover:not(:disabled) { background: #fef3c7; }
+/* 돌아가는 동안에도 가운데 버튼이 비쳐 보이지 않게 한다 */
+.wheel-spin:disabled { opacity: 1; color: #94a3b8; }
+
+/* 결과 칸은 높이를 미리 잡아 두어 결과가 나올 때 아래 내용이 밀리지 않게 한다 */
+.wheel-result { min-height: 3.4rem; margin: 16px 0 0; color: var(--muted); text-align: center; word-break: keep-all; }
+.wheel-result strong { display: inline-block; color: var(--text); font-size: 1.9rem; animation: result-pop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
+@keyframes result-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+.wheel-note { margin: 4px 0 0; color: var(--muted); font-size: 0.85rem; }
+.wheel-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.wheel-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.wheel-options button { margin-left: 8px; padding: 4px 10px; font-size: 0.85rem; }
+
+/* 항목 */
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.presets button { padding: 6px 12px; font-size: 0.85rem; }
+.items-input {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+.items-hint { margin: 8px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+/* 뽑힌 차례 */
+.history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.history-head h2 { margin: 0; }
+.history-head button { padding: 4px 12px; font-size: 0.85rem; }
+.history { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.history li { display: flex; align-items: center; gap: 6px; padding: 4px 12px 4px 4px; border-radius: 999px; background: var(--bg); font-size: 0.9rem; }
+.history .order {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-result strong { animation: none; }
+}

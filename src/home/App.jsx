@@ -14,6 +14,12 @@ const FEATURES = [
     description: "이름과 결과를 넣고 사다리를 타서 누가 뭐가 나오는지 정합니다.",
   },
   {
+    path: "wheel/",
+    icon: "🎡",
+    title: "돌림판",
+    description: "항목을 넣고 돌림판을 돌려 하나를 뽑습니다. 점심 메뉴 고르기, 순서 정하기에 씁니다.",
+  },
+  {
     path: "golf/",
     icon: "⛳",
     title: "골프 스코어카드",

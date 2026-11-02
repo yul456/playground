@@ -30,6 +30,11 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
 - 지난 날씨(archive API)는 한 해에 한 번씩 불러야 하고, 동시에 많이 부르면 429(Too many concurrent requests)가 난다. 그래서 두 해씩 부르고, 429면 잠시 뒤 다시 부른다.
 - 골프장 목록과 지도는 OpenStreetMap 데이터(ODbL)라 화면에 출처를 표시한다.
 
+## 돌림판 주의점
+
+- 결과는 돌리기 전에 `randomIndex`(crypto, 나머지 편향 없음)로 먼저 뽑고, 바늘이 그 칸 안쪽(경계 15% 밖)에 멈추도록 `spinTarget`으로 회전 각도를 정한다. 회전 애니메이션이 결과를 정하지 않는다.
+- 회전은 CSS transition이 아니라 requestAnimationFrame으로 매 프레임 원판 각도를 바꾼다. 실제 돌림판처럼 처음에 빨라졌다가 천천히 멈추는 움직임(`spinProgress`)은 CSS 곡선 하나로 만들 수 없다. 돌리는 동안 React는 다시 그리지 않고, 끝나면 멈춘 각도를 상태에 넣는다.
+
 ## 날씨 기능 주의점
 
 - 위치 요청은 `enableHighAccuracy: true`를 유지한다. macOS 크롬에서 false면 캐시된 위치가 없을 때 응답이 오지 않는다.
