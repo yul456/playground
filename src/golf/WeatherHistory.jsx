@@ -1,22 +1,19 @@
+import WeatherIcon from "../shared/WeatherIcon.jsx";
 import { describeWeather } from "../shared/weatherCodes.js";
-import { RAINY_ROUND_MM, WINDY_GUST, WINDY_SPEED, fmt, monthDayLabel, roundEnd, roundHours, summarize } from "./roundWeather.js";
+import { RAINY_ROUND_MM, WINDY_GUST, WINDY_SPEED, fmt, monthDayLabel, roundEnd, summarizeHistory } from "./roundWeather.js";
 
 // 지난 몇 해 같은 날, 같은 라운드 시간의 날씨. 예보가 없는 먼 날짜를 고를 때 특히 쓸모 있다
 export default function WeatherHistory({ history, loading, date, tee, holes }) {
-  if (!history) return null;
-  const years = history
-    .map(({ year, hours }) => ({ year, s: summarize(roundHours(hours, tee, holes)) }))
-    .filter((y) => y.s);
-  if (!years.length) return null;
-  const rainy = years.filter((y) => y.s.rain >= RAINY_ROUND_MM).length;
-  const average = (pick) => years.reduce((sum, y) => sum + pick(y.s), 0) / years.length;
+  const past = history && summarizeHistory(history, tee, holes);
+  if (!past) return null;
+  const { years, rainy, temp } = past;
 
   return (
     <section className={`card weather-card${loading ? " loading" : ""}`}>
       <h2>지난 {years.length}년 같은 날 <small>{monthDayLabel(date)} {tee}~{roundEnd(tee, holes)}</small></h2>
       <p className="history-summary">
         {years.length}년 중 라운드 시간에 비가 온 해({RAINY_ROUND_MM}mm 이상)는 <strong>{rainy}번</strong>이고,
-        기온은 평균 {fmt(average((s) => s.temp[0]))}~{fmt(average((s) => s.temp[1]))}°였습니다.
+        기온은 평균 {fmt(temp[0])}~{fmt(temp[1])}°였습니다.
       </p>
       <div className="table-scroll">
         <table className="hour-table">
@@ -31,12 +28,12 @@ export default function WeatherHistory({ history, loading, date, tee, holes }) {
           </thead>
           <tbody>
             {years.map(({ year, s }) => {
-              const [desc, icon] = describeWeather(s.code);
+              const [desc] = describeWeather(s.code);
               const windy = (s.wind?.wind ?? 0) >= WINDY_SPEED || (s.gust?.gust ?? 0) >= WINDY_GUST;
               return (
                 <tr key={year}>
                   <th scope="row">{year}</th>
-                  <td title={desc}><span aria-hidden="true">{icon}</span> <span className="weather-desc">{desc}</span></td>
+                  <td title={desc}><WeatherIcon code={s.code} aria-hidden="true" /> <span className="weather-desc">{desc}</span></td>
                   <td>{fmt(s.temp[0])}~{fmt(s.temp[1])}°</td>
                   <td className={s.rain >= RAINY_ROUND_MM ? "wet" : undefined}>{fmt(s.rain, 1)}mm</td>
                   <td className={windy ? "windy" : undefined}>

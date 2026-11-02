@@ -1,15 +1,16 @@
+import WeatherIcon from "../shared/WeatherIcon.jsx";
 import { describeWeather } from "../shared/weatherCodes.js";
 import { KIND_LABELS, placeLabel } from "./api.js";
 
 export default function CurrentWeather({ view }) {
   const c = view.weather.current;
-  const [desc, icon] = describeWeather(c.weather_code);
+  const [desc] = describeWeather(c.weather_code);
 
   return (
     <div className="card current">
       <div className="location">{placeLabel(view)} ({KIND_LABELS[view.kind]})</div>
       <div className="current-main">
-        <span className="icon">{icon}</span>
+        <WeatherIcon code={c.weather_code} className="icon" />
         <span className="temp">{Math.round(c.temperature_2m)}°</span>
       </div>
       <div className="desc">{desc}</div>

@@ -25,6 +25,8 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
 
 - 골프장 이름 검색은 받아 둔 목록(`src/golf/golfCourses.js`)에서 페이지 안에서 한다. OpenStreetMap 검색(Nominatim)은 이름이 정확히 같아야 찾고, 입력하는 대로 검색(자동완성)하는 것이 이용 정책상 금지다. 목록은 `node scripts/golf-courses.mjs`로 새로 받는다 (Overpass, 2~3분).
 - Open-Meteo 예보는 오늘부터 16일째까지만 받을 수 있다 (그 뒤 날짜는 400 오류). 그 뒤 날짜는 지난 해 같은 날 기록만 보여 준다.
+- 예보는 골프장마다 16일 치를 한 번에 받아(`fetchForecast`) "라운드하기 좋은 날" 달력과 그날 예보가 함께 쓴다. 날짜를 바꿔도 예보는 다시 받지 않는다. 좋음·보통·나쁨 기준은 `roundWeather.js`의 `RATING`.
+- 공유 링크는 `golf/?lat=…&lon=…&d=YYYYMMDD&t=HHMM&h=18|9`다. 골프장 이름은 좌표로 목록에서 다시 찾는다. 링크로 들어오면 날씨 탭을 열고, 설정을 읽은 뒤 주소에서 지운다.
 - 지난 날씨(archive API)는 한 해에 한 번씩 불러야 하고, 동시에 많이 부르면 429(Too many concurrent requests)가 난다. 그래서 두 해씩 부르고, 429면 잠시 뒤 다시 부른다.
 - 골프장 목록과 지도는 OpenStreetMap 데이터(ODbL)라 화면에 출처를 표시한다.
 
@@ -32,3 +34,4 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
 
 - 위치 요청은 `enableHighAccuracy: true`를 유지한다. macOS 크롬에서 false면 캐시된 위치가 없을 때 응답이 오지 않는다.
 - API 키가 필요한 서비스는 쓰지 않는다. GitHub Pages는 소스가 공개되어 키가 노출된다.
+- 날씨 아이콘은 이모지를 바로 넣지 말고 `src/shared/WeatherIcon.jsx`로 그린다. 안개 이모지(🌫️)가 애플 기기에서 흐릿한 회색 네모로 보여서, 구름 이모지 아래에 안개 줄을 그린다.

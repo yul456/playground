@@ -1,10 +1,10 @@
+import WeatherIcon from "../shared/WeatherIcon.jsx";
 import { describeWeather } from "../shared/weatherCodes.js";
 import {
-  FORECAST_DAYS, WET_CHANCE, WET_MM, WINDY_GUST, WINDY_SPEED,
-  addDays, dateLabel, daysFromToday, fmt, roundEnd, roundHours, summarize, todayIso, windName,
+  FORECAST_DAYS, GRADE_LABELS, WET_CHANCE, WET_MM, WINDY_GUST, WINDY_SPEED,
+  addDays, clockOf, dateLabel, daylightWarning, daysFromToday, fmt, rateRound, roundEnd, roundHours, summarize, todayIso,
+  windName,
 } from "./roundWeather.js";
-
-const clock = (iso) => iso.slice(11, 16);
 
 // 바람이 불어 가는 쪽을 가리킨다. 풍향은 불어오는 쪽이라 ↓를 그만큼 돌린다
 function WindArrow({ deg }) {
@@ -17,13 +17,13 @@ function WindArrow({ deg }) {
 }
 
 function HourRow({ row }) {
-  const [desc, icon] = describeWeather(row.code);
+  const [desc] = describeWeather(row.code);
   const wet = (row.chance ?? 0) >= WET_CHANCE || (row.rain ?? 0) >= WET_MM;
   const windy = (row.wind ?? 0) >= WINDY_SPEED || (row.gust ?? 0) >= WINDY_GUST;
   return (
     <tr>
       <th scope="row">{row.hour}시</th>
-      <td title={desc}><span aria-hidden="true">{icon}</span> <span className="weather-desc">{desc}</span></td>
+      <td title={desc}><WeatherIcon code={row.code} aria-hidden="true" /> <span className="weather-desc">{desc}</span></td>
       <td>{fmt(row.temp)}°<small>체감 {fmt(row.feels)}°</small></td>
       <td className={wet ? "wet" : undefined}>
         {row.chance != null ? `${row.chance}%` : "–"}<small>{fmt(row.rain, 1)}mm</small>
@@ -35,7 +35,7 @@ function HourRow({ row }) {
   );
 }
 
-// 티오프부터 라운드가 끝날 때까지의 시간별 예보와 요약
+// 고른 날 티오프부터 라운드가 끝날 때까지의 시간별 예보와 요약 (forecast: 16일 예보)
 export default function RoundForecast({ forecast, loading, date, tee, holes }) {
   const end = roundEnd(tee, holes);
 
@@ -49,20 +49,26 @@ export default function RoundForecast({ forecast, loading, date, tee, holes }) {
       </section>
     );
   }
-  if (!forecast) return null;
+  const day = forecast?.days.find((d) => d.date === date);
+  if (!day) return null;
 
-  const rows = roundHours(forecast.hours, tee, holes);
+  const rows = roundHours(forecast.hours, date, tee, holes);
   const s = summarize(rows);
   if (!s) return null;
-  const sunrise = clock(forecast.sunrise);
-  const sunset = clock(forecast.sunset);
+  const { grade, reason } = rateRound(s);
+  const sunrise = clockOf(day.sunrise);
+  const sunset = clockOf(day.sunset);
+  const warning = daylightWarning(day, tee, holes);
   // 먼 날은 비 올 확률이 없고, 내내 0%면 몇 시라고 할 게 없다
   const rainy = s.chance?.chance > 0;
   const chance = !s.chance ? "확률 정보 없음" : rainy ? `최대 ${s.chance.chance}%` : "확률 0%";
 
   return (
     <section className={`card weather-card${loading ? " loading" : ""}`}>
-      <h2>라운드 예보 <small>{dateLabel(date)} {tee}~{end}</small></h2>
+      <h2>
+        라운드 예보 <small>{dateLabel(date)} {tee}~{end}</small>{" "}
+        <span className={`grade ${grade}`}>{GRADE_LABELS[grade]}{reason && ` · ${reason}`}</span>
+      </h2>
       <dl className="weather-summary">
         <div>
           <dt>기온</dt>
@@ -92,8 +98,7 @@ export default function RoundForecast({ forecast, loading, date, tee, holes }) {
           <dd>일출 {sunrise}<small>일몰 {sunset}</small></dd>
         </div>
       </dl>
-      {tee < sunrise && <p className="weather-warning">티오프가 해 뜨는 시각({sunrise})보다 이릅니다.</p>}
-      {end > sunset && <p className="weather-warning">라운드가 해 지는 시각({sunset}) 뒤에 끝납니다.</p>}
+      {warning && <p className="weather-warning">{warning}</p>}
 
       <div className="table-scroll">
         <table className="hour-table">
@@ -107,7 +112,7 @@ export default function RoundForecast({ forecast, loading, date, tee, holes }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => <HourRow key={row.hour} row={row} />)}
+            {rows.map((row) => <HourRow key={`${row.date} ${row.hour}`} row={row} />)}
           </tbody>
         </table>
       </div>

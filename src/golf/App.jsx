@@ -19,7 +19,8 @@ const TABS = [
 
 export default function App() {
   const { round, update, setScore, setHole, setPlayerCount, importScan, newRound } = useRound();
-  const [tab, setTab] = useState("score");
+  // 라운드 날씨 공유 링크(?lat=…)로 들어오면 날씨 탭부터 연다
+  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).has("lat") ? "weather" : "score"));
 
   return (
     <main className="container">

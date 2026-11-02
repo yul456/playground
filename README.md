@@ -28,7 +28,7 @@ weather/index.html      날씨 기능 입구
 ladder/index.html       사다리 타기 입구
 golf/index.html         골프 스코어카드 입구
 src/
-  shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, geo.js)
+  shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, WeatherIcon.jsx, geo.js)
   home/                 첫 화면. FEATURES 배열에 기능 카드를 둔다
   weather/              날씨 기능
   ladder/               사다리 타기

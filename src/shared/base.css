@@ -101,3 +101,17 @@ footer a { color: inherit; }
   from { left: -40%; }
   to { left: 100%; }
 }
+
+/* 안개 아이콘: 구름 이모지를 조금 올리고 아래에 길이가 다른 안개 줄 두 개를 그린다 (WeatherIcon) */
+.weather-icon.fog { position: relative; display: inline-block; }
+.weather-icon.fog > span { display: inline-block; transform: translateY(-0.12em) scale(0.92); }
+.weather-icon.fog::before,
+.weather-icon.fog::after {
+  content: "";
+  position: absolute;
+  height: 0.09em;
+  border-radius: 1em;
+  background: #9aa5b4;
+}
+.weather-icon.fog::before { left: 6%; right: 6%; bottom: 0.2em; }
+.weather-icon.fog::after { left: 20%; right: 20%; bottom: 0.04em; }

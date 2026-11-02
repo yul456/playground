@@ -1,5 +1,6 @@
-// 골프 라운드 날씨: 골프장 찾기, Open-Meteo 예보·지난 날씨 받기, 라운드 시간대 계산
+// 골프 라운드 날씨: 골프장 찾기, Open-Meteo 예보·지난 날씨 받기, 라운드 시간대 요약·평가, 공유
 // Open-Meteo는 API 키가 필요 없어 정적 사이트에서 바로 부를 수 있다
+import { describeWeather } from "../shared/weatherCodes.js";
 import { GOLF_COURSES } from "./golfCourses.js";
 
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
@@ -21,6 +22,17 @@ export const WINDY_SPEED = 6;
 export const WINDY_GUST = 10;
 // 지난 해 라운드 시간에 이만큼 넘게 왔으면 "비 온 해"로 센다
 export const RAINY_ROUND_MM = 1;
+// 라운드하기 좋은 날 기준. 하나라도 보통(fair) 기준에 닿으면 보통, 나쁨(bad) 기준에 닿으면 나쁨
+export const RATING = {
+  chance: { fair: 30, bad: 60 }, // 비 올 확률(%) 이상
+  rain: { fair: 0.5, bad: 2 }, // 라운드 동안 내리는 비(mm) 이상
+  wind: { fair: WINDY_SPEED, bad: 9 }, // 바람(m/s) 이상
+  gust: { fair: WINDY_GUST, bad: 15 }, // 돌풍(m/s) 이상
+  cold: { fair: 0, bad: -5 }, // 체감 온도(°) 이하
+  hot: { fair: 30, bad: 33 }, // 기온(°) 이상
+};
+export const GRADE_LABELS = { good: "좋음", fair: "보통", bad: "나쁨" };
+const GRADE_SHARE = { good: "✅ 라운드하기 좋음", fair: "⚠️ 라운드 날씨 보통", bad: "⛔ 라운드 날씨 나쁨" };
 
 const pad = (n) => String(n).padStart(2, "0");
 
@@ -71,7 +83,7 @@ export function nearestCourse(lat, lon, maxKm = 1.5) {
 
 // 브라우저 시간대 기준 "YYYY-MM-DD"
 const isoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const parseDate = (iso) => new Date(`${iso}T00:00:00`);
+export const parseDate = (iso) => new Date(`${iso}T00:00:00`);
 export const todayIso = () => isoDate(new Date());
 
 export function addDays(iso, days) {
@@ -89,15 +101,18 @@ export function isPlannableDate(iso) {
 }
 
 const NEAR_DAYS = ["오늘", "내일", "모레"];
-// "내일 · 11월 3일 (화)"
-export function dateLabel(iso) {
+// "내일 · 11월 3일 (화)". relative가 false면 "11월 3일 (화)"만 쓴다 (공유한 글은 다른 날 읽을 수도 있다)
+export function dateLabel(iso, relative = true) {
   const text = parseDate(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
-  const near = NEAR_DAYS[daysFromToday(iso)];
+  const near = relative && NEAR_DAYS[daysFromToday(iso)];
   return near ? `${near} · ${text}` : text;
 }
 
 // "11월 3일"
 export const monthDayLabel = (iso) => parseDate(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
+
+// "2026-11-03T06:47" → "06:47"
+export const clockOf = (iso) => iso.slice(11, 16);
 
 const minutesOf = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -110,11 +125,28 @@ export function roundEnd(tee, holes) {
   return `${pad(Math.floor(end / 60) % 24)}:${pad(end % 60)}`;
 }
 
-// 티오프부터 라운드가 끝날 때까지 걸치는 시각의 값들 (예: 07:30 티오프 18홀 → 7시~13시)
-export function roundHours(hours, tee, holes) {
+// date의 티오프부터 라운드가 끝날 때까지 걸치는 시각의 값들 (예: 07:30 티오프 18홀 → 7시~13시).
+// hours에 다음 날 값도 있으면 자정을 넘기는 야간 라운드도 끝까지 넣는다
+export function roundHours(hours, date, tee, holes) {
   const start = minutesOf(tee) / 60;
   const end = start + ROUND_HOURS[holes];
-  return hours.filter((h) => h.hour >= Math.floor(start) && h.hour <= Math.ceil(end));
+  const next = addDays(date, 1);
+  return hours.filter((h) => {
+    const at = h.date === date ? h.hour : h.date === next ? h.hour + 24 : -1;
+    return at >= Math.floor(start) && at <= Math.ceil(end);
+  });
+}
+
+// 해가 떠 있을 때 치는 라운드인지 보고, 아니면 알려 줄 문장을 돌려준다
+export function daylightWarning(day, tee, holes) {
+  const start = minutesOf(tee);
+  const end = start + ROUND_HOURS[holes] * 60;
+  const sunrise = clockOf(day.sunrise);
+  const sunset = clockOf(day.sunset);
+  if (start >= minutesOf(sunset)) return `해가 진 뒤(${sunset})에 시작하는 야간 라운드입니다.`;
+  if (start < minutesOf(sunrise)) return `티오프가 해 뜨는 시각(${sunrise})보다 이릅니다.`;
+  if (end > minutesOf(sunset)) return `라운드가 해 지는 시각(${sunset}) 뒤에 끝납니다.`;
+  return null;
 }
 
 // --- 요약 ---
@@ -153,6 +185,51 @@ const DIRECTIONS = ["북", "북동", "동", "남동", "남", "남서", "서", "�
 // 풍향(바람이 불어오는 쪽, 북쪽 0°부터 시계 방향)을 8방위 이름으로
 export function windName(deg) {
   return `${DIRECTIONS[Math.round((((deg % 360) + 360) % 360) / 45) % 8]}풍`;
+}
+
+// 시간대 날씨를 바뀌는 차례대로 적는다 (예: "☁️ 흐림 → 🌧️ 비"). 많으면 앞의 셋만
+export function weatherSteps(rows) {
+  const steps = [];
+  for (const r of rows) {
+    const [desc, icon] = describeWeather(r.code);
+    const step = `${icon} ${desc}`;
+    if (!steps.includes(step)) steps.push(step);
+  }
+  return steps.slice(0, 3).join(" → ");
+}
+
+const levelAtOrAbove = (v, { fair, bad }) => (v >= bad ? 2 : v >= fair ? 1 : 0);
+const levelAtOrBelow = (v, { fair, bad }) => (v <= bad ? 2 : v <= fair ? 1 : 0);
+const GRADES = ["good", "fair", "bad"];
+
+// 라운드 시간대 요약으로 좋음·보통·나쁨을 정하고, 가장 걸리는 이유를 붙인다 (좋음이면 이유 없음)
+export function rateRound(s) {
+  const feelsMin = (s.feels ?? s.temp)[0];
+  const checks = [
+    { level: levelAtOrAbove(s.chance?.chance ?? 0, RATING.chance), reason: `비 올 확률 ${s.chance?.chance}%` },
+    { level: levelAtOrAbove(s.rain, RATING.rain), reason: `비 ${fmt(s.rain, 1)}mm` },
+    { level: levelAtOrAbove(s.wind?.wind ?? 0, RATING.wind), reason: `바람 ${fmt(s.wind?.wind, 1)}m/s` },
+    { level: levelAtOrAbove(s.gust?.gust ?? 0, RATING.gust), reason: `돌풍 ${fmt(s.gust?.gust, 1)}m/s` },
+    { level: levelAtOrBelow(feelsMin, RATING.cold), reason: `체감 ${fmt(feelsMin)}°` },
+    { level: levelAtOrAbove(s.temp[1], RATING.hot), reason: `기온 ${fmt(s.temp[1])}°` },
+  ];
+  // 등급이 같으면 앞에 둔 이유(비 → 바람 → 기온)를 먼저 보여 준다
+  const worst = checks.reduce((a, b) => (b.level > a.level ? b : a), { level: 0, reason: null });
+  return { grade: GRADES[worst.level], reason: worst.reason };
+}
+
+// 지난 해들의 라운드 시간대 요약과, 비 온 해 수, 평균 기온 범위
+export function summarizeHistory(history, tee, holes) {
+  const years = history
+    .map(({ year, date, hours }) => ({ year, s: summarize(roundHours(hours, date, tee, holes)) }))
+    .filter((y) => y.s);
+  if (!years.length) return null;
+  const average = (pick) => years.reduce((sum, y) => sum + pick(y.s), 0) / years.length;
+  return {
+    years,
+    rainy: years.filter((y) => y.s.rain >= RAINY_ROUND_MM).length,
+    temp: [average((s) => s.temp[0]), average((s) => s.temp[1])],
+  };
 }
 
 // --- 받아 오기 ---
@@ -200,6 +277,7 @@ async function mapLimit(items, limit, fn) {
 
 function toHours(h) {
   return h.time.map((time, i) => ({
+    date: time.slice(0, 10),
     hour: Number(time.slice(11, 13)),
     temp: h.temperature_2m[i],
     feels: h.apparent_temperature[i],
@@ -214,9 +292,10 @@ function toHours(h) {
 
 const placeKey = ({ lat, lon }) => `${lat.toFixed(3)},${lon.toFixed(3)}`;
 
-// 그날의 시간별 예보와 일출·일몰
-export function fetchForecast(place, date) {
-  return cached(`forecast ${placeKey(place)} ${date}`, async () => {
+// 앞으로 16일의 시간별 예보(hours)와 날마다 일출·일몰(days: [{ date, sunrise, sunset }]).
+// 골프장마다 한 번 받아 좋은 날 찾기와 그날 예보가 함께 쓴다
+export function fetchForecast(place) {
+  return cached(`forecast ${placeKey(place)}`, async () => {
     const data = await getJson(FORECAST_URL, {
       latitude: place.lat,
       longitude: place.lon,
@@ -225,16 +304,19 @@ export function fetchForecast(place, date) {
       // 골프장 현지 시각으로 받는다
       timezone: "auto",
       wind_speed_unit: "ms",
-      start_date: date,
-      end_date: date,
+      forecast_days: FORECAST_DAYS,
     }, "예보");
-    return { hours: toHours(data.hourly), sunrise: data.daily.sunrise[0], sunset: data.daily.sunset[0] };
+    return {
+      hours: toHours(data.hourly),
+      days: data.daily.time.map((date, i) => ({ date, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i] })),
+    };
   });
 }
 
 const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 
-// 지난 몇 해 같은 날의 시간별 날씨. 최근 해부터.
+// 지난 몇 해 같은 날의 시간별 날씨: [{ year, date, hours }]. 최근 해부터.
+// 자정을 넘기는 야간 라운드를 위해 다음 날까지 받는다.
 // 한 해에 한 번씩 불러야 해서 동시 요청 제한에 걸리지 않게 두 해씩 부르고, 일부 해만 못 받으면 받은 해만 돌려준다
 export function fetchHistory(place, date) {
   const key = `history ${placeKey(place)} ${date}`;
@@ -252,9 +334,9 @@ export function fetchHistory(place, date) {
         timezone: "auto",
         wind_speed_unit: "ms",
         start_date: iso,
-        end_date: iso,
+        end_date: addDays(iso, 1),
       }, "지난 날씨");
-      return { year: y, hours: toHours(data.hourly) };
+      return { year: y, date: iso, hours: toHours(data.hourly) };
     });
     const loaded = results.filter((r) => !r.error);
     if (!loaded.length) throw results[0].error;
@@ -262,4 +344,67 @@ export function fetchHistory(place, date) {
     if (loaded.length < results.length) cache.delete(key);
     return loaded;
   });
+}
+
+// --- 공유 ---
+
+// 단톡방에 붙여 넣을 라운드 날씨 요약. 아직 예보가 없는 날은 지난 해 기록으로 대신한다
+export function shareText({ course, date, tee, holes }, forecast, history, link) {
+  const lines = [
+    `⛳ ${course.name}${course.region ? ` (${course.region})` : ""}`,
+    `📅 ${dateLabel(date, false)} ${tee}~${roundEnd(tee, holes)} · ${holes}홀`,
+  ];
+  const day = forecast?.days.find((d) => d.date === date);
+  const rows = day ? roundHours(forecast.hours, date, tee, holes) : [];
+  const s = summarize(rows);
+  const past = !s && history ? summarizeHistory(history, tee, holes) : null;
+  if (s) {
+    const { grade, reason } = rateRound(s);
+    const chance = !s.chance ? "정보 없음" : s.chance.chance > 0 ? `최대 ${s.chance.chance}%` : "0%";
+    lines.push(
+      `${GRADE_SHARE[grade]}${reason ? ` (${reason})` : ""}`,
+      weatherSteps(rows),
+      `🌡️ ${fmt(s.temp[0])}~${fmt(s.temp[1])}°${s.feels ? ` (체감 ${fmt(s.feels[0])}~${fmt(s.feels[1])}°)` : ""}`,
+      `💧 비 올 확률 ${chance} · ${fmt(s.rain, 1)}mm`,
+      `💨 바람 최대 ${fmt(s.wind?.wind, 1)}m/s · 돌풍 ${fmt(s.gust?.gust, 1)}m/s${s.dir != null ? ` · ${windName(s.dir)}` : ""}`,
+      `🌅 일출 ${clockOf(day.sunrise)} · 일몰 ${clockOf(day.sunset)}`,
+    );
+  } else if (past) {
+    lines.push(
+      `🗓️ 아직 예보 전이라 지난 ${past.years.length}년 같은 날 기록: 비 온 해 ${past.rainy}번, 기온 평균 ${fmt(past.temp[0])}~${fmt(past.temp[1])}°`,
+    );
+  }
+  lines.push(link);
+  return lines.join("\n");
+}
+
+// 받은 사람이 열면 같은 골프장·날짜·티오프로 날씨 탭이 열리는 링크. 골프장 이름은 좌표로 다시 찾는다
+export function shareLink({ course, date, tee, holes }, base) {
+  const params = new URLSearchParams({
+    lat: course.lat.toFixed(4),
+    lon: course.lon.toFixed(4),
+    d: date.replaceAll("-", ""),
+    t: tee.replace(":", ""),
+    h: String(holes),
+  });
+  return `${base}?${params}`;
+}
+
+// 공유 링크로 들어왔으면 그 골프장·날짜·티오프를 돌려준다. 아니면 null
+export function settingsFromLink(search) {
+  const p = new URLSearchParams(search);
+  const lat = Number(p.get("lat"));
+  const lon = Number(p.get("lon"));
+  const d = p.get("d") ?? "";
+  const t = p.get("t") ?? "";
+  const valid = p.has("lat") && p.has("lon") && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+    && /^\d{8}$/.test(d) && /^\d{4}$/.test(t);
+  if (!valid) return null;
+  const near = nearestCourse(lat, lon);
+  return {
+    course: { name: near?.name ?? "공유받은 위치", region: near?.region ?? "", lat, lon },
+    date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`,
+    tee: `${t.slice(0, 2)}:${t.slice(2)}`,
+    holes: p.get("h") === "9" ? 9 : 18,
+  };
 }
