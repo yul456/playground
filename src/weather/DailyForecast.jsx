@@ -1,10 +1,11 @@
-import { describe, formatDay } from "./api.js";
+import { describeWeather } from "../shared/weatherCodes.js";
+import { formatDay } from "./api.js";
 
 export default function DailyForecast({ daily }) {
   return (
     <ul className="daily">
       {daily.time.map((day, i) => {
-        const [desc, icon] = describe(daily.weather_code[i]);
+        const [desc, icon] = describeWeather(daily.weather_code[i]);
         const rain = daily.precipitation_probability_max[i];
         return (
           <li key={day} title={desc}>

@@ -28,23 +28,26 @@ weather/index.html      날씨 기능 입구
 ladder/index.html       사다리 타기 입구
 golf/index.html         골프 스코어카드 입구
 src/
-  shared/               모든 기능이 함께 쓰는 것 (base.css, site.js)
+  shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, geo.js)
   home/                 첫 화면. FEATURES 배열에 기능 카드를 둔다
   weather/              날씨 기능
   ladder/               사다리 타기
   golf/                 골프 스코어카드
 scripts/
   check-boundaries.mjs  기능 폴더 경계 검사 (npm run build 전에 자동 실행)
+  golf-courses.mjs      국내 골프장 목록(src/golf/golfCourses.js)을 OpenStreetMap에서 새로 받는다 (손으로 실행)
 vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 목록
 ```
 
-| 기능 | 폴더 | 이 기능만 쓰는 패키지 |
+| 기능 | 폴더 | 이 기능이 쓰는 패키지 |
 |---|---|---|
 | 날씨 | `src/weather/`, `weather/` | `leaflet` |
 | 사다리 타기 | `src/ladder/`, `ladder/` | 없음 |
-| 골프 스코어카드 | `src/golf/`, `golf/` | 없음 (사진 인식은 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드) |
+| 골프 스코어카드 | `src/golf/`, `golf/` | `leaflet` (라운드 날씨 지도). 사진 인식은 패키지 없이 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드 |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.
+
+골프장 목록 `src/golf/golfCourses.js`는 OpenStreetMap 데이터(© OpenStreetMap 기여자, ODbL)입니다. 화면에 출처를 표시하고, `node scripts/golf-courses.mjs`로 새로 받습니다.
 
 ## 규칙: 기능 폴더 경계
 
@@ -108,4 +111,4 @@ git filter-repo --path src/weather/ --path src/shared/ --path weather/index.html
   <a href="https://yul456.github.io/weather/">새 주소로 이동</a>
   ```
 
-- 위 "구조" 표에서 날씨 행을 빼고, 날씨만 쓰던 패키지(`leaflet`)를 지운다.
+- 위 "구조" 표에서 날씨 행을 빼고, 다른 기능이 쓰지 않는 패키지만 지운다 (`leaflet`은 골프도 쓰므로 남긴다).

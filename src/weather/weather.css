@@ -27,33 +27,6 @@
   .toast { animation: none; }
 }
 
-.loading-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  overflow: hidden;
-  z-index: 2000;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.loading-bar.active { opacity: 1; }
-.loading-bar::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 40%;
-  background: var(--accent);
-  animation: loading-slide 1.1s ease-in-out infinite;
-}
-@keyframes loading-slide {
-  from { left: -40%; }
-  to { left: 100%; }
-}
-
 .map-card { padding: 12px; }
 .map-header {
   display: flex;

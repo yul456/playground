@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_LOCATION, fetchPlaceName, fetchWeather, geoErrorMessage } from "./api.js";
+import { geoErrorMessage } from "../shared/geo.js";
+import { DEFAULT_LOCATION, fetchPlaceName, fetchWeather } from "./api.js";
 
 // 위치 찾기·날씨 조회 흐름을 관리한다.
 // 현재 위치를 먼저 찾고, 위치를 읽을 수 없을 때만 기본 위치를 보여준다.

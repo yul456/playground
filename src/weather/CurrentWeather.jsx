@@ -1,8 +1,9 @@
-import { KIND_LABELS, describe, placeLabel } from "./api.js";
+import { describeWeather } from "../shared/weatherCodes.js";
+import { KIND_LABELS, placeLabel } from "./api.js";
 
 export default function CurrentWeather({ view }) {
   const c = view.weather.current;
-  const [desc, icon] = describe(c.weather_code);
+  const [desc, icon] = describeWeather(c.weather_code);
 
   return (
     <div className="card current">
