@@ -8,6 +8,7 @@
 - 돌림판: https://yul456.github.io/playground/wheel/
 - 구슬 레이스: https://yul456.github.io/playground/ball/
 - 지뢰찾기: https://yul456.github.io/playground/mines/
+- 숫자 야구: https://yul456.github.io/playground/baseball/
 - 골프 스코어카드: https://yul456.github.io/playground/golf/
 
 ## 실행
@@ -32,6 +33,7 @@ ladder/index.html       사다리 타기 입구
 wheel/index.html        돌림판 입구
 ball/index.html         구슬 레이스 입구
 mines/index.html        지뢰찾기 입구
+baseball/index.html     숫자 야구 입구
 golf/index.html         골프 스코어카드 입구
 src/
   shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, WeatherIcon.jsx, geo.js, Confetti.jsx, random.js)
@@ -41,6 +43,7 @@ src/
   wheel/                돌림판
   ball/                 구슬 레이스 (코스 데이터는 ball/courses/에 하나씩)
   mines/                지뢰찾기
+  baseball/             숫자 야구
   golf/                 골프 스코어카드
 scripts/
   check-boundaries.mjs  기능 폴더 경계 검사 (npm run build 전에 자동 실행)
@@ -56,6 +59,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 돌림판 | `src/wheel/`, `wheel/` | 없음 |
 | 구슬 레이스 | `src/ball/`, `ball/` | `planck` (물리 엔진, Box2D를 자바스크립트로 옮긴 것) |
 | 지뢰찾기 | `src/mines/`, `mines/` | 없음 |
+| 숫자 야구 | `src/baseball/`, `baseball/` | 없음 |
 | 골프 스코어카드 | `src/golf/`, `golf/` | `leaflet` (라운드 날씨 지도). 사진 인식은 패키지 없이 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드 |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.

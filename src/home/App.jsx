@@ -32,6 +32,12 @@ const FEATURES = [
     description: "숫자를 단서로 지뢰를 피해 칸을 모두 엽니다. 초급·중급·고급 난이도와 최고 기록이 있습니다.",
   },
   {
+    path: "baseball/",
+    icon: "⚾",
+    title: "숫자 야구",
+    description: "컴퓨터가 정한 서로 다른 숫자 3~4개를 스트라이크·볼 힌트로 9회 안에 맞힙니다.",
+  },
+  {
     path: "golf/",
     icon: "⛳",
     title: "골프 스코어카드",

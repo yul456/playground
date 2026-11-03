@@ -19,6 +19,7 @@ export default defineConfig({
         wheel: resolve(import.meta.dirname, "wheel/index.html"),
         ball: resolve(import.meta.dirname, "ball/index.html"),
         mines: resolve(import.meta.dirname, "mines/index.html"),
+        baseball: resolve(import.meta.dirname, "baseball/index.html"),
         golf: resolve(import.meta.dirname, "golf/index.html"),
       },
     },

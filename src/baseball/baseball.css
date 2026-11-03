@@ -1,0 +1,94 @@
+.card h2 { margin: 0 0 8px; font-size: 1rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+/* 자릿수와 몇 회째인지 */
+.bb-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.bb-lengths { display: inline-flex; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.bb-lengths button { padding: 7px 16px; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.9rem; }
+.bb-lengths button.active { background: var(--accent); color: #fff; }
+.bb-inning { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 넓은 화면에서는 숫자판(왼쪽)과 기록(오른쪽)을 나란히 둔다 */
+.bb-play { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+
+/* 고른 숫자 */
+.bb-slots { display: flex; justify-content: center; gap: 8px; }
+.bb-slots span {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 60px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  font-size: 1.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.bb-slots span.current { border-color: var(--accent); }
+/* 결과 칸은 높이를 미리 잡아 두어 글이 바뀔 때 아래 숫자판이 밀리지 않게 한다 */
+.bb-status { min-height: 3rem; margin: 10px 0; color: var(--muted); text-align: center; word-break: keep-all; }
+.bb-status strong { color: var(--text); }
+
+/* 숫자판 */
+.bb-keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.bb-key {
+  height: 48px;
+  padding: 0;
+  background: color-mix(in srgb, var(--accent) 14%, var(--card));
+  color: var(--text);
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.bb-key:disabled { opacity: 0.3; }
+.bb-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px; }
+.bb-actions button { font-weight: 700; }
+
+/* 메모: 아님은 흐리게 줄을 긋고, 있음은 초록 테두리. 숫자판에도 같은 표시를 한다 */
+.bb-memo { display: grid; grid-template-columns: auto repeat(10, minmax(0, 1fr)); align-items: center; gap: 4px; margin-top: 14px; }
+.bb-label { margin-right: 4px; color: var(--muted); font-size: 0.85rem; }
+.bb-memo button {
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.memo-out { text-decoration: line-through; opacity: 0.45; }
+.memo-in { box-shadow: inset 0 0 0 2px #16a34a; }
+
+/* 기록: 전광판처럼 회, 친 숫자, 결과 */
+.bb-empty { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.bb-history { margin: 0; padding: 0; list-style: none; }
+.bb-history li {
+  display: grid;
+  grid-template-columns: 3em 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.bb-try { color: var(--muted); font-size: 0.85rem; }
+.bb-guess { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.3em; font-variant-numeric: tabular-nums; }
+.bb-result { display: flex; gap: 4px; }
+/* 야구 전광판처럼 볼은 초록, 스트라이크는 노랑, 아웃은 빨강 */
+.bb-chip { min-width: 2.6em; padding: 2px 6px; border-radius: 6px; color: #fff; font-size: 0.85rem; font-weight: 800; text-align: center; }
+.bb-chip.strike { background: #facc15; color: #1c2733; }
+.bb-chip.ball { background: #15803d; }
+.bb-chip.out { background: #dc2626; }
+
+.bb-footer { display: flex; justify-content: center; gap: 8px; margin-top: 20px; }
+.bb-footer button { min-width: 110px; font-weight: 700; }
+.bb-best { margin: 10px 0 0; color: var(--muted); font-size: 0.85rem; text-align: center; }
+.bb-hint { margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
+
+/* 휴대폰에서는 숫자판 아래에 기록을 둔다 */
+@media (max-width: 600px) {
+  .bb-play { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+}
+@media (max-width: 480px) {
+  .bb-card { padding: 14px; }
+}
