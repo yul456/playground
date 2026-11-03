@@ -26,6 +26,12 @@ const FEATURES = [
     description: "이름 붙은 구슬들을 한꺼번에 굴려 마지막까지 남은 구슬(또는 1등)을 뽑습니다.",
   },
   {
+    path: "mines/",
+    icon: "💣",
+    title: "지뢰찾기",
+    description: "숫자를 단서로 지뢰를 피해 칸을 모두 엽니다. 초급·중급·고급 난이도와 최고 기록이 있습니다.",
+  },
+  {
     path: "golf/",
     icon: "⛳",
     title: "골프 스코어카드",

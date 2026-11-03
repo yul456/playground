@@ -18,6 +18,7 @@ export default defineConfig({
         ladder: resolve(import.meta.dirname, "ladder/index.html"),
         wheel: resolve(import.meta.dirname, "wheel/index.html"),
         ball: resolve(import.meta.dirname, "ball/index.html"),
+        mines: resolve(import.meta.dirname, "mines/index.html"),
         golf: resolve(import.meta.dirname, "golf/index.html"),
       },
     },
