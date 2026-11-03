@@ -17,6 +17,7 @@ export default defineConfig({
         weather: resolve(import.meta.dirname, "weather/index.html"),
         ladder: resolve(import.meta.dirname, "ladder/index.html"),
         wheel: resolve(import.meta.dirname, "wheel/index.html"),
+        ball: resolve(import.meta.dirname, "ball/index.html"),
         golf: resolve(import.meta.dirname, "golf/index.html"),
       },
     },

@@ -1,0 +1,128 @@
+.card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+.card h2 small { margin-left: 6px; color: var(--muted); font-size: 0.85rem; font-weight: 400; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+/* 당첨 규칙 */
+.race-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+  margin-bottom: 12px;
+}
+/* 이름표와 버튼 묶음이 줄바꿈 때 떨어지지 않게 한 덩어리로 둔다 */
+.race-option { display: inline-flex; align-items: center; gap: 8px; }
+/* 휴대폰처럼 좁으면 버튼 글자가 두 줄이 된다. 이름표("당첨")는 한 줄로 두고, 버튼 글자는 낱말 사이에서만 나눈다 */
+.race-label { color: var(--muted); font-size: 0.9rem; white-space: nowrap; }
+.mode-toggle { display: inline-flex; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.mode-toggle button { padding: 7px 12px; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.85rem; word-break: keep-all; }
+.mode-toggle button.active { background: var(--accent); color: #fff; }
+.race-check { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+/* 중력 막대. 값 칸 폭을 잡아 두어 "(기본)"이 붙었다 빠질 때 옆 내용이 밀리지 않게 한다 */
+.race-range { width: 120px; margin: 0; accent-color: var(--accent); }
+.race-value { min-width: 4.6em; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+
+/* 코스(왼쪽)와 코스 전체를 줄인 띠(오른쪽) */
+.race-stage { display: grid; grid-template-columns: 1fr 34px; gap: 8px; height: min(64vh, 620px); }
+.race-canvas,
+.race-minimap { display: block; width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 12px; }
+/* min-width: 0이 없으면 캔버스의 실제 픽셀 폭 때문에 칸이 넓어질 수 있다 */
+.race-main { position: relative; min-width: 0; }
+/* 지도는 누르거나 끌어서 그 위치를 본다. 끄는 동안 페이지가 스크롤되지 않게 한다 */
+.race-minimap { cursor: pointer; touch-action: none; }
+/* 지도로 직접 고른 곳을 보고 있을 때만 나온다 */
+.race-auto {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+/* 휴대폰에서는 코스를 조금이라도 넓게 */
+@media (max-width: 480px) {
+  .race-card { padding: 12px; }
+  .race-stage { grid-template-columns: 1fr 24px; gap: 6px; }
+}
+
+/* 결과 칸은 높이를 미리 잡아 두어 결과가 나올 때 아래 내용이 밀리지 않게 한다 */
+.race-status { min-height: 2.6rem; margin: 14px 0 0; color: var(--muted); text-align: center; word-break: keep-all; }
+.race-status strong { display: inline-block; color: var(--text); font-size: 1.7rem; animation: result-pop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
+@keyframes result-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+.race-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.race-buttons button { min-width: 120px; font-weight: 700; }
+
+/* 구슬 목록: 누르면 화면이 그 구슬을 따라간다 */
+.ball-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 0; padding: 0; list-style: none; }
+.ball-list button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.ball-list button.following { border-color: var(--accent); }
+.ball-list button.arrived { color: var(--muted); }
+.ball-list button.winner { border-color: #f59e0b; font-weight: 700; }
+/* 캔버스의 구슬과 같은 색·번호 */
+.ball-dot {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.8);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.ball-count { color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+.arrival { color: var(--muted); font-size: 0.75rem; }
+.ball-hint { margin: 8px 0 0; color: var(--muted); font-size: 0.8rem; }
+
+/* 이름 */
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.presets button { padding: 6px 12px; font-size: 0.85rem; }
+.items-input {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+.items-hint { margin: 8px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+/* 당첨 기록 */
+.history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.history-head h2 { margin: 0; }
+.history-head button { padding: 4px 12px; font-size: 0.85rem; }
+.history { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.history li { display: flex; align-items: center; gap: 6px; padding: 4px 12px 4px 4px; border-radius: 999px; background: var(--bg); font-size: 0.9rem; }
+.history .order {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-status strong { animation: none; }
+}

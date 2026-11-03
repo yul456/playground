@@ -20,6 +20,12 @@ const FEATURES = [
     description: "항목을 넣고 돌림판을 돌려 하나를 뽑습니다. 점심 메뉴 고르기, 순서 정하기에 씁니다.",
   },
   {
+    path: "ball/",
+    icon: "🏁",
+    title: "구슬 레이스",
+    description: "이름 붙은 구슬들을 한꺼번에 굴려 마지막까지 남은 구슬(또는 1등)을 뽑습니다.",
+  },
+  {
     path: "golf/",
     icon: "⛳",
     title: "골프 스코어카드",

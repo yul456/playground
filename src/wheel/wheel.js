@@ -1,19 +1,9 @@
-// 돌림판 계산: 공정하게 하나 뽑기, 그 칸에서 바늘이 멈추는 회전 각도, 칸 색·글자
+// 돌림판 계산: 뽑힌 칸에서 바늘이 멈추는 회전 각도, 칸 색·글자.
+// 어느 칸을 뽑을지는 회전 애니메이션이 아니라 src/shared/random.js의 randomIndex로 먼저 정한다.
 // 바늘은 맨 위(12시)에 고정되어 있고, 칸은 12시부터 시계 방향으로 놓는다
 
 export const MIN_ITEMS = 2;
 export const MAX_ITEMS = 30;
-
-const cryptoUint32 = () => crypto.getRandomValues(new Uint32Array(1))[0];
-
-// 0 이상 n 미만의 정수를 고르게 뽑는다. 결과는 회전 애니메이션이 아니라 여기서 먼저 정한다.
-// 나머지 연산 때문에 앞쪽 수가 조금 더 자주 나오지 않도록, 고르게 나눠떨어지지 않는 범위의 값은 버리고 다시 뽑는다
-export function randomIndex(n, randomUint32 = cryptoUint32) {
-  const limit = Math.floor(2 ** 32 / n) * n;
-  let x = randomUint32();
-  while (x >= limit) x = randomUint32();
-  return x % n;
-}
 
 const mod360 = (deg) => ((deg % 360) + 360) % 360;
 

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import Confetti from "../shared/Confetti.jsx";
+import { randomIndex } from "../shared/random.js";
 import { HUB_URL } from "../shared/site.js";
 import { playTick, unlockSound } from "./tickSound.js";
 import Wheel from "./Wheel.jsx";
-import { MAX_ITEMS, MIN_ITEMS, randomIndex, spinTarget } from "./wheel.js";
+import { MAX_ITEMS, MIN_ITEMS, spinTarget } from "./wheel.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
 const STORAGE_KEY = "playground.wheel.v1";

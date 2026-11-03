@@ -6,6 +6,7 @@
 - 날씨: https://yul456.github.io/playground/weather/
 - 사다리 타기: https://yul456.github.io/playground/ladder/
 - 돌림판: https://yul456.github.io/playground/wheel/
+- 구슬 레이스: https://yul456.github.io/playground/ball/
 - 골프 스코어카드: https://yul456.github.io/playground/golf/
 
 ## 실행
@@ -28,17 +29,20 @@ index.html              첫 화면(기능 목록) 입구
 weather/index.html      날씨 기능 입구
 ladder/index.html       사다리 타기 입구
 wheel/index.html        돌림판 입구
+ball/index.html         구슬 레이스 입구
 golf/index.html         골프 스코어카드 입구
 src/
-  shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, WeatherIcon.jsx, geo.js, Confetti.jsx)
+  shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, WeatherIcon.jsx, geo.js, Confetti.jsx, random.js)
   home/                 첫 화면. FEATURES 배열에 기능 카드를 둔다
   weather/              날씨 기능
   ladder/               사다리 타기
   wheel/                돌림판
+  ball/                 구슬 레이스 (코스 데이터는 ball/courses/에 하나씩)
   golf/                 골프 스코어카드
 scripts/
   check-boundaries.mjs  기능 폴더 경계 검사 (npm run build 전에 자동 실행)
   golf-courses.mjs      국내 골프장 목록(src/golf/golfCourses.js)을 OpenStreetMap에서 새로 받는다 (손으로 실행)
+  ball-sim.mjs          구슬 레이스를 화면 없이 여러 판 돌려 한 판 길이·끼임·자리 쏠림을 본다 (코스를 고친 뒤 손으로 실행)
 vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 목록
 ```
 
@@ -47,6 +51,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 날씨 | `src/weather/`, `weather/` | `leaflet` |
 | 사다리 타기 | `src/ladder/`, `ladder/` | 없음 |
 | 돌림판 | `src/wheel/`, `wheel/` | 없음 |
+| 구슬 레이스 | `src/ball/`, `ball/` | `planck` (물리 엔진, Box2D를 자바스크립트로 옮긴 것) |
 | 골프 스코어카드 | `src/golf/`, `golf/` | `leaflet` (라운드 날씨 지도). 사진 인식은 패키지 없이 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드 |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.
