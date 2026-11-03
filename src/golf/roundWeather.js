@@ -12,7 +12,9 @@ const HOURLY = "temperature_2m,apparent_temperature,precipitation,weather_code,w
 export const FORECAST_DAYS = 16;
 // 고를 수 있는 날짜: 오늘부터 1년 뒤까지 (그 뒤는 지난 해 기록만 보게 된다)
 export const MAX_DAYS_AHEAD = 365;
-export const HISTORY_YEARS = 5;
+// 지난 해 같은 날 날씨를 몇 해치 보여 줄지. 이 값만 바꾸면 받는 해 수와 화면·공유 문구가 함께 바뀐다.
+// 해마다 요청을 하나씩 보내므로 늘리면 그만큼 오래 걸린다
+export const HISTORY_YEARS = 2;
 // 라운드에 걸리는 시간 (그늘집·대기를 넣은 대략값)
 export const ROUND_HOURS = { 18: 5, 9: 2.5 };
 // 표에서 눈에 띄게 할 기준: 비 올 확률·시간당 비(mm), 바람·돌풍(m/s)
@@ -234,31 +236,44 @@ export function summarizeHistory(history, tee, holes) {
 
 // --- 받아 오기 ---
 
-// 탭을 오가며 같은 골프장·날짜를 다시 열 때는 10분 동안 받아 둔 값을 쓴다
+// 탭을 오가며 같은 골프장·날짜를 다시 열 때는 10분 동안 받아 둔 값을 쓴다.
+// 다 받은 값만 기억하고 받는 중인 요청은 함께 쓰지 않는다. 날짜를 바꾸면 그 요청은 취소되기 때문이다.
+// complete(value)가 false면(일부만 받음) 기억하지 않아 다음에 다시 받는다
 const CACHE_MS = 10 * 60 * 1000;
 const cache = new Map();
 
-function cached(key, load) {
+async function cached(key, load, complete = () => true) {
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
-  const promise = load();
-  cache.set(key, { at: Date.now(), promise });
-  // 실패한 요청은 다음에 다시 시도하도록 지운다
-  promise.catch(() => cache.delete(key));
-  return promise;
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+  const value = await load();
+  if (complete(value)) cache.set(key, { at: Date.now(), value });
+  return value;
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Open-Meteo는 한 곳에서 동시에 많이 부르면 429(Too many concurrent requests)를 준다. 잠시 뒤 다시 부르면 대개 된다
-async function getJson(url, params, what, retries = 2) {
-  const res = await fetch(`${url}?${new URLSearchParams(params)}`);
-  if (res.status === 429 && retries > 0) {
-    await sleep(1500);
-    return getJson(url, params, what, retries - 1);
+// 지난 날씨 서버는 가끔 요청 하나에 수십 초씩 걸리거나 응답이 없다. 다시 부르는 시간까지 합쳐 이만큼 지나면 그만 기다린다
+const TIMEOUT_MS = 20 * 1000;
+
+// Open-Meteo는 한 곳에서 동시에 많이 부르면 429(Too many concurrent requests)를 준다. 잠시 뒤 다시 부르면 대개 된다.
+// signal: 날짜를 바꾸는 등으로 더는 필요 없어지면 요청을 취소한다
+async function getJson(url, params, what, signal) {
+  const stop = AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]);
+  const get = () => fetch(`${url}?${new URLSearchParams(params)}`, { signal: stop });
+  try {
+    let res = await get();
+    for (let retries = 2; res.status === 429 && retries > 0; retries--) {
+      await sleep(1500);
+      res = await get();
+    }
+    if (!res.ok) throw new Error(`${what}를 가져오지 못했습니다. (HTTP ${res.status})`);
+    return await res.json();
+  } catch (err) {
+    if (err.name === "TimeoutError") {
+      throw new Error(`${what} 서버가 ${TIMEOUT_MS / 1000}초 넘게 응답하지 않습니다. 잠시 뒤 다시 시도해 주세요.`);
+    }
+    throw err;
   }
-  if (!res.ok) throw new Error(`${what}를 가져오지 못했습니다. (HTTP ${res.status})`);
-  return res.json();
 }
 
 // items를 한 번에 limit개씩만 처리한다. 실패한 것은 { error }로 돌려준다
@@ -294,7 +309,7 @@ const placeKey = ({ lat, lon }) => `${lat.toFixed(3)},${lon.toFixed(3)}`;
 
 // 앞으로 16일의 시간별 예보(hours)와 날마다 일출·일몰(days: [{ date, sunrise, sunset }]).
 // 골프장마다 한 번 받아 좋은 날 찾기와 그날 예보가 함께 쓴다
-export function fetchForecast(place) {
+export function fetchForecast(place, signal) {
   return cached(`forecast ${placeKey(place)}`, async () => {
     const data = await getJson(FORECAST_URL, {
       latitude: place.lat,
@@ -305,7 +320,7 @@ export function fetchForecast(place) {
       timezone: "auto",
       wind_speed_unit: "ms",
       forecast_days: FORECAST_DAYS,
-    }, "예보");
+    }, "예보", signal);
     return {
       hours: toHours(data.hourly),
       days: data.daily.time.map((date, i) => ({ date, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i] })),
@@ -315,13 +330,15 @@ export function fetchForecast(place) {
 
 const isLeapYear = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 
-// 지난 몇 해 같은 날의 시간별 날씨: [{ year, date, hours }]. 최근 해부터.
+// 지난 HISTORY_YEARS해 같은 날의 시간별 날씨: [{ year, date, hours }]. 최근 해부터.
 // 자정을 넘기는 야간 라운드를 위해 다음 날까지 받는다.
 // 한 해에 한 번씩 불러야 해서 동시 요청 제한에 걸리지 않게 두 해씩 부르고, 일부 해만 못 받으면 받은 해만 돌려준다
-export function fetchHistory(place, date) {
+export function fetchHistory(place, date, signal) {
   const key = `history ${placeKey(place)} ${date}`;
   const [year, month, day] = date.split("-").map(Number);
   const years = Array.from({ length: HISTORY_YEARS }, (_, i) => year - 1 - i);
+  // 빠진 해가 있으면 다음에 열 때 다시 받도록 기억해 두지 않는다
+  const complete = (loaded) => loaded.length === years.length;
   return cached(key, async () => {
     const results = await mapLimit(years, 2, async (y) => {
       // 2월 29일은 윤년이 아닌 해에는 2월 28일로 본다
@@ -335,15 +352,13 @@ export function fetchHistory(place, date) {
         wind_speed_unit: "ms",
         start_date: iso,
         end_date: addDays(iso, 1),
-      }, "지난 날씨");
+      }, "지난 날씨", signal);
       return { year: y, date: iso, hours: toHours(data.hourly) };
     });
     const loaded = results.filter((r) => !r.error);
     if (!loaded.length) throw results[0].error;
-    // 빠진 해가 있으면 다음에 열 때 다시 받도록 기억해 두지 않는다
-    if (loaded.length < results.length) cache.delete(key);
     return loaded;
-  });
+  }, complete);
 }
 
 // --- 공유 ---
