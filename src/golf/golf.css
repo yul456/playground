@@ -5,6 +5,20 @@ button:disabled { opacity: 0.4; cursor: default; }
 button.link { padding: 0; background: none; color: var(--accent); font-size: 0.85rem; text-decoration: underline; }
 button.danger { background: #dc2626; }
 
+/* 골프 메뉴: 스코어카드·라운드 날씨·3D 코스 페이지를 오간다 */
+.golf-menu { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 16px; }
+.golf-menu a {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.golf-menu a:hover { color: var(--accent); }
+.golf-menu a.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
 /* 탭 */
 .tabs {
   display: grid;
@@ -304,6 +318,76 @@ button.danger { background: #dc2626; }
 .course-hint { margin: 8px 0 0; }
 .course-current { margin: 12px 0 8px; }
 .course-map { height: 260px; border-radius: 10px; }
+/* 3D 코스 탭에서 홀 정보가 있는 골프장 표시 */
+.course-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #16a34a 16%, var(--card));
+  color: #15803d;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* 3D 코스 */
+.course3d-map { position: relative; height: min(70vh, 560px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
+/* 휴대폰에서는 지도 위를 끌면 지도가 움직이므로, 지도 밖을 끌어 홀 목록으로 내려갈 자리를 남긴다 */
+@media (max-width: 480px) {
+  .course3d-map { height: 56vh; }
+}
+/* 지도 라이브러리 CSS가 이 칸을 position: relative로 바꾸므로 위치 대신 크기로 채운다 */
+.course3d-canvas { width: 100%; height: 100%; }
+/* 지도 위 버튼. 지도는 밝은 색이라 다크 모드에서도 밝은 버튼을 쓴다 */
+.course3d-tools { position: absolute; top: 8px; left: 8px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; }
+.course3d-tools button {
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  color: #1c2733;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.course3d-tools button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.course3d-error { position: absolute; right: 8px; bottom: 8px; left: 8px; z-index: 2; margin: 0; padding: 8px 10px; border-radius: 8px; background: #fee2e2; color: #991b1b; font-size: 0.85rem; }
+.course3d-note { margin: 10px 0 0; color: var(--muted); font-size: 0.9rem; }
+/* 날아가는 동안 지금 홀 설명 (지도 위 왼쪽, 버튼 아래) */
+.course3d-caption {
+  position: absolute;
+  top: 46px;
+  left: 8px;
+  z-index: 2;
+  max-width: calc(100% - 60px);
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(28, 39, 51, 0.85);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.course3d-caption .step { margin-right: 8px; color: #facc15; }
+.course3d-tour { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.course3d-label { margin-right: 2px; color: var(--muted); font-size: 0.85rem; }
+.course3d-tour button { padding: 7px 12px; font-size: 0.85rem; }
+.hole3d-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.hole3d-list button {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.9rem;
+  text-align: left;
+}
+.hole3d-list strong { flex: 1 1 auto; }
+.hole3d-list .slope { color: var(--muted); }
+.hole3d-list button.active { border-color: #eab308; box-shadow: inset 0 0 0 1px #eab308; }
 .course-pin { font-size: 26px; line-height: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
 
 .round-inputs { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; }

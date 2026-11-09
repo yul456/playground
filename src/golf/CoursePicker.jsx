@@ -3,8 +3,9 @@ import { geoErrorMessage } from "../shared/geo.js";
 import CourseMap from "./CourseMap.jsx";
 import { nearestCourse, searchCourses } from "./roundWeather.js";
 
-// 골프장 고르기: 이름 검색, 현재 위치, 지도에서 직접 고르기
-export default function CoursePicker({ course, onChange }) {
+// 골프장 고르기: 이름 검색, 현재 위치, 지도에서 직접 고르기.
+// map이 false면 지도 없이 고른다(3D 코스 탭은 아래에 3D 지도가 따로 있다). badge(골프장)가 글자를 돌려주면 검색 결과에 붙인다
+export default function CoursePicker({ course, onChange, map = true, badge }) {
   const [query, setQuery] = useState("");
   const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState(null);
@@ -70,14 +71,17 @@ export default function CoursePicker({ course, onChange }) {
           {results.map((c) => (
             <li key={`${c.name} ${c.lat}`}>
               <button type="button" onClick={() => choose(c)}>
-                <span>{c.name}</span>
+                <span>
+                  {c.name}
+                  {badge?.(c) && <span className="course-badge">{badge(c)}</span>}
+                </span>
                 <span className="region">{c.region}</span>
               </button>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="muted course-hint">목록에 없는 골프장입니다. 지도에서 위치를 눌러 고를 수 있습니다.</p>
+        <p className="muted course-hint">목록에 없는 골프장입니다.{map && " 지도에서 위치를 눌러 고를 수 있습니다."}</p>
       ))}
       {message && <p className="weather-error" role="alert">{message}</p>}
 
@@ -88,10 +92,10 @@ export default function CoursePicker({ course, onChange }) {
             <span className="muted">{course.region || `${course.lat.toFixed(3)}, ${course.lon.toFixed(3)}`}</span>
           </>
         ) : (
-          <span className="muted">골프장 이름을 검색하거나 지도를 눌러 고르세요.</span>
+          <span className="muted">골프장 이름을 검색하거나 {map ? "지도를 눌러" : "현재 위치로"} 고르세요.</span>
         )}
       </p>
-      <CourseMap course={course} onPick={pickAt} />
+      {map && <CourseMap course={course} onPick={pickAt} />}
     </section>
   );
 }

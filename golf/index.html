@@ -3,10 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>골프 스코어카드 · Playground</title>
+  <title>골프 · Playground</title>
+  <script>
+    // 골프는 메뉴 세 개(스코어카드·라운드 날씨·3D 코스)로 나뉘었다. 예전 주소로 오면 알맞은 메뉴로 보낸다.
+    // 예전 라운드 날씨 공유 링크(golf/?lat=…)는 날씨로, 나머지는 스코어카드로
+    location.replace((new URLSearchParams(location.search).has("lat") ? "weather/" : "scorecard/") + location.search);
+  </script>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="module" src="/src/golf/main.jsx"></script>
+  <p><a href="scorecard/">골프 스코어카드</a> · <a href="weather/">골프 라운드 날씨</a> · <a href="3d/">골프 3D 코스</a></p>
 </body>
 </html>
