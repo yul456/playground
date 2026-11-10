@@ -373,6 +373,10 @@ button.danger { background: #dc2626; }
 .measure-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .measure-head strong { flex: 1 1 auto; }
 .measure-head button { padding: 5px 10px; font-size: 0.8rem; }
+/* 거리 재기 방식(일반·공 궤적) 고르기 */
+.measure-mode { display: inline-grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.measure-mode button { border-radius: 0; background: transparent; color: var(--muted); }
+.measure-mode button.active { background: var(--accent); color: #fff; font-weight: 600; }
 .measure-list { margin: 8px 0 0; padding: 0; list-style: none; font-variant-numeric: tabular-nums; }
 .measure-list li { padding: 4px 0; border-top: 1px solid var(--border); font-size: 0.9rem; }
 .measure-list li:first-child { border-top: 0; }

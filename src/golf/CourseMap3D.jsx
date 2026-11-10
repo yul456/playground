@@ -190,6 +190,11 @@ async function buildArcs(pairs) {
 
 // 샷 이름
 const SHOT_NAMES = ["티샷", "두 번째 샷", "세 번째 샷", "네 번째 샷"];
+// 거리 재기 방식
+const MEASURE_MODES = [
+  ["plain", "일반"],
+  ["shot", "공 궤적"],
+];
 
 // 체감 거리 한 줄: "오르막 3m · 맞바람 +14m → 체감 약 227m · 클럽 2개 길게 · 오른쪽 보고"
 function playsLine(length, rise, wind) {
@@ -243,6 +248,8 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
   const [flat, setFlat] = useState(false);
   // 거리 재기: 켜져 있으면 지도를 누를 때마다 점을 찍는다. 점의 지형 높이는 따로 읽어 points와 짝을 맞춘다
   const [measuring, setMeasuring] = useState(false);
+  // 재는 방식: "plain"(거리·높이 차만) 또는 "shot"(점 사이 공 궤적과 바람·높낮이를 넣은 체감 거리). 처음에는 일반
+  const [measureMode, setMeasureMode] = useState("plain");
   const measuringRef = useRef(false);
   measuringRef.current = measuring;
   const [points, setPoints] = useState([]);
@@ -343,6 +350,14 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     stop();
     setMeasuring(!measuring);
     setPoints([]);
+  }
+
+  // "전체 보기" 버튼: 거리 재기도 끝내고 처음 화면으로 돌아간다. 카메라만 돌리면, 확대하지 않고 거리를 쟀을 때
+  // 점과 궤적이 그대로 남아 버튼이 안 눌린 것처럼 보였다
+  function showAll() {
+    setMeasuring(false);
+    setPoints([]);
+    overview();
   }
 
   function toggleFlat() {
@@ -532,12 +547,14 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     map.getCanvas().style.cursor = measuring ? "crosshair" : "";
   }, [points, measured, measuring]);
 
-  // 찍은 점 사이로 공 궤적을 그린다. 점을 하나 더 찍으면 새 구간으로 공이 날아간다
+  // 공 궤적 방식이면 찍은 점 사이로 공 궤적을 그린다. 점을 하나 더 찍으면 새 구간으로 공이 날아가고,
+  // 일반에서 공 궤적으로 바꾸면 모든 구간을 차례로 날아간다
   useEffect(() => {
     const shots = shotsRef.current;
     if (!shots) return;
     const token = ++measureTokenRef.current;
-    if (points.length < 2) {
+    const shown = measureShownRef.current;
+    if (measureMode !== "shot" || points.length < 2) {
       shots.clear("measure");
       measureShownRef.current = 0;
       return;
@@ -546,16 +563,27 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     buildArcs(pairs).then(
       (arcs) => {
         if (token !== measureTokenRef.current) return;
-        const added = pairs.length === measureShownRef.current + 1 && !reducedMotion();
         measureShownRef.current = pairs.length;
-        const now = performance.now();
-        shots.show("measure", arcs, arcs.map((_, i) => (added && i === arcs.length - 1 ? now : null)));
+        if (reducedMotion()) {
+          shots.show("measure", arcs);
+          return;
+        }
+        // 날릴 첫 구간: 아직 그린 게 없으면 처음부터, 점을 하나 더 찍었으면 새 구간만, 되돌렸으면 없음
+        const from = shown === 0 ? 0 : pairs.length === shown + 1 ? pairs.length - 1 : arcs.length;
+        let free = performance.now();
+        const starts = arcs.map((arc, i) => {
+          if (i < from) return null;
+          const start = free;
+          free = start + arc.ms + SHOT_PAUSE_MS;
+          return start;
+        });
+        shots.show("measure", arcs, starts);
       },
       () => {
         // 높이를 못 읽으면 궤적은 그리지 않는다
       },
     );
-  }, [points]);
+  }, [points, measureMode]);
 
   // 골프장이 바뀌면 그 자리로 옮긴다
   useEffect(() => {
@@ -600,7 +628,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
       <div className="course3d-map">
         <div ref={boxRef} className="course3d-canvas" />
         <div className="course3d-tools">
-          <button type="button" onClick={overview}>전체 보기</button>
+          <button type="button" onClick={showAll}>전체 보기</button>
           <button type="button" onClick={orbit}>한 바퀴</button>
           <button type="button" onClick={toggleFlat} aria-pressed={flat}>{flat ? "비스듬히" : "위에서"}</button>
           <button type="button" onClick={toggleMeasure} aria-pressed={measuring}>거리 재기</button>
@@ -623,6 +651,19 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
         <div className="course3d-measure">
           <div className="measure-head">
             <strong>📏 거리 재기</strong>
+            <div className="measure-mode" role="group" aria-label="재는 방식">
+              {MEASURE_MODES.map(([key, name]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={measureMode === key ? "active" : ""}
+                  aria-pressed={measureMode === key}
+                  onClick={() => setMeasureMode(key)}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
             <button type="button" className="secondary" disabled={!points.length} onClick={() => setPoints((list) => list.slice(0, -1))}>
               되돌리기
             </button>
@@ -630,27 +671,33 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
           </div>
           {segments.length === 0 ? (
             <p className="course3d-note">
-              지도를 눌러 점을 찍으세요. 두 점 사이 거리와 높이 차를 재고, 공이 날아가는 궤적을 그립니다. 여러 점을 찍으면(티 → 떨어질
-              곳 → 그린) 구간마다 잽니다.
+              {measureMode === "shot"
+                ? "지도를 눌러 점을 찍으세요. 티 → 떨어질 곳 → 그린 순서로 찍으면 점 사이로 공이 날아가고, 구간마다 바람과 높낮이를 넣은 체감 거리를 보여 줍니다."
+                : "지도를 눌러 점을 찍으세요. 두 점 사이 거리와 높이 차를 잽니다. 여러 점을 찍으면 구간마다 잽니다."}
             </p>
           ) : (
             <ol className="measure-list">
               {segments.map((seg, i) => (
                 <li key={i}>
                   <span className="muted">{i + 1}→{i + 2}</span> <strong>{Math.round(seg.length)}m</strong>
-                  {seg.rise == null ? " · 높이 재는 중" : ` · ${playsLine(seg.length, seg.rise, seg.wind)}`}
+                  {seg.rise == null
+                    ? " · 높이 재는 중"
+                    : ` · ${measureMode === "shot" ? playsLine(seg.length, seg.rise, seg.wind) : slopeText(seg.rise)}`}
                 </li>
               ))}
               {segments.length > 1 && (
                 <li className="measure-total">
                   합계 <strong>{Math.round(segments.reduce((sum, seg) => sum + seg.length, 0))}m</strong>
-                  {segments.every((seg) => seg.plays != null) &&
+                  {measureMode === "shot" &&
+                    segments.every((seg) => seg.plays != null) &&
                     ` · 체감 약 ${Math.round(segments.reduce((sum, seg) => sum + seg.plays, 0))}m`}
                 </li>
               )}
             </ol>
           )}
-          {segments.length > 0 && <p className="weather-note">{playsNote(wind)}</p>}
+          {segments.length > 0 && (
+            <p className="weather-note">{measureMode === "shot" ? playsNote(wind) : "높이는 약 30m 간격 지형 자료로 잽니다."}</p>
+          )}
         </div>
       )}
       {holes.length > 0 && (
