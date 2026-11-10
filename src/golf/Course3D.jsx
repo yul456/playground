@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import CourseMap3D from "./CourseMap3D.jsx";
 import CoursePicker from "./CoursePicker.jsx";
-import { arrangeHoles, courseKey, heightsAt, lineLength, slopeText } from "./course3d.js";
+import { arrangeHoles, bearing, courseKey, heightsAt, lineLength, slopeText, windOnHole } from "./course3d.js";
 import { GOLF_COURSES } from "./golfCourses.js";
+import { addDays, FORECAST_DAYS, fetchForecast, fmt, MAX_DAYS_AHEAD, roundHours, todayIso, windName } from "./roundWeather.js";
 
 // 골프장마다 홀·그린 데이터 파일. OpenStreetMap에 홀이나 그린이 그려진 골프장만 있다 (scripts/golf-3d.mjs가 만든다).
 // 파일마다 따로 묶여서 고른 골프장 것만 받는다
@@ -20,20 +21,91 @@ function firstCourse() {
   return { name, lat, lon, region };
 }
 
-function loadCourse() {
+// 골프장과, 바람을 볼 라운드 날짜·티오프. 날짜·티오프는 나중에 더한 설정이라 예전에 저장한 값에는 없다
+const defaults = () => ({ course: firstCourse(), date: addDays(todayIso(), 1), tee: "07:00" });
+
+function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-    if (saved?.course) return saved.course;
+    if (saved?.course) {
+      const settings = { ...defaults(), ...saved };
+      // 이미 지난 날짜면 내일로 돌린다
+      return settings.date < todayIso() ? { ...settings, date: defaults().date } : settings;
+    }
   } catch {
     // 저장소를 못 쓰는 환경(사생활 보호 모드 등)이면 처음 골프장으로 시작한다
   }
-  return firstCourse();
+  return defaults();
+}
+
+const pad = (n) => String(n).padStart(2, "0");
+
+// 라운드 바람: 날짜·티오프를 고르면 라운드 동안(18홀, 5시간)의 시간별 바람을 보여 준다.
+// 시각을 고르면 그때 바람으로 홀마다 맞바람·뒷바람·옆바람을 따진다
+function RoundCard({ date, tee, onChange, forecast, hours, pick, onPick, hasHoles }) {
+  const row = hours[pick];
+  let message = null;
+  if (forecast.error) message = forecast.error;
+  else if (!forecast.data) message = "바람 예보를 불러오는 중…";
+  else if (!hours.length) message = `바람 예보는 오늘부터 ${FORECAST_DAYS}일째까지만 받을 수 있습니다.`;
+  return (
+    <section className="card">
+      <h2>라운드 바람</h2>
+      <div className="round-inputs wind-inputs">
+        <label>
+          날짜
+          <input
+            type="date"
+            value={date}
+            min={todayIso()}
+            max={addDays(todayIso(), MAX_DAYS_AHEAD)}
+            onChange={(e) => e.target.value && onChange({ date: e.target.value })}
+          />
+        </label>
+        <label>
+          티오프
+          <input type="time" value={tee} step="600" onChange={(e) => e.target.value && onChange({ tee: e.target.value })} />
+        </label>
+      </div>
+      {message && <p className="course3d-note">{message}</p>}
+      {row && (
+        <>
+          <div className="wind-hours" role="group" aria-label="시간별 바람">
+            {hours.map((h, i) => (
+              <button
+                key={`${h.date} ${h.hour}`}
+                type="button"
+                className={i === pick ? "active" : ""}
+                aria-pressed={i === pick}
+                aria-label={`${h.hour}시 ${windName(h.dir)} ${fmt(h.wind, 1)}m/s`}
+                onClick={() => onPick(i)}
+              >
+                <span>{pad(h.hour)}시</span>
+                {/* 화살표는 바람이 불어 가는 쪽(지도 위쪽이 북쪽) */}
+                <span className="wind-arrow" style={{ transform: `rotate(${h.dir + 180}deg)` }} aria-hidden="true">↑</span>
+                <span>{fmt(h.wind, 1)}</span>
+              </button>
+            ))}
+          </div>
+          <p className="course3d-note">
+            {pad(row.hour)}시 {windName(row.dir)} {fmt(row.wind, 1)}m/s · 돌풍 {fmt(row.gust, 1)}m/s.
+            {hasHoles && " 다른 시각을 누르면 그때 바람으로 홀마다 다시 따집니다."}
+          </p>
+        </>
+      )}
+    </section>
+  );
 }
 
 // 골프 페이지의 "3D 코스" 탭: 골프장 주변 지형을 3D로 보여 주고, 홀 데이터가 있으면 홀마다
 // 길이·오르막 내리막을 보여 주며 티에서 그린까지 날아간다
 export default function Course3D() {
-  const [course, setCourse] = useState(loadCourse);
+  const [settings, setSettings] = useState(load);
+  const { course, date, tee } = settings;
+  const update = (patch) => setSettings((s) => ({ ...s, ...patch }));
+  // 바람 예보(라운드 날씨와 같은 16일 치 시간별 예보)와, 라운드 시각 가운데 고른 시각
+  const [forecast, setForecast] = useState({ data: null, error: null });
+  const [pick, setPick] = useState(0);
   // 골프장 데이터: { key, status: loading | ready | none | error, data }
   const [file, setFile] = useState(null);
   // 홀마다 [티 높이, 그린 높이](m)
@@ -50,11 +122,27 @@ export default function Course3D() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ course }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch {
       // 저장 실패는 무시한다. 화면에서는 계속 쓸 수 있다
     }
-  }, [course]);
+  }, [settings]);
+
+  // 골프장이 바뀌면 바람 예보를 다시 받는다. 날짜·티오프는 받은 예보에서 고르기만 한다
+  useEffect(() => {
+    if (!course) return undefined;
+    const controller = new AbortController();
+    setForecast({ data: null, error: null });
+    fetchForecast({ lat: course.lat, lon: course.lon }, controller.signal).then(
+      (data) => setForecast({ data, error: null }),
+      (err) => !controller.signal.aborted && setForecast({ data: null, error: err.message }),
+    );
+    return () => controller.abort();
+  }, [course?.lat, course?.lon]);
+
+  useEffect(() => setPick(0), [date, tee, course?.lat, course?.lon]);
+  const windHours = forecast.data ? roundHours(forecast.data.hours, date, tee, 18) : [];
+  const windRow = windHours[pick] ?? null;
 
   useEffect(() => {
     setSelected(null);
@@ -91,11 +179,15 @@ export default function Course3D() {
     return () => controller.abort();
   }, [data]);
 
-  // 홀마다 목록과 지도 위 설명에 함께 쓰는 정보
+  // 홀마다 목록과 지도 위 설명에 함께 쓰는 정보. 바람은 티에서 그린을 바로 잇는 방향으로 따진다
   const rows = (data?.holes ?? []).map((hole, i) => {
+    const par = hole.par ? `파${hole.par}` : "";
     const length = `${Math.round(lineLength(hole.coords))}m`;
     const slope = heights ? slopeText(heights[i] ? heights[i][1] - heights[i][0] : null) : null;
-    return { par: hole.par ? `파${hole.par}` : "", length, slope, info: [hole.label, hole.par && `파${hole.par}`, length, slope].filter(Boolean).join(" · ") };
+    const direction = bearing(hole.coords[0], hole.coords.at(-1));
+    const wind = windRow ? windOnHole(direction, windRow.dir, windRow.wind) : null;
+    const info = [hole.label, par, length, slope, wind?.text].filter(Boolean).join(" · ");
+    return { par, length, slope, wind, info };
   });
 
   let note = null;
@@ -109,7 +201,19 @@ export default function Course3D() {
 
   return (
     <>
-      <CoursePicker course={course} onChange={setCourse} map={false} badge={(c) => (fileOf(c) ? "코스 정보" : null)} />
+      <CoursePicker course={course} onChange={(next) => update({ course: next })} map={false} badge={(c) => (fileOf(c) ? "코스 정보" : null)} />
+      {course && (
+        <RoundCard
+          date={date}
+          tee={tee}
+          onChange={update}
+          forecast={forecast}
+          hours={windHours}
+          pick={pick}
+          onPick={setPick}
+          hasHoles={data?.holes.length > 0}
+        />
+      )}
       <section className="card">
         <h2>3D 코스</h2>
         {course ? (
@@ -118,6 +222,8 @@ export default function Course3D() {
             data={data}
             selected={selected}
             info={rows.map((r) => r.info)}
+            windDir={windRow?.dir ?? null}
+            windSpeed={windRow?.wind ?? null}
             onActive={setActive}
             onPick={(index) => setSelected({ index, nonce: Date.now() })}
           />
@@ -139,6 +245,7 @@ export default function Course3D() {
                   <span>{rows[i].par}</span>
                   <span>{rows[i].length}</span>
                   <span className="slope">{heights ? rows[i].slope ?? "" : "높이 재는 중"}</span>
+                  {rows[i].wind && <span className={`wind ${rows[i].wind.kind}`}>{rows[i].wind.text}</span>}
                 </button>
               </li>
             ))}
@@ -147,7 +254,8 @@ export default function Course3D() {
         {data?.holes.length > 0 && (
           <p className="weather-note">
             길이는 지도에 그려진 홀 선(보통 티에서 그린 가운데까지)의 길이입니다. 오르막·내리막은 약 30m 간격의 지형 자료로 잰
-            티와 그린의 높이 차라 몇 m 정도 틀릴 수 있습니다.
+            티와 그린의 높이 차라 몇 m 정도 틀릴 수 있습니다. 바람은 티에서 그린을 바로 잇는 방향으로 따지므로 휘어진 홀은 티샷 방향과
+            다를 수 있습니다.
           </p>
         )}
         {data && <p className="weather-credit">골프장 데이터 © OpenStreetMap 기여자 (ODbL), {data.updated} 기준</p>}

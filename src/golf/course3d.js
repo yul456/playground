@@ -254,6 +254,32 @@ export function slopeText(diff) {
   return diff > 0 ? `오르막 ${meters}m` : `내리막 ${meters}m`;
 }
 
+// 거리 재기: 찍은 점과 점 사이 구간마다 거리(m), 높이 차(rise, m, 오르막이 +), 체감 거리(plays, m).
+// heights[i]는 i번 점의 지형 높이(아직 모르면 null). 체감 거리는 오르막 1m를 거리 1m로 치는 흔한 어림셈이다
+export function measureSegments(points, heights = []) {
+  return points.slice(1).map((point, i) => {
+    const length = distance(points[i], point);
+    const rise = heights[i] != null && heights[i + 1] != null ? heights[i + 1] - heights[i] : null;
+    return { length, rise, plays: rise == null ? null : length + rise };
+  });
+}
+
+// 이보다 약한 바람(m/s)은 홀 방향을 따지지 않는다
+export const CALM_WIND = 1.5;
+
+// 바람이 홀에 어떻게 부는지. holeBearing은 티에서 그린 쪽 방향, dir은 바람이 불어오는 쪽(풍향, 북쪽 0°부터
+// 시계 방향)이다. 그린 쪽에서 불어오면 맞바람, 티 쪽에서 불어오면 뒷바람, 그 사이(45°~135°)는 옆바람이다.
+// 그린을 보고 섰을 때 오른쪽에서 불어오면 공이 오른쪽에서 왼쪽으로 밀린다
+export function windOnHole(holeBearing, dir, speed) {
+  if (dir == null || speed == null) return null;
+  const strength = `${speed.toFixed(1)}m/s`;
+  if (speed < CALM_WIND) return { kind: "calm", text: `바람 약함 ${strength}` };
+  const turn = ((dir - holeBearing + 540) % 360) - 180;
+  if (Math.abs(turn) <= 45) return { kind: "head", text: `맞바람 ${strength}` };
+  if (Math.abs(turn) >= 135) return { kind: "tail", text: `뒷바람 ${strength}` };
+  return turn > 0 ? { kind: "right", text: `오→왼 옆바람 ${strength}` } : { kind: "left", text: `왼→오 옆바람 ${strength}` };
+}
+
 // 지형 높이: Terrarium 타일(PNG)의 색에 높이가 들어 있다. 높이(m) = R × 256 + G + B ÷ 256 − 32768
 export const TERRAIN_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
 export const terrariumHeight = (r, g, b) => r * 256 + g + b / 256 - 32768;

@@ -2,7 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
-import { bearing, lineLength, pointAlong, TERRAIN_TILES } from "./course3d.js";
+import { bearing, heightsAt, lineLength, measureSegments, pointAlong, slopeText, TERRAIN_TILES } from "./course3d.js";
 
 // 지도 라이브러리는 무거운 계산을 웹 워커에서 한다. 워커 파일 주소를 스스로 찾지 못해(파일 이름을
 // 실행 중에 만들어서 번들러가 모른다) 번들러가 내보낸 주소를 알려 준다
@@ -18,6 +18,8 @@ const VIEW = { zoom: 15, pitch: 58, bearing: -20 };
 const ORBIT_MS = 30_000;
 const AREA_COLORS = { fairway: "#8cc96f", tee: "#a8d98a", green: "#45a852", bunker: "#ecdcab", water: "#76b5e8" };
 const SELECTED = "#facc15";
+// 거리 재기 선·점 색
+const MEASURE = "#e11d48";
 
 // 바탕 지도 글자를 한글 이름으로 (기본은 영어 이름과 현지 이름을 함께 쓴다)
 function koreanLabels(map) {
@@ -94,6 +96,31 @@ function addLayers(map) {
     },
     labels,
   );
+  // 거리 재기: 찍은 점, 점을 잇는 점선, 구간 거리. 다른 것보다 위에
+  map.addSource("measure", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({
+    id: "measure-line",
+    type: "line",
+    source: "measure",
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: { "line-cap": "round" },
+    paint: { "line-color": MEASURE, "line-width": 3, "line-dasharray": [2, 1.5] },
+  });
+  map.addLayer({
+    id: "measure-point",
+    type: "circle",
+    source: "measure",
+    filter: ["==", ["get", "kind"], "point"],
+    paint: { "circle-radius": 6, "circle-color": "#ffffff", "circle-stroke-color": MEASURE, "circle-stroke-width": 2.5 },
+  });
+  map.addLayer({
+    id: "measure-label",
+    type: "symbol",
+    source: "measure",
+    filter: ["==", ["get", "kind"], "label"],
+    layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-allow-overlap": true, "text-ignore-placement": true },
+    paint: { "text-color": MEASURE, "text-halo-color": "#ffffff", "text-halo-width": 2 },
+  });
   // 홀 번호는 바탕 지도 글자보다 위에
   map.addLayer({
     id: "golf-number-dot",
@@ -124,8 +151,9 @@ const dataId = (data) => (data ? `${data.name}|${data.updated}` : null);
 // 3D 지형 위에 골프장(data가 있으면 홀·그린·경계)을 그린다. selected({ index, nonce })가 바뀌면 그 홀을
 // 티에서 그린까지 날아가고, 아래 "코스 둘러보기"로 전체나 코스 하나의 홀을 차례로 날아간다.
 // info[i]는 날아가는 동안 지도에 띄울 i번 홀 설명, onActive(i)는 지금 보여 주는 홀이 바뀔 때,
-// onPick(i)은 지도에서 홀 선을 눌렀을 때 부른다
-export default function CourseMap3D({ course, data, selected, info, onActive, onPick }) {
+// onPick(i)은 지도에서 홀 선을 눌렀을 때 부른다. windDir(풍향, 불어오는 쪽)·windSpeed(m/s)가 있으면
+// 지도 위에 바람 화살표를 띄우고, 지도를 돌리면 화살표도 같이 돈다
+export default function CourseMap3D({ course, data, selected, info, onActive, onPick, windDir, windSpeed }) {
   const boxRef = useRef(null);
   const mapRef = useRef(null);
   const readyRef = useRef(false);
@@ -148,6 +176,26 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
   const [touring, setTouring] = useState(null);
   const [error, setError] = useState(null);
   const [flat, setFlat] = useState(false);
+  // 거리 재기: 켜져 있으면 지도를 누를 때마다 점을 찍는다. 점의 지형 높이는 따로 읽어 points와 짝을 맞춘다
+  const [measuring, setMeasuring] = useState(false);
+  const measuringRef = useRef(false);
+  measuringRef.current = measuring;
+  const [points, setPoints] = useState([]);
+  const [measured, setMeasured] = useState({ points: [], heights: [] });
+  const heights = measured.points === points ? measured.heights : [];
+  const segments = measureSegments(points, heights);
+  // 바람 화살표는 지도가 돌 때마다(날기 중엔 화면마다) 돌리므로 다시 그리지 않고 스타일만 바꾼다
+  const windRef = useRef(windDir);
+  windRef.current = windDir;
+  const arrowRef = useRef(null);
+
+  // 바람 화살표는 바람이 불어 가는 쪽을 가리킨다 (지도 회전만큼 되돌린다)
+  function turnArrow() {
+    const map = mapRef.current;
+    if (map && arrowRef.current && windRef.current != null) {
+      arrowRef.current.style.transform = `rotate(${windRef.current + 180 - map.getBearing()}deg)`;
+    }
+  }
 
   function stop() {
     runRef.current++;
@@ -198,6 +246,12 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
       if (t < 1) frameRef.current = requestAnimationFrame(frame);
     };
     frameRef.current = requestAnimationFrame(frame);
+  }
+
+  function toggleMeasure() {
+    stop();
+    setMeasuring(!measuring);
+    setPoints([]);
   }
 
   function toggleFlat() {
@@ -277,6 +331,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.on("rotate", turnArrow);
     map.on("load", () => {
       koreanLabels(map);
       addLayers(map);
@@ -291,9 +346,11 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     });
     // 사용자가 지도를 만지면 날기·돌기·둘러보기를 멈춘다
     for (const type of ["mousedown", "touchstart", "wheel"]) map.on(type, stop);
-    map.on("click", "golf-hole", (e) => onPickRef.current?.(e.features[0].properties.index));
-    map.on("mouseenter", "golf-hole", () => (map.getCanvas().style.cursor = "pointer"));
-    map.on("mouseleave", "golf-hole", () => (map.getCanvas().style.cursor = ""));
+    // 거리를 재는 중에는 홀 선을 눌러도 날지 않고 점을 찍는다
+    map.on("click", (e) => measuringRef.current && setPoints((list) => [...list, [e.lngLat.lng, e.lngLat.lat]]));
+    map.on("click", "golf-hole", (e) => !measuringRef.current && onPickRef.current?.(e.features[0].properties.index));
+    map.on("mouseenter", "golf-hole", () => !measuringRef.current && (map.getCanvas().style.cursor = "pointer"));
+    map.on("mouseleave", "golf-hole", () => !measuringRef.current && (map.getCanvas().style.cursor = ""));
     return () => {
       stop();
       readyRef.current = false;
@@ -302,6 +359,34 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     };
   }, []);
 
+  // 찍은 점의 지형 높이를 읽는다
+  useEffect(() => {
+    if (!points.length) return undefined;
+    const controller = new AbortController();
+    heightsAt(points, controller.signal).then(
+      (values) => setMeasured({ points, heights: values }),
+      () => {
+        // 높이를 못 읽으면 거리만 보여 준다
+      },
+    );
+    return () => controller.abort();
+  }, [points]);
+
+  // 찍은 점과 구간 거리("152m +8m")를 지도에 그린다. 지도 글꼴에 없는 글자를 피해 숫자와 기호만 쓴다
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    const features = points.map((p) => ({ type: "Feature", properties: { kind: "point" }, geometry: { type: "Point", coordinates: p } }));
+    if (points.length > 1) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } });
+    segments.forEach((seg, i) => {
+      const rise = seg.rise == null ? "" : ` ${seg.rise >= 0 ? "+" : "-"}${Math.abs(Math.round(seg.rise))}m`;
+      const middle = [(points[i][0] + points[i + 1][0]) / 2, (points[i][1] + points[i + 1][1]) / 2];
+      features.push({ type: "Feature", properties: { kind: "label", label: `${Math.round(seg.length)}m${rise}` }, geometry: { type: "Point", coordinates: middle } });
+    });
+    map.getSource("measure").setData({ type: "FeatureCollection", features });
+    map.getCanvas().style.cursor = measuring ? "crosshair" : "";
+  }, [points, measured, measuring]);
+
   // 골프장이 바뀌면 그 자리로 옮긴다
   useEffect(() => {
     const map = mapRef.current;
@@ -309,6 +394,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     stop();
     setFlat(false);
     map.jumpTo({ center: [course.lon, course.lat], ...VIEW });
+    setPoints([]);
   }, [course.lat, course.lon]);
 
   // 골프장 데이터가 오면 그리고, 코스 전체가 보이게 한다.
@@ -324,6 +410,8 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     highlight(null);
     if (data) overview();
   }, [data]);
+
+  useEffect(turnArrow, [windDir]);
 
   // 목록이나 지도에서 홀을 고르면 그 홀을 날아간다
   useEffect(() => {
@@ -344,6 +432,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
           <button type="button" onClick={overview}>전체 보기</button>
           <button type="button" onClick={orbit}>한 바퀴</button>
           <button type="button" onClick={toggleFlat} aria-pressed={flat}>{flat ? "비스듬히" : "위에서"}</button>
+          <button type="button" onClick={toggleMeasure} aria-pressed={measuring}>거리 재기</button>
         </div>
         {current != null && info?.[current] && (
           <p className="course3d-caption" aria-live="polite">
@@ -351,8 +440,49 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
             {info[current]}
           </p>
         )}
+        {windDir != null && windSpeed != null && (
+          <div className="course3d-badge" role="img" aria-label={`바람 ${windSpeed.toFixed(1)}m/s, 화살표 쪽으로 분다`}>
+            <span ref={arrowRef} className="wind-arrow" aria-hidden="true">↑</span>
+            <span>{windSpeed.toFixed(1)}m/s</span>
+          </div>
+        )}
         {error && <p className="course3d-error" role="alert">{error}</p>}
       </div>
+      {measuring && (
+        <div className="course3d-measure">
+          <div className="measure-head">
+            <strong>📏 거리 재기</strong>
+            <button type="button" className="secondary" disabled={!points.length} onClick={() => setPoints((list) => list.slice(0, -1))}>
+              되돌리기
+            </button>
+            <button type="button" className="secondary" disabled={!points.length} onClick={() => setPoints([])}>지우기</button>
+          </div>
+          {segments.length === 0 ? (
+            <p className="course3d-note">
+              지도를 눌러 점을 찍으세요. 두 점 사이 거리와 높이 차를 잽니다. 여러 점을 찍으면(티 → 떨어질 곳 → 그린) 구간마다 잽니다.
+            </p>
+          ) : (
+            <ol className="measure-list">
+              {segments.map((seg, i) => (
+                <li key={i}>
+                  <span className="muted">{i + 1}→{i + 2}</span> <strong>{Math.round(seg.length)}m</strong>
+                  {seg.rise == null ? " · 높이 재는 중" : ` · ${slopeText(seg.rise)} · 체감 약 ${Math.round(seg.plays)}m`}
+                </li>
+              ))}
+              {segments.length > 1 && (
+                <li className="measure-total">
+                  합계 <strong>{Math.round(segments.reduce((sum, seg) => sum + seg.length, 0))}m</strong>
+                  {segments.every((seg) => seg.plays != null) &&
+                    ` · 체감 약 ${Math.round(segments.reduce((sum, seg) => sum + seg.plays, 0))}m`}
+                </li>
+              )}
+            </ol>
+          )}
+          {segments.length > 0 && (
+            <p className="weather-note">체감 거리는 오르막 1m를 거리 1m로 친 대략값입니다(내리막은 그만큼 짧게). 높이는 약 30m 간격 지형 자료로 잽니다.</p>
+          )}
+        </div>
+      )}
       {holes.length > 0 && (
         <div className="course3d-tour">
           <span className="course3d-label">코스 둘러보기</span>
