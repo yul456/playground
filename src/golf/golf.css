@@ -423,6 +423,11 @@ button.danger { background: #dc2626; }
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 .course3d-badge .wind-arrow { color: #2563eb; font-size: 1.4rem; }
+/* 바탕 지도 장소 말풍선. 지도 라이브러리 말풍선은 흰 바탕이라 글자색을 정해 둔다(어두운 화면에서도 읽히게).
+   오른쪽 닫기 단추와 글자가 겹치지 않게 오른쪽을 비운다 */
+.course3d-map .maplibregl-popup-content { padding: 8px 26px 8px 10px; }
+.place-popup { display: grid; gap: 2px; color: #1c2733; font-size: 0.85rem; }
+.place-popup span { color: #5b6673; font-size: 0.8rem; }
 .hole3d-list .wind { font-size: 0.8rem; font-weight: 600; }
 .hole3d-list .wind.head { color: #dc2626; }
 .hole3d-list .wind.tail { color: #16a34a; }

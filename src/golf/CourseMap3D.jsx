@@ -23,6 +23,7 @@ import {
   windParts,
   windText,
 } from "./course3d.js";
+import { placeKind } from "./placeKinds.js";
 import { createShotLayer } from "./shotLayer.js";
 
 // 지도 라이브러리는 무거운 계산을 웹 워커에서 한다. 워커 파일 주소를 스스로 찾지 못해(파일 이름을
@@ -269,6 +270,8 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
   const arrowRef = useRef(null);
   // 공 궤적 레이어, 홀마다 계산해 둔 궤적, 늦게 온 계산 결과를 버리기 위한 번호
   const shotsRef = useRef(null);
+  // 바탕 지도 장소를 눌렀을 때 띄운 말풍선
+  const popupRef = useRef(null);
   const arcCacheRef = useRef(new Map());
   const holeTokenRef = useRef(0);
   const measureTokenRef = useRef(0);
@@ -351,6 +354,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
 
   function toggleMeasure() {
     stop();
+    popupRef.current?.remove();
     setMeasuring(!measuring);
     setPoints([]);
   }
@@ -358,9 +362,34 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
   // "전체 보기" 버튼: 거리 재기도 끝내고 처음 화면으로 돌아간다. 카메라만 돌리면, 확대하지 않고 거리를 쟀을 때
   // 점과 궤적이 그대로 남아 버튼이 안 눌린 것처럼 보였다
   function showAll() {
+    popupRef.current?.remove();
     setMeasuring(false);
     setPoints([]);
     overview();
+  }
+
+  // 바탕 지도의 장소(가게·정류장 등)를 누르면 이름과 종류를 말풍선으로 띄운다. 지도 데이터에는 이름과 종류만 있다.
+  // 거리를 재는 중이거나 홀 선을 함께 눌렀으면(그 홀을 난다) 띄우지 않는다. 이름은 OpenStreetMap 글자라 HTML로 넣지 않는다
+  function showPlace(e) {
+    const map = mapRef.current;
+    if (!map || measuringRef.current) return;
+    if (map.queryRenderedFeatures(e.point, { layers: ["golf-hole"] }).length) return;
+    const place = e.features[0];
+    const name = place.properties["name:ko"] ?? place.properties.name;
+    if (!name) return;
+    const box = document.createElement("div");
+    box.className = "place-popup";
+    const title = document.createElement("strong");
+    title.textContent = name;
+    box.append(title);
+    const kind = placeKind(place.properties);
+    if (kind) {
+      const line = document.createElement("span");
+      line.textContent = kind;
+      box.append(line);
+    }
+    popupRef.current?.remove();
+    popupRef.current = new maplibregl.Popup({ offset: 10, maxWidth: "240px" }).setLngLat(place.geometry.coordinates).setDOMContent(box).addTo(map);
   }
 
   function toggleFlat() {
@@ -497,6 +526,13 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
       addLayers(map);
       // 공 궤적은 맨 위에 그린다
       map.addLayer(shots.layer);
+      // 바탕 지도의 장소 글자·아이콘 레이어(OpenMapTiles poi). 레이어 이름은 바탕 지도 스타일마다 달라 데이터 층으로 찾는다
+      const places = map.getStyle().layers.filter((l) => l["source-layer"] === "poi").map((l) => l.id);
+      if (places.length) {
+        map.on("click", places, showPlace);
+        map.on("mouseenter", places, () => !measuringRef.current && (map.getCanvas().style.cursor = "pointer"));
+        map.on("mouseleave", places, () => !measuringRef.current && (map.getCanvas().style.cursor = ""));
+      }
       readyRef.current = true;
       map.getSource("golf").setData(toGeoJSON(dataRef.current));
       shownRef.current = dataId(dataRef.current);
@@ -594,6 +630,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     if (!map) return;
     stop();
     setFlat(false);
+    popupRef.current?.remove();
     map.jumpTo({ center: [course.lon, course.lat], ...VIEW });
     setPoints([]);
   }, [course.lat, course.lon]);
