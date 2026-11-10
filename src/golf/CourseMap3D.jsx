@@ -2,7 +2,28 @@ import * as maplibregl from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
-import { bearing, heightsAt, lineLength, measureSegments, pointAlong, slopeText, TERRAIN_TILES } from "./course3d.js";
+import {
+  aimText,
+  bearing,
+  CLUB_GAP,
+  clubText,
+  distance,
+  heightsAt,
+  holeShots,
+  lineLength,
+  measureSegments,
+  playsLike,
+  pointAlong,
+  SHOT_STEPS,
+  shotHeights,
+  shotMs,
+  shotPoints,
+  slopeText,
+  TERRAIN_TILES,
+  windParts,
+  windText,
+} from "./course3d.js";
+import { createShotLayer } from "./shotLayer.js";
 
 // 지도 라이브러리는 무거운 계산을 웹 워커에서 한다. 워커 파일 주소를 스스로 찾지 못해(파일 이름을
 // 실행 중에 만들어서 번들러가 모른다) 번들러가 내보낸 주소를 알려 준다
@@ -140,8 +161,51 @@ function addLayers(map) {
 }
 
 const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+// easeInOut을 거꾸로: 움직인 비율(0~1)에 닿는 시간 비율
+const easeInOutInverse = (y) => (y < 0.5 ? Math.sqrt(y / 2) : 1 - Math.sqrt(2 * (1 - y)) / 2);
 // 그린에 닿은 뒤 다음 홀로 가기 전에 잠깐 멈추는 시간
 const PAUSE_MS = 700;
+// 공이 떨어진 뒤 다음 샷까지 쉬는 시간
+const SHOT_PAUSE_MS = 350;
+
+// 샷([출발, 도착] 쌍)마다 공 궤적. 공이 지나는 자리의 지형 높이를 읽어 공 높이를 정하고, 지도처럼 높이를 부풀린다.
+// 체감 거리에 쓰도록 샷 거리(length), 높이 차(rise, 부풀리기 전), 방향(bearing)도 함께 돌려준다
+async function buildArcs(pairs) {
+  const paths = pairs.map(([from, to]) => shotPoints(from, to));
+  const heights = await heightsAt(paths.flat());
+  return paths.map((points, k) => {
+    const ground = heights.slice(k * (SHOT_STEPS + 1), (k + 1) * (SHOT_STEPS + 1));
+    const length = distance(...pairs[k]);
+    return {
+      points,
+      heights: shotHeights(ground, length).map((h) => h * EXAGGERATION),
+      ground: ground.map((h) => h * EXAGGERATION),
+      ms: shotMs(length),
+      length,
+      rise: ground.at(-1) - ground[0],
+      bearing: bearing(...pairs[k]),
+    };
+  });
+}
+
+// 샷 이름
+const SHOT_NAMES = ["티샷", "두 번째 샷", "세 번째 샷", "네 번째 샷"];
+
+// 체감 거리 한 줄: "오르막 3m · 맞바람 +14m → 체감 약 227m · 클럽 2개 길게 · 오른쪽 보고"
+function playsLine(length, rise, wind) {
+  const { plays, byWind } = playsLike(length, rise, wind);
+  const reasons = [rise == null ? null : slopeText(rise), windText(byWind)].filter(Boolean);
+  const advice = [clubText(plays - length), aimText(wind?.side)].filter(Boolean);
+  return `${reasons.length ? `${reasons.join(" · ")} → ` : ""}체감 약 ${Math.round(plays)}m · ${advice.join(" · ")}`;
+}
+
+// 체감 거리 설명. 바람 예보가 없는 날이면 높낮이만 넣었다고 알린다
+const playsNote = (wind) =>
+  `체감 거리는 어림셈입니다. 오르막 1m를 거리 1m로 치고, 맞바람은 1m/s마다 2.2% 길게, 뒷바람은 1m/s마다 1.1% 짧게 칩니다. 클럽 하나는 ${CLUB_GAP}m로 봅니다. ` +
+  (wind
+    ? "바람은 고른 시각의 예보(땅에서 10m 높이, 1시간 평균)라 코스 안 바람과 다를 수 있습니다. 옆바람이 1.5m/s를 넘으면 바람이 오는 쪽을 보고 치라고 알려 줍니다."
+    : "이 날은 바람 예보가 없어 높낮이만 넣었습니다.") +
+  " 높이는 약 30m 간격 지형 자료로 잽니다.";
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 // 둘러보기 버튼 이름. "A" → "A 코스", "북코스" → 그대로
 const courseName = (name) => (/코스$/.test(name) ? name : `${name} 코스`);
@@ -152,7 +216,8 @@ const dataId = (data) => (data ? `${data.name}|${data.updated}` : null);
 // 티에서 그린까지 날아가고, 아래 "코스 둘러보기"로 전체나 코스 하나의 홀을 차례로 날아간다.
 // info[i]는 날아가는 동안 지도에 띄울 i번 홀 설명, onActive(i)는 지금 보여 주는 홀이 바뀔 때,
 // onPick(i)은 지도에서 홀 선을 눌렀을 때 부른다. windDir(풍향, 불어오는 쪽)·windSpeed(m/s)가 있으면
-// 지도 위에 바람 화살표를 띄우고, 지도를 돌리면 화살표도 같이 돈다
+// 지도 위에 바람 화살표를 띄우고, 지도를 돌리면 화살표도 같이 돈다.
+// 홀을 날 때와 거리를 잴 때는 공이 날아가는 궤적(shotLayer.js)을 그린다
 export default function CourseMap3D({ course, data, selected, info, onActive, onPick, windDir, windSpeed }) {
   const boxRef = useRef(null);
   const mapRef = useRef(null);
@@ -183,11 +248,21 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
   const [points, setPoints] = useState([]);
   const [measured, setMeasured] = useState({ points: [], heights: [] });
   const heights = measured.points === points ? measured.heights : [];
-  const segments = measureSegments(points, heights);
+  // 고른 시각의 바람. 체감 거리에 넣는다 (예보가 없는 날이면 높낮이만)
+  const wind = windDir != null && windSpeed != null ? { dir: windDir, speed: windSpeed } : null;
+  const segments = measureSegments(points, heights, wind);
+  // 고른 홀의 샷마다 거리·높이 차·방향 ({ index, shots }). 공 궤적을 계산할 때 함께 나온다
+  const [plan, setPlan] = useState(null);
   // 바람 화살표는 지도가 돌 때마다(날기 중엔 화면마다) 돌리므로 다시 그리지 않고 스타일만 바꾼다
   const windRef = useRef(windDir);
   windRef.current = windDir;
   const arrowRef = useRef(null);
+  // 공 궤적 레이어, 홀마다 계산해 둔 궤적, 늦게 온 계산 결과를 버리기 위한 번호
+  const shotsRef = useRef(null);
+  const arcCacheRef = useRef(new Map());
+  const holeTokenRef = useRef(0);
+  const measureTokenRef = useRef(0);
+  const measureShownRef = useRef(0);
 
   // 바람 화살표는 바람이 불어 가는 쪽을 가리킨다 (지도 회전만큼 되돌린다)
   function turnArrow() {
@@ -204,7 +279,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     setTouring(null);
   }
 
-  // 지도의 노란 홀 선, 지도 위 설명, 아래 목록 표시를 이 홀로 옮긴다 (null이면 지운다)
+  // 지도의 노란 홀 선, 지도 위 설명, 아래 목록 표시를 이 홀로 옮긴다 (null이면 지운다). 앞 홀의 공 궤적은 지운다
   function highlight(index) {
     const map = mapRef.current;
     if (activeRef.current != null) map.setFeatureState({ source: "golf", id: activeRef.current }, { selected: false });
@@ -212,6 +287,22 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     activeRef.current = index;
     setCurrent(index);
     onActiveRef.current?.(index);
+    holeTokenRef.current++;
+    shotsRef.current?.clear("hole");
+    setPlan(null);
+  }
+
+  // index번 홀의 공 궤적. 골프장 데이터마다 홀별로 한 번만 계산한다
+  function holeArcs(index) {
+    const cache = arcCacheRef.current;
+    if (!cache.has(index)) {
+      const hole = dataRef.current.holes[index];
+      const shots = holeShots(hole.coords, hole.par);
+      const arcs = buildArcs(shots.map((shot) => [shot.from, shot.to])).then((list) => list.map((arc, k) => ({ ...arc, at: shots[k].at })));
+      arcs.catch(() => cache.delete(index));
+      cache.set(index, arcs);
+    }
+    return cache.get(index);
   }
 
   function overview() {
@@ -262,9 +353,27 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     setFlat(!flat);
   }
 
+  // 홀 전체를 옆에서 본다(티가 왼쪽, 그린이 오른쪽). 뒤에서 따라갈 때는 공 궤적이 세로 선으로만 보여서,
+  // 다 날고 나면 옆에서 궤적 모양을 보여 준다
+  function sideView(path, jump = false) {
+    const map = mapRef.current;
+    const side = (bearing(path[0], path.at(-1)) + 270) % 360;
+    const lons = path.map(([lon]) => lon);
+    const lats = path.map(([, lat]) => lat);
+    const bounds = [
+      [Math.min(...lons), Math.min(...lats)],
+      [Math.max(...lons), Math.max(...lats)],
+    ];
+    const camera = map.cameraForBounds(bounds, { padding: { top: 90, bottom: 40, left: 40, right: 70 }, bearing: side });
+    if (!camera) return;
+    const view = { ...camera, bearing: side, pitch: 62 };
+    if (jump) map.jumpTo(view);
+    else map.easeTo({ ...view, duration: 1600 });
+  }
+
   // index번 홀을 따라 날기: 티 뒤에서 그린 쪽을 보고 시작해, 홀 선을 따라 그린까지 간다.
   // 휘어진 홀(도그레그)도 따라가도록 늘 70m 앞을 바라본다. run이 바뀌면(멈추면) 그만두고,
-  // 그린에 닿으면 잠깐 쉬었다가 onDone을 부른다 (둘러보기에서 다음 홀로)
+  // 그린에 닿으면 잠깐 쉬었다가 onDone을 부른다 (둘러보기에서 다음 홀로). 홀 하나만 날 때는 끝에 옆에서 본다
   function flyHole(index, run, onDone) {
     const map = mapRef.current;
     const hole = dataRef.current?.holes[index];
@@ -276,18 +385,49 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     const look = (meters) => bearing(pointAlong(path, meters), pointAlong(path, Math.min(total, meters + 70)));
     const finish = () => {
       if (onDone) timerRef.current = setTimeout(() => run === runRef.current && onDone(), reducedMotion() ? 2500 : PAUSE_MS);
+      else if (!reducedMotion()) timerRef.current = setTimeout(() => run === runRef.current && sideView(path), PAUSE_MS);
     };
+    // 공 궤적. timing이 없으면 다 그린 채로, 있으면 timing(궤적들)이 정한 시각부터 공이 날아간다.
+    // 그사이 다른 홀로 옮겼으면(번호가 바뀌면) 그리지 않는다
+    const token = holeTokenRef.current;
+    const arcs = holeArcs(index);
+    const showArcs = (timing) =>
+      arcs.then(
+        (list) => token === holeTokenRef.current && shotsRef.current?.show("hole", list, timing?.(list) ?? null),
+        () => {
+          // 높이를 못 읽으면 궤적은 그리지 않는다
+        },
+      );
+    // 샷마다 체감 거리는 궤적이 계산되는 대로 보여 준다 (카메라를 기다리지 않는다)
+    arcs.then(
+      (list) => token === holeTokenRef.current && setPlan({ index, shots: list.map(({ length, rise, bearing: dir }) => ({ length, rise, dir })) }),
+      () => {},
+    );
     if (reducedMotion()) {
-      map.jumpTo({ center: path.at(-1), bearing: look(Math.max(0, total - 70)), zoom: 17.3, pitch: 60 });
+      sideView(path, true);
+      showArcs(null);
       finish();
       return;
     }
     map.flyTo({ center: path[0], bearing: look(0), zoom: 17, pitch: 66, duration: 1400 });
     map.once("moveend", () => {
-      if (run !== runRef.current) return;
+      if (run !== runRef.current) {
+        // 홀 선을 따라 날기 전에 멈췄으면 궤적만 그려 둔다
+        showArcs(null);
+        return;
+      }
       // 둘러보기는 홀이 많아 조금 빨리 난다
       const duration = Math.min(10_000, Math.max(onDone ? 3500 : 4000, total * (onDone ? 11 : 14)));
       const begin = performance.now();
+      // 카메라가 샷을 치는 곳에 닿을 때 공을 날린다. 앞 공이 아직 날고 있으면 떨어진 뒤에
+      showArcs((list) => {
+        let free = performance.now();
+        return list.map((arc) => {
+          const start = Math.max(begin + easeInOutInverse(total > 0 ? arc.at / total : 0) * duration, free);
+          free = start + arc.ms + SHOT_PAUSE_MS;
+          return start;
+        });
+      });
       let heading = look(0);
       const frame = (now) => {
         if (run !== runRef.current) return;
@@ -330,11 +470,15 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
       attributionControl: { compact: true },
     });
     mapRef.current = map;
+    const shots = createShotLayer();
+    shotsRef.current = shots;
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.on("rotate", turnArrow);
     map.on("load", () => {
       koreanLabels(map);
       addLayers(map);
+      // 공 궤적은 맨 위에 그린다
+      map.addLayer(shots.layer);
       readyRef.current = true;
       map.getSource("golf").setData(toGeoJSON(dataRef.current));
       shownRef.current = dataId(dataRef.current);
@@ -355,6 +499,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
       stop();
       readyRef.current = false;
       mapRef.current = null;
+      shotsRef.current = null;
       map.remove();
     };
   }, []);
@@ -387,6 +532,31 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     map.getCanvas().style.cursor = measuring ? "crosshair" : "";
   }, [points, measured, measuring]);
 
+  // 찍은 점 사이로 공 궤적을 그린다. 점을 하나 더 찍으면 새 구간으로 공이 날아간다
+  useEffect(() => {
+    const shots = shotsRef.current;
+    if (!shots) return;
+    const token = ++measureTokenRef.current;
+    if (points.length < 2) {
+      shots.clear("measure");
+      measureShownRef.current = 0;
+      return;
+    }
+    const pairs = points.slice(1).map((point, i) => [points[i], point]);
+    buildArcs(pairs).then(
+      (arcs) => {
+        if (token !== measureTokenRef.current) return;
+        const added = pairs.length === measureShownRef.current + 1 && !reducedMotion();
+        measureShownRef.current = pairs.length;
+        const now = performance.now();
+        shots.show("measure", arcs, arcs.map((_, i) => (added && i === arcs.length - 1 ? now : null)));
+      },
+      () => {
+        // 높이를 못 읽으면 궤적은 그리지 않는다
+      },
+    );
+  }, [points]);
+
   // 골프장이 바뀌면 그 자리로 옮긴다
   useEffect(() => {
     const map = mapRef.current;
@@ -405,6 +575,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
     map.getSource("golf").setData(toGeoJSON(data));
     if (dataId(data) === shownRef.current) return;
     shownRef.current = dataId(data);
+    arcCacheRef.current = new Map();
     map.removeFeatureState({ source: "golf" });
     activeRef.current = null;
     highlight(null);
@@ -459,14 +630,15 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
           </div>
           {segments.length === 0 ? (
             <p className="course3d-note">
-              지도를 눌러 점을 찍으세요. 두 점 사이 거리와 높이 차를 잽니다. 여러 점을 찍으면(티 → 떨어질 곳 → 그린) 구간마다 잽니다.
+              지도를 눌러 점을 찍으세요. 두 점 사이 거리와 높이 차를 재고, 공이 날아가는 궤적을 그립니다. 여러 점을 찍으면(티 → 떨어질
+              곳 → 그린) 구간마다 잽니다.
             </p>
           ) : (
             <ol className="measure-list">
               {segments.map((seg, i) => (
                 <li key={i}>
                   <span className="muted">{i + 1}→{i + 2}</span> <strong>{Math.round(seg.length)}m</strong>
-                  {seg.rise == null ? " · 높이 재는 중" : ` · ${slopeText(seg.rise)} · 체감 약 ${Math.round(seg.plays)}m`}
+                  {seg.rise == null ? " · 높이 재는 중" : ` · ${playsLine(seg.length, seg.rise, seg.wind)}`}
                 </li>
               ))}
               {segments.length > 1 && (
@@ -478,9 +650,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
               )}
             </ol>
           )}
-          {segments.length > 0 && (
-            <p className="weather-note">체감 거리는 오르막 1m를 거리 1m로 친 대략값입니다(내리막은 그만큼 짧게). 높이는 약 30m 간격 지형 자료로 잽니다.</p>
-          )}
+          {segments.length > 0 && <p className="weather-note">{playsNote(wind)}</p>}
         </div>
       )}
       {holes.length > 0 && (
@@ -501,6 +671,22 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
                 ))}
             </>
           )}
+        </div>
+      )}
+      {plan && plan.index === current && holes[current] && (
+        <div className="course3d-measure">
+          <div className="measure-head">
+            <strong>🏌️ {holes[current].label} 샷마다 체감 거리 (공 궤적 기준)</strong>
+          </div>
+          <ol className="measure-list">
+            {plan.shots.map((shot, i) => (
+              <li key={i}>
+                <span className="muted">{SHOT_NAMES[i] ?? `${i + 1}번째 샷`}</span> <strong>{Math.round(shot.length)}m</strong> ·{" "}
+                {playsLine(shot.length, shot.rise, wind && windParts(shot.dir, wind.dir, wind.speed))}
+              </li>
+            ))}
+          </ol>
+          <p className="weather-note">{playsNote(wind)}</p>
         </div>
       )}
     </>

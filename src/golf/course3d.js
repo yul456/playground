@@ -254,13 +254,59 @@ export function slopeText(diff) {
   return diff > 0 ? `오르막 ${meters}m` : `내리막 ${meters}m`;
 }
 
-// 거리 재기: 찍은 점과 점 사이 구간마다 거리(m), 높이 차(rise, m, 오르막이 +), 체감 거리(plays, m).
-// heights[i]는 i번 점의 지형 높이(아직 모르면 null). 체감 거리는 오르막 1m를 거리 1m로 치는 흔한 어림셈이다
-export function measureSegments(points, heights = []) {
+// 체감 거리: 바람과 높낮이를 넣어 실제로 쳐야 하는 거리. 골프에서 흔히 쓰는 어림셈으로,
+// 맞바람은 1m/s마다 2.2%(1mph마다 1%) 길게, 뒷바람은 1m/s마다 1.1%(맞바람의 절반) 짧게, 오르막 1m는 1m 길게 친다.
+// 옆바람은 거리 대신 조준 방향만 알려 준다
+const HEAD_PER_MS = 0.0224;
+const TAIL_PER_MS = 0.0112;
+// 클럽 하나가 보내는 거리 차이(m)
+export const CLUB_GAP = 10;
+
+// shotBearing 쪽으로 칠 때 바람(dir: 불어오는 쪽, speed: m/s)의 앞뒤 세기(head, 맞바람이 +)와 옆 세기(side, 오른쪽에서 불면 +)
+export function windParts(shotBearing, dir, speed) {
+  if (dir == null || speed == null) return null;
+  const turn = (((dir - shotBearing + 540) % 360) - 180) * RAD;
+  return { head: speed * Math.cos(turn), side: speed * Math.sin(turn) };
+}
+
+// length(m)를 칠 때 바람 때문에 더(+) 또는 덜(−) 쳐야 하는 거리(m). head는 windParts의 앞뒤 세기
+export const windExtra = (length, head) => length * (head > 0 ? HEAD_PER_MS : TAIL_PER_MS) * head;
+
+// 체감 거리(plays)와 바람 몫(byWind). rise는 높이 차(m, 오르막이 +, 모르면 0으로 본다), wind는 windParts 결과(없으면 null)
+export function playsLike(length, rise, wind) {
+  const byWind = wind ? windExtra(length, wind.head) : 0;
+  return { plays: length + byWind + (rise ?? 0), byWind };
+}
+
+// 평소보다 클럽 몇 개 길게·짧게 잡을지 (diff = 체감 거리 − 거리)
+export function clubText(diff) {
+  const n = Math.sign(diff) * Math.round(Math.abs(diff) / CLUB_GAP);
+  if (n === 0) return "평소대로";
+  return n > 0 ? `클럽 ${n}개 길게` : `클럽 ${-n}개 짧게`;
+}
+
+// 바람 몫을 말로 ("맞바람 +14m"). 1m가 안 되면 null
+export function windText(byWind) {
+  const meters = Math.round(Math.abs(byWind));
+  if (meters < 1) return null;
+  return byWind > 0 ? `맞바람 +${meters}m` : `뒷바람 −${meters}m`;
+}
+
+// 옆바람이 CALM_WIND를 넘으면 바람이 오는 쪽을 보고 친다
+export function aimText(side) {
+  if (side == null || Math.abs(side) < CALM_WIND) return null;
+  return side > 0 ? "오른쪽 보고" : "왼쪽 보고";
+}
+
+// 거리 재기: 찍은 점과 점 사이 구간마다 거리(m), 높이 차(rise, m, 오르막이 +), 바람(windParts), 바람 몫(byWind, m),
+// 체감 거리(plays, m). heights[i]는 i번 점의 지형 높이(아직 모르면 null), wind는 { dir, speed }(없으면 null)
+export function measureSegments(points, heights = [], wind = null) {
   return points.slice(1).map((point, i) => {
     const length = distance(points[i], point);
     const rise = heights[i] != null && heights[i + 1] != null ? heights[i + 1] - heights[i] : null;
-    return { length, rise, plays: rise == null ? null : length + rise };
+    const parts = wind ? windParts(bearing(points[i], point), wind.dir, wind.speed) : null;
+    const { plays, byWind } = playsLike(length, rise, parts);
+    return { length, rise, wind: parts, byWind, plays: rise == null ? null : plays };
   });
 }
 
@@ -279,6 +325,65 @@ export function windOnHole(holeBearing, dir, speed) {
   if (Math.abs(turn) >= 135) return { kind: "tail", text: `뒷바람 ${strength}` };
   return turn > 0 ? { kind: "right", text: `오→왼 옆바람 ${strength}` } : { kind: "left", text: `왼→오 옆바람 ${strength}` };
 }
+
+// 공 궤적. 실제 기록이 아니라 화면에 보여 줄 어림이다.
+// 홀은 정규 타수(파 − 2: 파3은 1번, 파4는 2번, 파5는 3번)로 나눠 티 → 떨어질 곳 → … → 그린으로 친다.
+// 첫 타는 DRIVE(m, 짧은 홀은 길이의 60%까지)이고 남은 거리는 나머지 타수로 똑같이 나눈다.
+// 떨어질 곳을 홀 선 위에 두어 휘어진 홀도 따라간다
+export const DRIVE = 210;
+// 파가 없는 홀은 길이로 정한다 (남자 기준 229m까지 파3, 430m까지 파4)
+export const parFor = (length) => (length <= 229 ? 3 : length <= 430 ? 4 : 5);
+
+// 홀의 샷들: { from, to, at(홀 선에서 샷을 치는 곳까지 거리, m), length(m) }
+export function holeShots(coords, par) {
+  const total = lineLength(coords);
+  const count = Math.min(4, Math.max(1, (par ?? parFor(total)) - 2));
+  const stops = [0];
+  if (count > 1) {
+    const first = Math.min(DRIVE, total * 0.6);
+    for (let k = 0; k < count - 1; k++) stops.push(first + ((total - first) * k) / (count - 1));
+  }
+  stops.push(total);
+  return stops.slice(1).map((end, i) => {
+    const from = pointAlong(coords, stops[i]);
+    const to = pointAlong(coords, end);
+    return { from, to, at: stops[i], length: distance(from, to) };
+  });
+}
+
+// 공이 가장 높이 뜨는 높이(m). 멀리 치는 샷일수록 높고 30m를 넘지 않는다 (투어 선수 드라이버·아이언이 30m 안팎)
+export const apexFor = (length) => Math.min(30, 4 + length * 0.13);
+// 공 높이의 모양(0~1). 거리의 58%쯤에서 가장 높고, 올라갈 때보다 내려올 때 가파르다
+const PEAK_AT = 0.58;
+const SKEW = Math.log(0.5) / Math.log(PEAK_AT);
+export const flightShape = (t) => Math.sin(Math.PI * Math.min(1, Math.max(0, t)) ** SKEW);
+// 공 궤적 하나를 이만큼 나눠 그린다
+export const SHOT_STEPS = 40;
+// 언덕을 넘는 샷은 땅보다 이만큼(m) 넘게 뜨도록 가장 높은 높이를 올린다. 산을 넘겨 찍은 점처럼 터무니없을 때는 MAX_APEX까지만
+const CLEARANCE = 4;
+const MAX_APEX = 80;
+
+// a에서 b까지 공이 지나는 땅 위 자리 steps+1개
+export function shotPoints(a, b, steps = SHOT_STEPS) {
+  return Array.from({ length: steps + 1 }, (_, i) => [a[0] + ((b[0] - a[0]) * i) / steps, a[1] + ((b[1] - a[1]) * i) / steps]);
+}
+
+// shotPoints 점마다 공의 해발 높이(m). ground는 같은 점들의 지형 높이, length는 샷 거리(m).
+// 처음과 끝은 땅이고, 그 사이는 두 끝을 직선으로 이은 높이에 flightShape만큼 더한다
+export function shotHeights(ground, length) {
+  const n = ground.length - 1;
+  const base = (i) => ground[0] + ((ground[n] - ground[0]) * i) / n;
+  let apex = apexFor(length);
+  for (let i = 1; i < n; i++) {
+    const shape = flightShape(i / n);
+    if (shape > 0.2) apex = Math.max(apex, (ground[i] + CLEARANCE - base(i)) / shape);
+  }
+  apex = Math.min(apex, MAX_APEX);
+  return ground.map((_, i) => base(i) + apex * flightShape(i / n));
+}
+
+// 공 한 번이 날아가는 모습을 보여 줄 시간(ms). 실제(드라이버 6초쯤)보다 빠르게 보여 준다
+export const shotMs = (length) => 700 + length * 3.5;
 
 // 지형 높이: Terrarium 타일(PNG)의 색에 높이가 들어 있다. 높이(m) = R × 256 + G + B ÷ 256 − 32768
 export const TERRAIN_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";

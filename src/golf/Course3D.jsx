@@ -197,7 +197,7 @@ export default function Course3D() {
   else if (data && !data.holes.length && !Object.values(data.areas).some((list) => list.length)) {
     note = "OpenStreetMap에 골프장 경계만 있고 홀·그린은 그려져 있지 않아, 지형과 경계(점선)만 보여 줍니다.";
   } else if (data && !data.holes.length) note = "그린·벙커만 그려져 있고 홀 선은 없는 골프장입니다.";
-  else if (data) note = "홀을 누르면 티 뒤에서 그린까지 날아갑니다. 지도에서 홀 선을 눌러도 되고, 지도를 만지면 멈춥니다.";
+  else if (data) note = "홀을 누르면 티 뒤에서 그린까지 날아가며 공이 날아가는 궤적을 보여 줍니다. 지도에서 홀 선을 눌러도 되고, 지도를 만지면 멈춥니다.";
 
   return (
     <>
@@ -255,7 +255,8 @@ export default function Course3D() {
           <p className="weather-note">
             길이는 지도에 그려진 홀 선(보통 티에서 그린 가운데까지)의 길이입니다. 오르막·내리막은 약 30m 간격의 지형 자료로 잰
             티와 그린의 높이 차라 몇 m 정도 틀릴 수 있습니다. 바람은 티에서 그린을 바로 잇는 방향으로 따지므로 휘어진 홀은 티샷 방향과
-            다를 수 있습니다.
+            다를 수 있습니다. 공 궤적은 정규 타수(파3 1번, 파4 2번, 파5 3번)로 나눠 첫 타를 210m로 친 어림이고, 공은 가장 높이 30m쯤
+            뜹니다(파가 없는 홀은 길이로 파를 정합니다).
           </p>
         )}
         {data && <p className="weather-credit">골프장 데이터 © OpenStreetMap 기여자 (ODbL), {data.updated} 기준</p>}
