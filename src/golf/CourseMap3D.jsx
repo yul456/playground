@@ -165,6 +165,9 @@ const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 const easeInOutInverse = (y) => (y < 0.5 ? Math.sqrt(y / 2) : 1 - Math.sqrt(2 * (1 - y)) / 2);
 // 그린에 닿은 뒤 다음 홀로 가기 전에 잠깐 멈추는 시간
 const PAUSE_MS = 700;
+// 홀을 날 때 카메라를 홀 방향에서 이만큼(도) 비켜 비스듬히 본다. 바로 뒤에서 보면 공 궤적이 세로 선으로만 보여
+// 공이 움직이는 게 잘 안 보였다
+const SIDE_ANGLE = 35;
 // 공이 떨어진 뒤 다음 샷까지 쉬는 시간
 const SHOT_PAUSE_MS = 350;
 
@@ -387,7 +390,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
   }
 
   // index번 홀을 따라 날기: 티 뒤에서 그린 쪽을 보고 시작해, 홀 선을 따라 그린까지 간다.
-  // 휘어진 홀(도그레그)도 따라가도록 늘 70m 앞을 바라본다. run이 바뀌면(멈추면) 그만두고,
+  // 휘어진 홀(도그레그)도 따라가도록 늘 70m 앞을 바라보되, 공 궤적이 보이게 SIDE_ANGLE만큼 비스듬히 본다. run이 바뀌면(멈추면) 그만두고,
   // 그린에 닿으면 잠깐 쉬었다가 onDone을 부른다 (둘러보기에서 다음 홀로). 홀 하나만 날 때는 끝에 옆에서 본다
   function flyHole(index, run, onDone) {
     const map = mapRef.current;
@@ -424,7 +427,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
       finish();
       return;
     }
-    map.flyTo({ center: path[0], bearing: look(0), zoom: 17, pitch: 66, duration: 1400 });
+    map.flyTo({ center: path[0], bearing: look(0) + SIDE_ANGLE, zoom: 17, pitch: 66, duration: 1400 });
     map.once("moveend", () => {
       if (run !== runRef.current) {
         // 홀 선을 따라 날기 전에 멈췄으면 궤적만 그려 둔다
@@ -450,7 +453,7 @@ export default function CourseMap3D({ course, data, selected, info, onActive, on
         const meters = easeInOut(t) * total;
         // 그린 가까이에서는 바라볼 앞쪽이 없어 방향이 흔들리므로 마지막 방향을 그대로 쓴다
         if (total - meters > 25) heading = look(meters);
-        map.jumpTo({ center: pointAlong(path, meters), bearing: heading, zoom: 17 + 0.3 * t, pitch: 66 - 6 * t });
+        map.jumpTo({ center: pointAlong(path, meters), bearing: heading + SIDE_ANGLE, zoom: 17 + 0.3 * t, pitch: 66 - 6 * t });
         if (t < 1) frameRef.current = requestAnimationFrame(frame);
         else finish();
       };
