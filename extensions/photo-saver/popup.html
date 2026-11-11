@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>페이지 사진 받기</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <main>
+    <h1>페이지 사진 받기</h1>
+    <p class="page" id="page">&nbsp;</p>
+    <div class="message" id="message" hidden></div>
+
+    <div id="form" hidden>
+      <fieldset class="modes">
+        <legend>받는 방식</legend>
+        <label><input type="radio" name="mode" value="files"> 사진 따로</label>
+        <label><input type="radio" name="mode" value="stitch"> 이어 붙인 한 장</label>
+        <label><input type="radio" name="mode" value="both"> 둘 다</label>
+      </fieldset>
+      <!-- 사진을 따로 받을 때의 폴더와 파일 이름 -->
+      <div id="filesOptions">
+        <label class="path">
+          <span class="where">폴더: 다운로드 › <span id="base"></span> ›</span>
+          <input id="folder" maxlength="60" spellcheck="false" autocomplete="off">
+        </label>
+        <fieldset class="modes">
+          <legend>사진 이름</legend>
+          <label><input type="radio" name="fileNames" value="original"> 원본 이름 <small>photo.jpg</small></label>
+          <label><input type="radio" name="fileNames" value="number"> 번호 <small>001.jpg</small></label>
+        </fieldset>
+      </div>
+      <!-- 이어 붙인 그림의 파일 이름 -->
+      <div id="stitchOptions">
+        <fieldset class="modes">
+          <legend>이어 붙인 그림 이름</legend>
+          <label><input type="radio" name="stitchName" value="page"> 페이지 이름</label>
+          <label><input type="radio" name="stitchName" value="custom"> 직접 입력</label>
+          <input class="text" id="customName" maxlength="60" spellcheck="false" autocomplete="off" placeholder="파일 이름" aria-label="이어 붙인 그림의 파일 이름">
+        </fieldset>
+      </div>
+      <p class="preview" id="preview"></p>
+      <fieldset class="exts" id="exts" hidden>
+        <legend>확장자 <small>(끄면 그 확장자 사진의 체크를 끕니다)</small></legend>
+        <span class="ext-list" id="extList"></span>
+      </fieldset>
+      <label class="option">
+        <input type="checkbox" id="hideDecor">
+        <span>꾸밈 그림 숨기기 <small>(작은 그림, SVG, 배경 그림, 미리보기가 안 뜨는 것)</small></span>
+      </label>
+      <details class="rules" id="rules" hidden>
+        <summary>빼 둔 이름 <span id="ruleCount"></span>개</summary>
+        <p class="hint">
+          받기를 누를 때 직접 끈 사진의 파일 이름입니다. 다른 페이지에서도 이 이름의 사진은 처음부터 꺼 둡니다.
+          주소 끝이 파일 이름이 아닌 사진(…/128 등)은 주소 전체로 기억합니다. 다시 켜고 받으면 여기서 빠집니다.
+        </p>
+        <ul class="rule-list" id="ruleList"></ul>
+        <button type="button" class="link" id="clearRules">모두 지우기</button>
+      </details>
+      <div class="toolbar">
+        <span class="count" id="count"></span>
+        <button type="button" class="link" id="toggleAll">모두 고르기</button>
+        <button type="button" class="link" id="rescan">다시 찾기</button>
+      </div>
+      <ol class="grid" id="grid"></ol>
+    </div>
+
+    <footer>
+      <div class="row">
+        <button type="button" id="start" disabled>받기</button>
+        <button type="button" class="secondary" id="openFolder" hidden>폴더 열기</button>
+        <button type="button" class="secondary" id="openStitch" hidden>세로로 붙이기</button>
+      </div>
+      <p class="status" id="status"></p>
+    </footer>
+  </main>
+</body>
+</html>

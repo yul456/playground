@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "check": "node scripts/check-boundaries.mjs",
+    "check": "node scripts/check-boundaries.mjs && node scripts/check-copies.mjs",
     "prebuild": "npm run check",
     "build": "vite build",
     "preview": "vite preview"

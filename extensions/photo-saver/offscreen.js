@@ -1,0 +1,21 @@
+// 보이지 않는 문서(offscreen document). 서비스 워커는 Blob 주소(URL.createObjectURL)를 만들지 못해서
+// 세로로 이어 붙이기는 여기서 하고, 다 만든 그림의 Blob 주소를 서비스 워커에 넘겨 받게 한다.
+// 이 문서에서는 chrome.runtime(메시지)만 쓸 수 있다
+import { stitchImages } from "./stitch.js";
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.target !== "offscreen") return;
+  if (message.type === "stitch") run(message);
+  else if (message.type === "revoke") URL.revokeObjectURL(message.url);
+});
+
+async function run({ jobId, urls }) {
+  const send = (message) => chrome.runtime.sendMessage({ target: "background", jobId, ...message }).catch(() => {});
+  try {
+    const result = await stitchImages(urls, (progress) => send({ type: "stitch-progress", ...progress }));
+    const { width, height, bytes, count, failed } = result;
+    send({ type: "stitch-done", url: URL.createObjectURL(result.blob), width, height, bytes, count, failed });
+  } catch (err) {
+    send({ type: "stitch-error", message: err?.message || String(err) });
+  }
+}

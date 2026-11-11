@@ -1,0 +1,170 @@
+// 페이지 사진 받기(크롬 확장 프로그램) 안내 페이지. 확장 프로그램 코드는 extensions/photo-saver에 있고,
+// 빌드할 때 vite.config.js가 그 폴더를 ZIP으로 묶어 이 페이지 옆(photo-saver.zip)에 둔다
+import { useState } from "react";
+import { HUB_URL } from "../shared/site.js";
+
+const ZIP_URL = "photo-saver.zip";
+const STITCH_URL = `${import.meta.env.BASE_URL}stitch/`;
+const EXTENSIONS_PAGE = "chrome://extensions";
+
+export default function App() {
+  const [copied, setCopied] = useState(false);
+
+  // 웹 페이지에서는 chrome:// 주소로 가는 링크를 열 수 없어서 주소를 복사해 붙여 넣게 한다
+  async function copyAddress() {
+    try {
+      await navigator.clipboard.writeText(EXTENSIONS_PAGE);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <main className="container">
+      <a className="back-link" href={HUB_URL}>← Playground</a>
+      <header>
+        <h1>페이지 사진 받기</h1>
+        <p className="subtitle">
+          보고 있는 웹 페이지의 사진을 한 폴더에 한꺼번에 받거나, 세로로 이어 붙여 한 장으로 받는 크롬 확장
+          프로그램입니다. 웹 스토어에 올리지 않아서 아래처럼 직접 설치합니다.
+        </p>
+      </header>
+
+      <section className="card ps-download">
+        <a className="ps-button" href={ZIP_URL} download>
+          확장 프로그램 받기 (ZIP)
+        </a>
+        <span className="ps-muted">버전 {__PHOTO_SAVER_VERSION__} · 크롬·엣지</span>
+      </section>
+
+      <section className="card">
+        <h2>설치 (PC마다 한 번)</h2>
+        <ol className="ps-steps">
+          <li>
+            받은 ZIP의 압축을 풉니다. 크롬이 이 폴더에서 확장 프로그램을 읽으므로, 지우거나 옮기지 않을 곳에 둡니다.
+          </li>
+          <li>
+            크롬 주소창에 <code>{EXTENSIONS_PAGE}</code>를 붙여 넣어 엽니다. 엣지는 <code>edge://extensions</code>
+            입니다.{" "}
+            <button type="button" className="secondary ps-copy" onClick={copyAddress}>
+              {copied ? "복사했습니다" : "주소 복사"}
+            </button>
+          </li>
+          <li>
+            오른쪽 위의 <b>개발자 모드</b>를 켭니다.
+          </li>
+          <li>
+            <b>압축해제된 확장 프로그램을 로드합니다</b>를 눌러 1번에서 푼 폴더(<code>manifest.json</code>이 든
+            폴더)를 고릅니다.
+          </li>
+          <li>
+            주소창 오른쪽의 퍼즐 모양 버튼을 누르고 <b>페이지 사진 받기</b> 옆의 핀을 누르면 툴바에 버튼이 생깁니다.
+          </li>
+          <li>
+            크롬 설정 › 다운로드의 <b>다운로드 전에 각 파일의 저장 위치 확인</b>이 켜져 있으면 끕니다. 켜져 있으면
+            사진마다 저장 창이 뜹니다.
+          </li>
+        </ol>
+      </section>
+
+      <section className="card">
+        <h2>쓰는 법</h2>
+        <ol className="ps-steps">
+          <li>사진을 받을 페이지를 엽니다. 스크롤해야 나오는 사진이 있으면 끝까지 한 번 내려 둡니다.</li>
+          <li>
+            툴바의 확장 프로그램 버튼을 누르면 페이지의 사진이 순서대로 나옵니다. 받을 사진만 체크해 둡니다.
+            아이콘·배경 그림 같은 꾸밈 그림과 미리보기가 안 뜨는 것은 처음부터 빠져 있고 목록에서도 숨겨 둡니다.
+          </li>
+          <li>
+            받는 방식을 고르고 버튼을 누릅니다.
+            <ul className="ps-sub">
+              <li>
+                <b>사진 따로</b>: <code>다운로드/페이지 사진/제목/</code>에 저장합니다. <b>사진 이름</b>은 원본 이름(
+                <code>photo.jpg</code>, 기본)과 페이지 순서 번호(<code>001.jpg</code>) 가운데 고릅니다.
+              </li>
+              <li>
+                <b>이어 붙인 한 장</b>: 고른 사진을 세로로 이어 붙여 저장합니다. <b>이어 붙인 그림 이름</b>은 페이지 이름(
+                <code>다운로드/페이지 사진/제목.png</code>, 기본)과 직접 입력한 이름(<code>입력한 이름.png</code>) 가운데
+                고릅니다. 폭은 가장 넓은 사진에 맞추고, 좁은 사진은 가운데에 두고 양옆을 흰색으로 채웁니다.
+              </li>
+              <li>
+                <b>둘 다</b>: 두 가지를 함께 저장합니다.
+              </li>
+            </ul>
+          </li>
+          <li>
+            <b>확장자</b> 체크박스에는 이 페이지에서 찾은 사진의 확장자가 나옵니다. 끄면 그 확장자 사진의 체크가 한꺼번에
+            꺼집니다. 사진은 목록에 그대로 보이고, 필요한 것은 하나씩 다시 켤 수 있습니다. 꺼 둔 확장자는 다른 페이지에서도
+            처음부터 꺼 둡니다.
+          </li>
+          <li>
+            고른 옵션(받는 방식, 사진 이름, 그림 이름, 확장자, 꾸밈 그림 숨기기)은 바로 기억해서, 다음에 열 때 그대로
+            설정합니다.
+          </li>
+          <li>
+            직접 끄고 받은 사진의 파일 이름은 기억해 두었다가, 다른 페이지에서도 같은 이름의 사진은 처음부터 꺼 둡니다
+            ("빼 둔 이름" 표시). 다시 켜고 받으면 잊습니다. 기억한 이름은 확장 프로그램 창의 <b>빼 둔 이름</b>에서 보고
+            지울 수 있습니다.
+          </li>
+          <li>
+            사진만 따로 받았다면 <a href={STITCH_URL}>사진 세로로 붙이기</a>에서 그 폴더를 골라 이어 붙일 수도
+            있습니다. <code>페이지 사진</code> 폴더를 고르면 받은 페이지마다 한 장씩 한꺼번에 붙입니다.
+          </li>
+        </ol>
+      </section>
+
+      <section className="card">
+        <h2>업데이트</h2>
+        <p className="ps-text">
+          새 ZIP을 받아 푼 파일로 원래 폴더의 파일을 바꾼 뒤, <code>{EXTENSIONS_PAGE}</code>의 이 확장 프로그램 칸에서
+          새로고침(↻) 버튼을 누릅니다. 설치한 버전은 그 칸에 적혀 있습니다.
+        </p>
+      </section>
+
+      <section className="ps-notes">
+        <h2>알아 둘 것</h2>
+        <ul>
+          <li>개발자 모드는 켜 둔 채로 둡니다. 끄면 직접 설치한 이 확장 프로그램도 꺼집니다.</li>
+          <li>버튼을 누른 탭의 페이지만 읽고, 사진은 그 사이트에서 바로 받습니다. 다른 곳으로 보내는 것은 없습니다.</li>
+          <li>
+            이어 붙이려면 확장 프로그램이 사진을 직접 받아 읽어야 하고, 사진은 대개 다른 주소(사진 서버)에 있어서
+            "모든 사이트" 권한을 씁니다. 확장 프로그램 세부정보의 사이트 액세스에 그렇게 나옵니다.
+          </li>
+          <li>
+            페이지 안의 틀(iframe)은 같은 사이트의 것만 읽습니다. 네이버 지도의 장소 사진처럼 주소 뒤쪽(naver.com)이 같은
+            틀의 사진은 찾고, 다른 사이트의 틀(광고, 블로그 옆 위젯 등)에 든 그림은 찾지 않습니다.
+          </li>
+          <li>
+            원본 이름으로 받으면 폴더 안의 이름순이 페이지 순서와 달라집니다. 사진 세로로 붙이기는 이름순으로 붙이므로,
+            페이지 순서대로 붙이려면 이 확장 프로그램의 이어 붙이기를 쓰거나 번호로 받으세요. 주소에 파일 이름이 없는
+            사진은 번호로 받고, 같은 이름이 또 나오면 (2)를 붙입니다.
+          </li>
+          <li>
+            확장자는 주소에 적힌 것으로 봅니다. 주소에 확장자가 없으면 받아 본 종류로 알아보고, 그래도 모르면 "기타"로
+            묶습니다. 저장되는 파일의 확장자는 받아 본 종류를 따르므로 드물게 주소의 확장자와 다를 수 있습니다.
+          </li>
+          <li>
+            빼 둔 이름은 주소 끝의 파일 이름(photo.jpg)으로 맞춰 봅니다. 폴더가 달라도 이름이 같으면 같은 사진으로
+            봅니다. 주소 끝이 파일 이름이 아니면(…/128처럼 확장자가 없으면) 주소 전체가 같아야 합니다.
+          </li>
+          <li>
+            image.png처럼 흔한 이름은 다른 사진과 겹칠 수 있어서, 빼 둔 이름의 사진은 숨기지 않고 "빼 둔 이름" 표시와
+            함께 보여 줍니다.
+          </li>
+          <li>같은 이름의 폴더에 받은 적이 있으면 "제목 (2)"처럼 새 폴더에 받습니다.</li>
+          <li>
+            사이트가 사진 받기를 막거나 그림 대신 다른 것을 돌려주면 그 사진은 받지 못합니다. 받지 못한 수와 까닭은
+            확장 프로그램 창에 나오고, 크롬 다운로드 목록에는 남기지 않습니다.
+          </li>
+          <li>
+            이어 붙일 때 받지 못하거나 열지 못한 사진은 빼고 붙이고, 뺀 사진의 번호와 까닭을 확장 프로그램 창에 알려
+            줍니다. SVG는 고르면 제 크기대로 그려 붙입니다.
+          </li>
+          <li>회사에서 관리하는 크롬은 개발자 모드나 확장 프로그램 설치가 막혀 있을 수 있습니다.</li>
+        </ul>
+      </section>
+    </main>
+  );
+}

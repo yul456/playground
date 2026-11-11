@@ -13,6 +13,7 @@
 - 골프 라운드 날씨: https://yul456.github.io/playground/golf/weather/
 - 골프 3D 코스: https://yul456.github.io/playground/golf/3d/
 - 사진 세로로 붙이기: https://yul456.github.io/playground/stitch/
+- 페이지 사진 받기(크롬 확장 프로그램 안내·ZIP): https://yul456.github.io/playground/photo-saver/
 
 ## 실행
 
@@ -42,6 +43,9 @@ golf/scorecard/        골프 스코어카드 입구 (index.html)
 golf/weather/          골프 라운드 날씨 입구
 golf/3d/               골프 3D 코스 입구
 stitch/index.html       사진 세로로 붙이기 입구
+photo-saver/index.html  페이지 사진 받기(크롬 확장 프로그램) 안내 페이지 입구. 빌드하면 옆에 photo-saver.zip이 생긴다
+extensions/
+  photo-saver/          페이지 사진 받기 크롬 확장 프로그램. 빌드 없이 이 폴더째 설치한다
 src/
   shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, WeatherIcon.jsx, geo.js, Confetti.jsx, random.js)
   home/                 첫 화면. FEATURES 배열에 기능 카드를 둔다
@@ -53,7 +57,10 @@ src/
   baseball/             숫자 야구
   golf/                 골프 메뉴 세 페이지(스코어카드·라운드 날씨·3D 코스)가 함께 쓰는 폴더 (3D 코스 데이터는 golf/courses3d/)
   stitch/               사진 세로로 붙이기 (PNG를 줄 단위로 이어 쓰는 png.js, 백그라운드 작업 stitchWorker.js)
+  photo-saver/          페이지 사진 받기 안내 페이지 (설치 방법, ZIP 받기)
 scripts/
+  zip-folder.mjs        폴더를 ZIP으로 묶는다 (vite.config.js가 확장 프로그램 ZIP을 만들 때 쓴다)
+  check-copies.mjs      확장 프로그램이 복사해 쓰는 파일(png.js)이 원본과 같은지 검사 (npm run check에서 돈다)
   check-boundaries.mjs  기능 폴더 경계 검사 (npm run build 전에 자동 실행)
   golf-courses.mjs      국내 골프장 목록(src/golf/golfCourses.js)을 OpenStreetMap에서 새로 받는다 (손으로 실행)
   golf-3d.mjs           골프 3D 코스의 홀·그린 데이터(src/golf/courses3d/)를 OpenStreetMap에서 새로 받는다 (golf-courses.mjs 다음에 손으로 실행)
@@ -71,6 +78,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 숫자 야구 | `src/baseball/`, `baseball/` | 없음 |
 | 골프 (스코어카드·라운드 날씨·3D 코스) | `src/golf/`, `golf/` | `leaflet` (라운드 날씨 지도), `maplibre-gl` (3D 코스 지도). 사진 인식은 패키지 없이 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드 |
 | 사진 세로로 붙이기 | `src/stitch/`, `stitch/` | 없음 (PNG 압축은 브라우저 내장 CompressionStream) |
+| 페이지 사진 받기 | `extensions/photo-saver/`, `src/photo-saver/`, `photo-saver/` | 없음 (확장 프로그램은 빌드 없이 쓰는 자바스크립트, 이어 붙이기 PNG는 `src/stitch/png.js` 복사본, ZIP은 Node 내장 zlib로 묶음) |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.
 

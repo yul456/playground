@@ -61,6 +61,13 @@ const FEATURES = [
     title: "사진 세로로 붙이기",
     description: "폴더를 고르면 그 폴더와 안의 폴더마다 사진을 파일 이름순으로 세로로 이어 붙여 PNG 한 장씩 저장합니다.",
   },
+  {
+    path: "photo-saver/",
+    icon: "📥",
+    title: "페이지 사진 받기",
+    description:
+      "크롬 확장 프로그램입니다. 보고 있는 웹 페이지의 사진을 한 폴더에 한꺼번에 받거나, 세로로 이어 붙여 한 장으로 받습니다.",
+  },
 ];
 
 export default function App() {

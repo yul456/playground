@@ -1,0 +1,184 @@
+/* 색은 Playground 사이트와 같게 맞춘다 */
+:root {
+  --bg: #ffffff;
+  --card: #f1f5f9;
+  --text: #1c2733;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --border: #dbe3ee;
+  --warn: #b45309;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1720;
+    --card: #1a2430;
+    --text: #e6edf5;
+    --muted: #94a3b8;
+    --accent: #60a5fa;
+    --border: #2a3644;
+    --warn: #fbbf24;
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* 크롬 팝업은 내용 크기에 맞춰 열리고 가장 크게 800×600이다 */
+html { width: 400px; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+}
+
+main { padding: 14px 14px 0; }
+h1 { margin: 0; font-size: 15px; }
+.page { margin: 2px 0 10px; overflow: hidden; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
+
+.message { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); }
+.message small { display: block; margin-top: 4px; color: var(--muted); word-break: break-all; }
+
+/* 사진을 받을 폴더 */
+.path { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.where { color: var(--muted); white-space: nowrap; }
+.path input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+/* 받는 방식, 사진 이름, 이어 붙인 그림 이름 */
+.modes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 6px; padding: 0; border: 0; }
+.modes legend { float: left; margin-right: 2px; padding: 0; color: var(--muted); }
+.modes label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.modes input { margin: 0; accent-color: var(--accent); }
+.modes small { color: var(--muted); font-size: 11px; }
+/* 이어 붙인 그림 이름을 직접 적는 칸 */
+.modes .text {
+  flex: 1;
+  min-width: 110px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.modes .text[hidden] { display: none; }
+#filesOptions[hidden], #stitchOptions[hidden] { display: none; }
+/* 받으면 생길 파일 */
+.preview { margin: 0 0 8px; color: var(--muted); font-size: 12px; word-break: break-all; }
+.preview span { display: block; }
+
+/* 확장자 체크박스 */
+.exts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 8px; padding: 0; border: 0; }
+.exts legend { float: left; margin-right: 2px; padding: 0; color: var(--muted); }
+.exts legend small { font-size: 11px; }
+.ext-list { display: contents; }
+.exts label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.exts input { margin: 0; accent-color: var(--accent); }
+.exts .n { color: var(--muted); font-size: 11px; }
+
+.option { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; cursor: pointer; }
+.option small { color: var(--muted); }
+.option input { margin: 0; accent-color: var(--accent); }
+
+/* 빼 둔 이름 */
+.rules { margin: 0 0 8px; }
+.rules summary { color: var(--muted); cursor: pointer; }
+.hint { margin: 4px 0; color: var(--muted); font-size: 12px; }
+.rule-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 110px; margin: 4px 0; padding: 0; overflow: auto; list-style: none; }
+.rule-list li {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 2px 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+}
+.rule-list span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rule-list button { padding: 0 6px; background: none; color: var(--muted); font-size: 14px; line-height: 1; }
+
+.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.count { flex: 1; color: var(--muted); }
+
+button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+button.link { padding: 0; background: none; color: var(--accent); }
+button.secondary { border: 1px solid var(--border); background: transparent; color: var(--accent); }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cell label { display: block; position: relative; cursor: pointer; }
+.thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+/* 작은 그림은 키우지 않아서 작다는 것이 보이게 한다 */
+.thumb img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.nopreview { padding: 6px; color: var(--muted); font-size: 11px; text-align: center; }
+.cell input { position: absolute; top: 6px; right: 6px; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+/* 받을 때 붙는 번호(파일 이름) */
+.num {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.num:empty { display: none; }
+/* 빼 둔 이름이라 꺼 둔 사진 */
+.tag {
+  position: absolute;
+  top: 28px;
+  left: 6px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--warn);
+  color: #fff;
+  font-size: 10px;
+}
+.tag[hidden] { display: none; }
+.size { display: block; min-height: 16px; margin-top: 2px; color: var(--muted); font-size: 11px; text-align: center; }
+.cell.off .thumb,
+.cell.off .size { opacity: 0.35; }
+
+footer {
+  position: sticky;
+  bottom: 0;
+  margin: 10px -14px 0;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.row { display: flex; align-items: center; gap: 8px; }
+.status { margin: 6px 0 0; color: var(--muted); word-break: break-all; }
+.status:empty { display: none; }
+.status > span { display: block; }
+.status .warn { color: var(--warn); font-style: normal; }
