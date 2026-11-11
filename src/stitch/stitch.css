@@ -1,0 +1,64 @@
+.card h2 { margin: 0; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.st-muted { color: var(--muted); }
+.st-small { font-size: 0.9rem; }
+.st-excluded { margin: 2px 0 0; }
+
+/* 고르기 칸 */
+.st-example { margin: 0 0 14px; }
+.st-suffix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 14px; }
+.st-suffix input {
+  width: 12em;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+}
+.st-naming { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 14px; padding: 0; border: 0; }
+.st-naming legend { float: left; margin-right: 4px; padding: 0; }
+.st-naming label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.st-naming code, .st-example code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.st-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.st-save { margin: 12px 0 0; color: var(--muted); font-size: 0.9rem; }
+.st-notice { margin: 12px 0 0; color: #d97706; }
+
+/* 폴더 목록 */
+.st-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.st-summary span { color: var(--muted); }
+.st-all { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.st-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.st-list li { padding: 10px 0; border-top: 1px solid var(--border); }
+/* 체크박스 다음 줄들(설명·저장 이름)은 폴더 이름과 같은 자리에서 시작한다 */
+.st-list li > :not(.st-row) { margin-left: 26px; }
+.st-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.st-row input, .st-all input, .st-naming input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.st-folder { flex: 1; font-weight: 600; word-break: break-all; }
+.st-row .st-muted { white-space: nowrap; }
+/* 체크를 끈 폴더는 흐리게 (체크박스는 그대로 보이게) */
+.st-list li.off > :not(.st-row),
+.st-list li.off .st-row > :not(input) { opacity: 0.45; }
+.st-out { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 2px; color: var(--muted); font-size: 0.9rem; }
+.st-name { word-break: break-all; }
+.st-ok { color: #16a34a; }
+.st-warn { color: #d97706; }
+.st-error { color: #dc2626; }
+.st-skipped { margin: 4px 0 0; color: #d97706; font-size: 0.85rem; word-break: break-all; }
+.st-bar { height: 6px; margin-top: 6px; overflow: hidden; border-radius: 3px; background: var(--border); }
+.st-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+.st-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; }
+
+/* 알아 둘 것 */
+.st-notes { color: var(--muted); font-size: 0.9rem; }
+.st-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.st-notes ul { margin: 0; padding-left: 1.2em; }
+.st-notes li { margin-bottom: 4px; }

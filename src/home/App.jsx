@@ -55,6 +55,12 @@ const FEATURES = [
     title: "골프 3D 코스",
     description: "골프장 지형을 3D로 보고, 홀마다 길이·오르막 내리막을 확인하며 코스를 날아서 둘러봅니다.",
   },
+  {
+    path: "stitch/",
+    icon: "🖼️",
+    title: "사진 세로로 붙이기",
+    description: "폴더를 고르면 그 폴더와 안의 폴더마다 사진을 파일 이름순으로 세로로 이어 붙여 PNG 한 장씩 저장합니다.",
+  },
 ];
 
 export default function App() {
