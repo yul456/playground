@@ -36,9 +36,41 @@ body {
 
 main { padding: 14px 14px 0; }
 h1 { margin: 0; font-size: 15px; }
+/* 제목과 "열린 탭 받기" */
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .page { margin: 2px 0 10px; overflow: hidden; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
 
 .message { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); }
+
+/* 설정 세트: 고르는 칸과 새 세트·이름 바꾸기·지우기, 그 아래 이름을 묻는 칸 */
+.sets { margin: 0 0 8px; }
+.set-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.set-pick { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.set-pick select {
+  max-width: 150px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.set-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--card); }
+.set-edit[hidden], .set-edit input[hidden] { display: none; }
+.set-label { flex-basis: 100%; }
+.set-edit input {
+  flex: 1;
+  min-width: 100px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.set-edit button { padding: 4px 10px; }
+.set-error { flex-basis: 100%; color: var(--warn); }
+.set-error:empty { display: none; }
 .message small { display: block; margin-top: 4px; color: var(--muted); word-break: break-all; }
 
 /* 사진을 받을 폴더 */

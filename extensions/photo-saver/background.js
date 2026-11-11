@@ -60,6 +60,7 @@ function publicJob(job) {
         .join(", ")
     : "";
   return {
+    id: job.id, // 받기마다 다른 번호. 열린 탭 받기가 자기가 맡긴 받기의 소식인지 알아본다
     folder: BASE_FOLDER,
     dir: job.dir,
     running: job.running,

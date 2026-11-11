@@ -1,0 +1,28 @@
+/* 열린 탭 받기 화면. 색, 단추, 옵션 줄은 popup.css 것을 그대로 쓰고, 탭 한 장을 채우는 배치만 여기서 정한다 */
+html { width: auto; }
+body { font-size: 14px; }
+main { max-width: 720px; margin: 0 auto; padding: 28px 16px 48px; }
+h1 { font-size: 20px; }
+.lead { margin: 4px 0 16px; color: var(--muted); }
+
+.box { margin-bottom: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; }
+.box .hint { margin: 0 0 8px; }
+.box .option { margin: 0; }
+#fileNamesRow[hidden] { display: none; }
+
+/* 탭 목록: 체크박스, 제목, 주소, 오른쪽에 받은 결과 */
+.tabs { margin: 0; padding: 0; list-style: none; }
+.tabs li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.tabs label { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; cursor: pointer; }
+.tabs input { flex: none; margin: 0; accent-color: var(--accent); }
+.tabs .title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tabs .host { flex: none; color: var(--muted); font-size: 12px; }
+.tabs .state { flex: none; max-width: 55%; color: var(--muted); font-size: 12px; text-align: right; }
+.tabs li.off .title,
+.tabs li.off .host { opacity: 0.45; }
+.tabs .state.now { color: var(--accent); }
+.tabs .state.ok { color: var(--text); }
+.tabs .state.warn { color: var(--warn); }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.actions .status { margin: 0; }

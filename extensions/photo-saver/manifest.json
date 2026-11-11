@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "페이지 사진 받기",
-  "version": "1.4.1",
+  "version": "1.6.0",
   "description": "보고 있는 페이지의 사진을 한꺼번에 받거나, 세로로 이어 붙여 한 장으로 받습니다.",
   "icons": {
     "16": "icons/16.png",

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>열린 탭 받기 · 페이지 사진 받기</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="batch.css">
+  <script type="module" src="batch.js"></script>
+</head>
+<body>
+  <main>
+    <h1>열린 탭 받기</h1>
+    <p class="lead">
+      이 창에 열려 있는 탭을 하나씩, 그 페이지에서 "받기"를 누른 것과 똑같이 받습니다. 받는 동안 이 탭은 닫지 마세요.
+    </p>
+    <div class="message" id="message" hidden></div>
+
+    <section class="box">
+      <div class="sets" id="sets"></div>
+      <fieldset class="modes">
+        <legend>받는 방식</legend>
+        <label><input type="radio" name="mode" value="files"> 사진 따로</label>
+        <label><input type="radio" name="mode" value="stitch"> 이어 붙인 한 장</label>
+        <label><input type="radio" name="mode" value="both"> 둘 다</label>
+      </fieldset>
+      <fieldset class="modes" id="fileNamesRow">
+        <legend>사진 이름</legend>
+        <label><input type="radio" name="fileNames" value="original"> 원본 이름 <small>photo.jpg</small></label>
+        <label><input type="radio" name="fileNames" value="number"> 번호 <small>001.jpg</small></label>
+      </fieldset>
+      <p class="preview" id="preview"></p>
+      <p class="hint" id="filters"></p>
+      <label class="option"><input type="checkbox" id="closeTabs"> <span>다 받은 탭은 닫기</span></label>
+    </section>
+
+    <section class="box">
+      <div class="toolbar">
+        <span class="count" id="count"></span>
+        <button type="button" class="link" id="toggleAll">모두 끄기</button>
+        <button type="button" class="link" id="reload">탭 다시 읽기</button>
+      </div>
+      <ol class="tabs" id="tabs"></ol>
+    </section>
+
+    <div class="actions">
+      <button type="button" id="start" disabled>받기</button>
+      <button type="button" class="secondary" id="stop" hidden>멈추기</button>
+      <button type="button" class="secondary" id="openFolder" hidden>폴더 열기</button>
+      <span class="status" id="status"></span>
+    </div>
+  </main>
+</body>
+</html>
