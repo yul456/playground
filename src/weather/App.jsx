@@ -53,7 +53,7 @@ export default function App() {
 
         <footer>
           날씨 데이터: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
-          {" · "}지도: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+          {" · "}지도·지역 이름: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap 기여자</a>
         </footer>
       </main>
     </>

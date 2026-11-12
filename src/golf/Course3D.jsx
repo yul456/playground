@@ -93,6 +93,12 @@ function RoundCard({ date, tee, onChange, forecast, hours, pick, onPick, hasHole
           </p>
         </>
       )}
+      {/* Open-Meteo 데이터는 보여 주는 곳 옆에 출처를 밝힌다 (CC BY 4.0) */}
+      {forecast.data && (
+        <p className="weather-credit">
+          바람 예보: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
+        </p>
+      )}
     </section>
   );
 }
