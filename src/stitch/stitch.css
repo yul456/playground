@@ -52,7 +52,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .st-ok { color: #16a34a; }
 .st-warn { color: #d97706; }
 .st-error { color: #dc2626; }
-.st-skipped { margin: 4px 0 0; color: #d97706; font-size: 0.85rem; word-break: break-all; }
+.st-skipped, .st-fallback { margin: 4px 0 0; color: #d97706; font-size: 0.85rem; }
+.st-skipped { word-break: break-all; }
 .st-bar { height: 6px; margin-top: 6px; overflow: hidden; border-radius: 3px; background: var(--border); }
 .st-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
 .st-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; }

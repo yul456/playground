@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { HUB_URL } from "../shared/site.js";
 import { cleanSuffix, groupFileList, groupKey, NAMINGS, outputNames, planGroups, scanDirectory } from "./folders.js";
 import { cancelJob, runJob } from "./jobs.js";
+import { explainSaveError, SAVE_TRIES, saveToFolder } from "./save.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
 const STORAGE_KEY = "playground.stitch.v1";
@@ -39,15 +40,6 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_MS);
 }
 
-async function fileExists(dir, name) {
-  try {
-    await dir.getFileHandle(name);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const number = (n) => n.toLocaleString("ko-KR");
 
 function fileSize(bytes) {
@@ -61,10 +53,13 @@ function duration(ms) {
   return s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`;
 }
 
+// 묶음 안의 비율(0~1)에서 PNG를 다 만든 때. 남은 몫은 고른 폴더에 저장하는 동안이다
+const MADE = 0.95;
+
 // 작업자가 보낸 진행 상황을 묶음 안의 비율(0~1)과 글로 바꾼다. 크기 확인은 금방 끝나 10%로 친다
 function describe(p) {
   if (p.phase === "measure") return { fraction: 0.1 * (p.done / p.total), text: `사진 크기 확인 ${p.done}/${p.total}` };
-  return { fraction: 0.1 + 0.9 * (p.rows / p.totalRows), text: `붙이는 중 ${p.done}/${p.total}장` };
+  return { fraction: 0.1 + (MADE - 0.1) * (p.rows / p.totalRows), text: `붙이는 중 ${p.done}/${p.total}장` };
 }
 
 function ResultText({ result, overwrite }) {
@@ -100,6 +95,8 @@ export default function App() {
   const inputRef = useRef(null);
   const allRef = useRef(null);
   const stopRef = useRef(false);
+  // 고른 폴더에 쓰는 중인 스트림. 멈추기를 누르면 그만 쓰게 한다
+  const savingRef = useRef(null);
   const running = status === "running";
   const busy = running || status === "scanning";
 
@@ -167,30 +164,28 @@ export default function App() {
     if (files.length) open(groupFileList(files), null);
   }
 
-  // 묶음 하나를 만든다. 고른 폴더에 쓸 수 있으면 거기에, 아니면(또는 쓰다가 막히면) 다운로드로 받는다
-  async function saveGroup(files, name, onProgress) {
+  // 묶음 하나를 만든다. PNG를 다 만든 뒤, 고른 폴더에 쓸 수 있으면 거기에 저장하고 아니면 다운로드로 받는다.
+  // 고른 폴더에 끝내 저장하지 못해도 다운로드로 받고, 까닭(saveError)을 함께 돌려준다
+  async function saveGroup(files, name, report) {
+    const made = await runJob(files, (p) => report(describe(p)));
+    if (made.type !== "done") return made;
+    const { blob, ...result } = made;
     const dir = source.saveDir;
-    if (dir) {
-      let target = null;
-      let created = false;
-      try {
-        created = !(await fileExists(dir, name));
-        target = await dir.getFileHandle(name, { create: true });
-      } catch {
-        // 폴더에 파일을 만들지 못하면 다운로드로 받는다
-      }
-      if (target) {
-        const result = await runJob(files, target, onProgress);
-        if (result.type === "done") return { ...result, savedTo: "folder" };
-        // 새로 만든 빈 파일은 지운다. 원래 있던 파일은 다 쓰기 전까지 바뀌지 않아 그대로 둔다
-        if (created) await dir.removeEntry(name).catch(() => {});
-        if (!result.writeFailed) return result;
-      }
+    if (!dir) {
+      download(blob, name);
+      return { ...result, savedTo: "download" };
     }
-    const result = await runJob(files, null, onProgress);
-    if (result.type !== "done") return result;
-    download(result.blob, name);
-    return { ...result, blob: null, savedTo: "download" };
+    const saved = await saveToFolder(dir, name, blob, {
+      stopped: () => stopRef.current,
+      hold: (writable) => {
+        savingRef.current = writable;
+      },
+      onTry: (n) => report({ fraction: MADE, text: n === 1 ? "폴더에 저장하는 중" : `다시 저장하는 중 (${n}/${SAVE_TRIES})` }),
+    });
+    if (saved.ok) return { ...result, savedTo: "folder" };
+    if (saved.cancelled) return { type: "cancelled", skipped: result.skipped };
+    download(blob, name);
+    return { ...result, savedTo: "download", saveError: explainSaveError(saved.error) };
   }
 
   async function start() {
@@ -212,7 +207,7 @@ export default function App() {
       let result;
       try {
         const files = await Promise.all(group.files.map((f) => (typeof f.getFile === "function" ? f.getFile() : f)));
-        result = await saveGroup(files, names[index], (p) => setProgress({ ...at, ...describe(p) }));
+        result = await saveGroup(files, names[index], (p) => setProgress({ ...at, ...p }));
       } catch (err) {
         result = { type: "error", message: err.message, skipped: [] };
       }
@@ -235,6 +230,8 @@ export default function App() {
   function stop() {
     stopRef.current = true;
     cancelJob();
+    // 고른 폴더에 쓰는 중이면 그만 쓴다. 쓰다 만 임시 파일은 브라우저가 버리고 원래 있던 파일은 그대로 남는다
+    savingRef.current?.abort(new DOMException("멈춤", "AbortError")).catch(() => {});
   }
 
   // 붙일 말·이름 방식을 바꾸면 지난 결과는 지운다. 남겨 두면 저장하지 않은 새 이름 옆에 "저장함"이 붙어 보인다
@@ -262,6 +259,8 @@ export default function App() {
   const checkedCount = keys.filter((k) => !unchecked.has(k)).length;
   const imageCount = groups.reduce((sum, g) => sum + g.files.length, 0);
   const madeCount = results.filter((r) => r?.type === "done").length;
+  // 고른 폴더에 저장하지 못해 다운로드로 받은 묶음 수
+  const fallbackCount = results.filter((r) => r?.saveError).length;
   const overall = progress ? (progress.step + progress.fraction) / progress.total : 0;
 
   // 모두 고르기 체크박스는 일부만 골랐을 때 가운데 줄(indeterminate)로 보인다. 이 상태는 HTML 속성이 없어 직접 넣는다
@@ -287,8 +286,12 @@ export default function App() {
 
   let footerText = "";
   if (running) footerText = `${(progress?.step ?? 0) + 1}/${progress?.total ?? runTotal} 폴더 · ${Math.floor(overall * 100)}%`;
-  else if (status === "done") footerText = `고른 폴더 ${runTotal}개 중 ${madeCount}개를 만들었습니다.`;
-  else if (groups.length) footerText = `${checkedCount}개 폴더를 붙입니다.`;
+  else if (status === "done") {
+    footerText = `고른 폴더 ${runTotal}개 중 ${madeCount}개를 만들었습니다.`;
+    if (fallbackCount) {
+      footerText += ` ${fallbackCount}개는 다운로드 폴더로 받았습니다. 브라우저가 여러 파일 다운로드를 물으면 허용을 눌러 주세요.`;
+    }
+  } else if (groups.length) footerText = `${checkedCount}개 폴더를 붙입니다.`;
 
   return (
     <main className="container">
@@ -397,6 +400,11 @@ export default function App() {
                           <span style={{ width: `${progress.fraction * 100}%` }} />
                         </div>
                       )}
+                      {result?.saveError && (
+                        <p className="st-fallback" title={result.saveError.detail}>
+                          고른 폴더에 저장하지 못해 다운로드 폴더로 받았습니다. {result.saveError.text}
+                        </p>
+                      )}
                       {result?.skipped?.length > 0 && (
                         <p className="st-skipped">열지 못해 뺀 사진: {result.skipped.join(", ")}</p>
                       )}
@@ -428,6 +436,10 @@ export default function App() {
           <li>폭은 폴더에서 가장 넓은 사진에 맞춥니다. 크기를 줄이지 않고, 좁은 사진은 가운데에 두고 양옆을 흰색으로 채웁니다.</li>
           <li>PNG는 JPG보다 훨씬 커서 원본 사진을 여러 장 붙이면 파일이 수백 MB가 될 수 있습니다.</li>
           <li>같은 이름 파일이 있으면 덮어씁니다. 다 만들기 전에 멈추면 원래 파일은 그대로 남습니다.</li>
+          <li>
+            고른 폴더에 저장하지 못하면 잠깐 뒤 다시 해 보고, 그래도 안 되면 다운로드 폴더로 받습니다. 백신이나 클라우드
+            백업 같은 다른 프로그램이 그 파일을 잡고 있을 때 생깁니다.
+          </li>
           <li>고른 폴더 자체의 사진은 브라우저가 그 위 폴더 이름을 알려 주지 않아, 이름 방식과 상관없이 고른 폴더 이름으로 저장합니다.</li>
           <li>바탕화면·문서·다운로드 폴더 자체는 크롬·엣지가 고르지 못하게 막습니다. 그 안의 폴더를 고르세요.</li>
           <li>JPG·PNG·WebP·GIF·BMP를 붙입니다. 아이폰 원본(HEIC)과 TIFF는 브라우저가 열지 못해 빼고 붙입니다.</li>

@@ -27,13 +27,12 @@ function getWorker() {
   return worker;
 }
 
-// files: File 목록, target: 저장할 파일(FileSystemFileHandle) 또는 null(다운로드할 Blob을 받는다).
-// 결과는 done · cancelled · error 메시지 그대로 돌려준다
-export function runJob(files, target, onProgress) {
+// files: File 목록. 결과는 done(blob: 다 만든 PNG) · cancelled · error 메시지 그대로 돌려준다
+export function runJob(files, onProgress) {
   if (current) return Promise.reject(new Error("이미 만드는 중입니다"));
   return new Promise((resolve) => {
     current = { id: nextId++, resolve, onProgress };
-    getWorker().postMessage({ type: "run", id: current.id, files, target });
+    getWorker().postMessage({ type: "run", id: current.id, files });
   });
 }
 

@@ -1,12 +1,13 @@
 // 사진 묶음 하나를 받아 세로로 이어 붙인 PNG를 만든다. 화면이 멈추지 않게 따로 돈다(Web Worker).
-// 받는 것: { type: "run", id, files: File[], target: 저장할 FileSystemFileHandle 또는 null(다운로드용 Blob으로 돌려줌) }
+// 받는 것: { type: "run", id, files: File[] }
 //          { type: "cancel", id }
-// 보내는 것: progress(measure·draw), done, cancelled, error
+// 보내는 것: progress(measure·draw), done(blob: 다 만든 PNG), cancelled, error
+// 파일로 저장하는 일은 화면 쪽(save.js)이 한다. 여기서 고른 폴더의 파일에 조각마다 바로 쓰지 않는 까닭도 거기 적었다
 import { openPng } from "./png.js";
 
 // 한 번에 그려 PNG로 넘길 화소 수(약 800만 개, 32MB). 폭이 넓으면 줄 수가 줄어든다
 const STRIP_PIXELS = 8_000_000;
-// 다운로드용 데이터를 이만큼씩 Blob으로 묶는다. 브라우저가 큰 Blob은 디스크에 내려 둘 수 있어 메모리를 덜 쓴다
+// 만든 데이터를 이만큼씩 Blob으로 묶는다. 브라우저가 큰 Blob은 디스크에 내려 둘 수 있어 메모리를 덜 쓴다
 const BLOB_BYTES = 64 << 20;
 
 class Cancelled extends Error {}
@@ -33,16 +34,7 @@ async function decode(file) {
   }
 }
 
-// 고른 폴더의 파일에 바로 쓴다. 다 쓰고 닫을 때 한 번에 바뀌므로 중간에 그만두면 원래 파일은 그대로다
-async function fileSink(handle) {
-  const writable = await handle.createWritable();
-  return {
-    write: (bytes) => writable.write(bytes),
-    close: () => writable.close(),
-    abort: () => writable.abort().catch(() => {}),
-  };
-}
-
+// PNG 조각을 받아 Blob 하나로 모은다
 function blobSink() {
   const blobs = [];
   let parts = [];
@@ -71,7 +63,7 @@ function blobSink() {
   return sink;
 }
 
-async function run({ id, files, target }) {
+async function run({ id, files }) {
   const current = { id, cancelled: false };
   job = current;
   const post = (message) => self.postMessage({ id, ...message });
@@ -99,13 +91,8 @@ async function run({ id, files, target }) {
     const width = Math.max(...items.map((item) => item.width));
     const height = items.reduce((sum, item) => sum + item.height, 0);
 
-    // 2. 저장할 곳 열기. 폴더에 못 쓰면 화면 쪽이 다운로드로 다시 맡긴다
-    try {
-      sink = target ? await fileSink(target) : blobSink();
-    } catch (err) {
-      err.writeFailed = true;
-      throw err;
-    }
+    // 2. PNG를 모아 둘 곳 열기
+    sink = blobSink();
     png = await openPng(width, height, sink);
 
     // 3. 사진을 위에서부터 몇백~몇천 줄씩 흰 바탕에 그려 PNG에 붙인다. 좁은 사진은 가운데에 둔다
@@ -136,12 +123,12 @@ async function run({ id, files, target }) {
       }
     }
     const bytes = await png.finish();
-    post({ type: "done", width, height, bytes, count: items.length, skipped, blob: sink.blob ?? null });
+    post({ type: "done", width, height, bytes, count: items.length, skipped, blob: sink.blob });
   } catch (err) {
     if (png) await png.abort(err);
     else await sink?.abort();
     if (err instanceof Cancelled) post({ type: "cancelled", skipped });
-    else post({ type: "error", message: err?.message || String(err), writeFailed: Boolean(err?.writeFailed), skipped });
+    else post({ type: "error", message: err?.message || String(err), skipped });
   } finally {
     if (job === current) job = null;
   }

@@ -56,7 +56,7 @@ src/
   mines/                지뢰찾기
   baseball/             숫자 야구
   golf/                 골프 메뉴 세 페이지(스코어카드·라운드 날씨·3D 코스)가 함께 쓰는 폴더 (3D 코스 데이터는 golf/courses3d/)
-  stitch/               사진 세로로 붙이기 (PNG를 줄 단위로 이어 쓰는 png.js, 백그라운드 작업 stitchWorker.js)
+  stitch/               사진 세로로 붙이기 (PNG를 줄 단위로 이어 쓰는 png.js, 백그라운드 작업 stitchWorker.js, 고른 폴더에 저장하는 save.js)
   photo-saver/          페이지 사진 받기 안내 페이지 (설치 방법, ZIP 받기)
 scripts/
   zip-folder.mjs        폴더를 ZIP으로 묶는다 (vite.config.js가 확장 프로그램 ZIP을 만들 때 쓴다)
