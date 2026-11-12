@@ -28,6 +28,12 @@
         <label><input type="radio" name="fileNames" value="original"> 원본 이름 <small>photo.jpg</small></label>
         <label><input type="radio" name="fileNames" value="number"> 번호 <small>001.jpg</small></label>
       </fieldset>
+      <fieldset class="modes" id="stitchFormatRow">
+        <legend>이어 붙인 그림 형식</legend>
+        <label><input type="radio" name="stitchFormat" value="jpg"> JPG <small>작게, 너무 길면 PNG</small></label>
+        <label><input type="radio" name="stitchFormat" value="png"> PNG <small>화질 그대로</small></label>
+        <label id="qualityBox">품질 <select id="jpgQuality" aria-label="JPG 품질"></select></label>
+      </fieldset>
       <p class="preview" id="preview"></p>
       <p class="hint" id="filters"></p>
       <label class="option"><input type="checkbox" id="closeTabs"> <span>다 받은 탭은 닫기</span></label>

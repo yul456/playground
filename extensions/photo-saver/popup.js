@@ -1,5 +1,5 @@
 // 확장 프로그램 버튼을 누르면 뜨는 창. 지금 탭의 사진을 찾아 보여 주고, 고른 사진을 받게 맡긴다(background.js)
-import { NO_EXT, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, newItem, saveExts, saveRules, saveSettings, typeOf } from "./core.js";
+import { JPG_QUALITIES, NO_EXT, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, newItem, saveExts, saveRules, saveSettings, typeOf } from "./core.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
 
@@ -303,11 +303,12 @@ function updateStart() {
   start.textContent = chosen ? START_TEXT[settings.mode](chosen) : "받기";
 }
 
-// 받는 방식에 맞는 이름 옵션만 보인다 (사진 따로: 폴더와 사진 이름, 이어 붙이기: 그림 이름)
+// 받는 방식에 맞는 옵션만 보인다 (사진 따로: 폴더와 사진 이름, 이어 붙이기: 그림 이름과 형식). 품질은 JPG일 때만 고른다
 function showOptions() {
   $("filesOptions").hidden = settings.mode === "stitch";
   $("stitchOptions").hidden = settings.mode === "files";
   $("customName").hidden = settings.stitchName !== "custom";
+  $("qualityBox").hidden = settings.stitchFormat !== "jpg";
 }
 
 // 받으면 생길 파일을 미리 보여 준다
@@ -319,7 +320,8 @@ function updatePreview() {
     lines.push(`사진: 다운로드/${BASE_FOLDER}/${folder}/${names}`);
   }
   if (settings.mode !== "files") {
-    lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/${customStitchName() || folder}.png`);
+    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 .png)" : "";
+    lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/${customStitchName() || folder}.${settings.stitchFormat}${tooLong}`);
   }
   $("preview").replaceChildren(
     ...lines.map((text) => {
@@ -400,7 +402,16 @@ async function start() {
   learn();
   $("start").disabled = true;
   const reply = await chrome.runtime
-    .sendMessage({ type: "start", folder, urls, mode: settings.mode, naming: settings.fileNames, stitchName: customStitchName() })
+    .sendMessage({
+      type: "start",
+      folder,
+      urls,
+      mode: settings.mode,
+      naming: settings.fileNames,
+      stitchName: customStitchName(),
+      stitchFormat: settings.stitchFormat,
+      jpgQuality: settings.jpgQuality,
+    })
     .catch((err) => ({ error: err.message }));
   if (reply?.error) {
     showMessage(reply.error);
@@ -448,10 +459,13 @@ function showJob(next) {
     if (stitch.state === "running") {
       if (stitch.phase === "fetch") line(`이어 붙일 사진 받는 중 ${stitch.done}/${stitch.total}`);
       else if (stitch.phase === "draw") line(`이어 붙이는 중 ${stitch.done}/${stitch.total}`);
+      else if (stitch.phase === "encode") line("JPG로 만드는 중");
       else line("이어 붙인 그림 저장하는 중");
     } else if (stitch.state === "done") {
       const size = `${stitch.width.toLocaleString()}×${stitch.height.toLocaleString()}`;
-      line(`이어 붙인 그림을 저장했습니다 · 다운로드 › ${job.folder} › ${stitch.name} (${size})`, leftOut(stitch));
+      // JPG를 골랐는데 너무 길거나 커서 PNG로 받았으면 그 까닭을 알린다
+      const asPng = stitch.note ? ` · PNG로 받았습니다: ${stitch.note}` : "";
+      line(`이어 붙인 그림을 저장했습니다 · 다운로드 › ${job.folder} › ${stitch.name} (${size})`, asPng + leftOut(stitch));
     } else {
       line("", `이어 붙이지 못했습니다: ${stitch.error}`);
     }
@@ -478,8 +492,8 @@ async function init() {
     saveSettings(settings);
     refresh();
   });
-  // 받는 방식, 사진 이름, 이어 붙인 그림 이름: 고르면 바로 기억한다
-  for (const name of ["mode", "fileNames", "stitchName"]) {
+  // 받는 방식, 사진 이름, 이어 붙인 그림 이름과 형식: 고르면 바로 기억한다
+  for (const name of ["mode", "fileNames", "stitchName", "stitchFormat"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) {
       radio.checked = radio.value === settings[name];
       radio.addEventListener("change", () => {
@@ -492,6 +506,12 @@ async function init() {
       });
     }
   }
+  $("jpgQuality").replaceChildren(...JPG_QUALITIES.map((value) => new Option(String(value), String(value))));
+  $("jpgQuality").value = String(settings.jpgQuality);
+  $("jpgQuality").addEventListener("change", () => {
+    settings.jpgQuality = Number($("jpgQuality").value);
+    saveSettings(settings);
+  });
   $("customName").value = settings.customName;
   $("customName").addEventListener("input", () => {
     settings.customName = $("customName").value;

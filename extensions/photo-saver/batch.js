@@ -1,7 +1,7 @@
 // 열린 탭 받기. 이 창에 열려 있는 탭을 하나씩, 그 페이지에서 확장 프로그램 창을 열어 받기를 누른 것과 똑같이 받는다.
 // 확장 프로그램 창(popup)은 다른 곳을 누르면 닫혀서, 여러 탭을 받는 긴 일은 따로 연 이 탭이 맡는다.
 // 탭마다: 사진 찾기(core.js) → 크기 재기 → 꾸밈 그림·꺼 둔 확장자·빼 둔 이름 빼기 → 받기 맡기기(background.js) → 끝나기를 기다림
-import { extKey, findImages, isDecor, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
+import { JPG_QUALITIES, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
 
@@ -105,18 +105,25 @@ function refresh() {
   $("stop").disabled = stopping;
   $("stop").textContent = stopping ? "지금 탭까지 받고 멈춥니다" : "멈추기";
   setsUi?.setDisabled(running);
-  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], #closeTabs")) input.disabled = running;
+  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], #jpgQuality, #closeTabs")) {
+    input.disabled = running;
+  }
 }
 
 // 저장될 자리와, 받지 않는 것을 알려 준다
 function showOptions() {
   $("fileNamesRow").hidden = settings.mode === "stitch";
+  $("stitchFormatRow").hidden = settings.mode === "files";
+  $("qualityBox").hidden = settings.stitchFormat !== "jpg";
   const lines = [];
   if (settings.mode !== "stitch") {
     const names = settings.fileNames === "original" ? "원본 이름.jpg …" : "001.jpg, 002.jpg …";
     lines.push(`사진: 다운로드/${BASE_FOLDER}/탭의 페이지 제목/${names}`);
   }
-  if (settings.mode !== "files") lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/탭의 페이지 제목.png`);
+  if (settings.mode !== "files") {
+    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 .png)" : "";
+    lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/탭의 페이지 제목.${settings.stitchFormat}${tooLong}`);
+  }
   $("preview").replaceChildren(
     ...lines.map((text) => {
       const span = document.createElement("span");
@@ -141,9 +148,10 @@ function readOptions() {
   settings = loadSettings();
   rules = loadRules();
   extOff = loadExts();
-  for (const name of ["mode", "fileNames"]) {
+  for (const name of ["mode", "fileNames", "stitchFormat"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) radio.checked = radio.value === settings[name];
   }
+  $("jpgQuality").value = String(settings.jpgQuality);
   $("closeTabs").checked = settings.closeTabs;
   setsUi?.refresh(); // 확장 프로그램 창에서 세트를 바꾸거나 만들었을 수 있다
   showOptions();
@@ -210,6 +218,7 @@ function progressText(job) {
   if (stitch?.state === "running") {
     if (stitch.phase === "fetch") return `이어 붙일 사진 받는 중 ${stitch.done}/${stitch.total}`;
     if (stitch.phase === "draw") return `이어 붙이는 중 ${stitch.done}/${stitch.total}`;
+    if (stitch.phase === "encode") return "JPG로 만드는 중";
     return "이어 붙인 그림 저장하는 중";
   }
   return "마무리하는 중";
@@ -232,6 +241,8 @@ function resultOf(job) {
   if (stitch) {
     if (stitch.state === "done") {
       parts.push(`이어 붙임 ${stitch.width.toLocaleString()}×${stitch.height.toLocaleString()}`);
+      // JPG를 골랐는데 너무 길거나 커서 PNG로 받은 탭
+      if (stitch.note) parts.push("JPG로 만들 수 없어 PNG로 받음");
       got = true;
       if (stitch.failed?.length) {
         parts.push(`붙이지 못한 사진 ${stitch.failed.length}장`);
@@ -266,6 +277,8 @@ async function runTab(row) {
       mode: settings.mode,
       naming: settings.fileNames,
       stitchName: "",
+      stitchFormat: settings.stitchFormat,
+      jpgQuality: settings.jpgQuality,
     });
     setState(row, progressText(job), "now");
     const done = await waitJob(job.id, (now) => setState(row, progressText(now), "now"));
@@ -318,7 +331,13 @@ function init() {
   // 설정 세트를 바꾸거나 지우면 옵션을 다시 읽는다
   setsUi = mountSets($("sets"), readOptions);
   // 옵션은 고르는 즉시 저장한다 (확장 프로그램 창과 같은 저장소)
-  for (const name of ["mode", "fileNames"]) {
+  $("jpgQuality").replaceChildren(...JPG_QUALITIES.map((value) => new Option(String(value), String(value))));
+  $("jpgQuality").value = String(settings.jpgQuality);
+  $("jpgQuality").addEventListener("change", () => {
+    settings.jpgQuality = Number($("jpgQuality").value);
+    saveSettings(settings);
+  });
+  for (const name of ["mode", "fileNames", "stitchFormat"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) {
       radio.checked = radio.value === settings[name];
       radio.addEventListener("change", () => {

@@ -35,13 +35,19 @@
           <label><input type="radio" name="fileNames" value="number"> 번호 <small>001.jpg</small></label>
         </fieldset>
       </div>
-      <!-- 이어 붙인 그림의 파일 이름 -->
+      <!-- 이어 붙인 그림의 파일 이름과 형식 -->
       <div id="stitchOptions">
         <fieldset class="modes">
           <legend>이어 붙인 그림 이름</legend>
           <label><input type="radio" name="stitchName" value="page"> 페이지 이름</label>
           <label><input type="radio" name="stitchName" value="custom"> 직접 입력</label>
           <input class="text" id="customName" maxlength="60" spellcheck="false" autocomplete="off" placeholder="파일 이름" aria-label="이어 붙인 그림의 파일 이름">
+        </fieldset>
+        <fieldset class="modes">
+          <legend>이어 붙인 그림 형식</legend>
+          <label><input type="radio" name="stitchFormat" value="jpg"> JPG <small>작게, 너무 길면 PNG</small></label>
+          <label><input type="radio" name="stitchFormat" value="png"> PNG <small>화질 그대로</small></label>
+          <label id="qualityBox">품질 <select id="jpgQuality" aria-label="JPG 품질"></select></label>
         </fieldset>
       </div>
       <p class="preview" id="preview"></p>

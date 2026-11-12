@@ -59,7 +59,14 @@ const FEATURES = [
     path: "stitch/",
     icon: "🖼️",
     title: "사진 세로로 붙이기",
-    description: "폴더를 고르면 그 폴더와 안의 폴더마다 사진을 파일 이름순으로 세로로 이어 붙여 PNG 한 장씩 저장합니다.",
+    description:
+      "폴더를 고르면 그 폴더와 안의 폴더마다 사진을 파일 이름순으로 세로로 이어 붙여 한 장씩 저장합니다. 사진을 직접 골라 붙일 수도 있습니다.",
+  },
+  {
+    path: "convert/",
+    icon: "🔄",
+    title: "사진 형식 바꾸기",
+    description: "폴더를 고르면 그 폴더와 안의 폴더에 있는 PNG를 JPG로 바꿔 원본과 같은 자리에 저장합니다.",
   },
   {
     path: "photo-saver/",

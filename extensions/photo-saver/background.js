@@ -69,7 +69,7 @@ function publicJob(job) {
   };
 }
 
-// 이어 붙이기가 어디까지 왔나(0~100). 받기·크기 재기가 절반, 그리기가 나머지
+// 이어 붙이기가 어디까지 왔나(0~100). 받기·크기 재기가 절반, 그리기가 나머지 (JPG로 만드는 중과 저장하는 중은 95)
 function stitchPercent(stitch) {
   if (stitch.phase === "fetch") return (stitch.done / stitch.total) * 50;
   if (stitch.phase === "draw") return 50 + (stitch.done / stitch.total) * 45;
@@ -142,7 +142,7 @@ async function openOffscreen() {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN,
     reasons: ["BLOBS"],
-    justification: "고른 사진을 세로로 이어 붙인 PNG를 만들어 받는다",
+    justification: "고른 사진을 세로로 이어 붙인 그림을 만들어 받는다",
   });
 }
 
@@ -222,7 +222,7 @@ async function begin(plan) {
 async function startStitch(job, urls) {
   try {
     await openOffscreen();
-    await chrome.runtime.sendMessage({ target: "offscreen", type: "stitch", jobId: job.id, urls });
+    await chrome.runtime.sendMessage({ target: "offscreen", type: "stitch", jobId: job.id, urls, format: job.stitchFormat, quality: job.jpgQuality });
   } catch (err) {
     Object.assign(job.stitch, { state: "failed", error: err?.message || String(err) });
     closeOffscreen();
@@ -239,11 +239,12 @@ function onStitchMessage(message) {
     Object.assign(stitch, { phase: message.phase, done: message.done, total: message.total });
     update(job);
   } else if (message.type === "stitch-done") {
-    const { width, height, bytes, count, failed = [] } = message;
-    Object.assign(stitch, { phase: "save", width, height, bytes, count, failed });
+    // format은 실제로 만든 형식이다. JPG를 바랐어도 너무 길면 PNG로 만들어지고, 그 까닭이 note에 온다
+    const { width, height, bytes, count, failed = [], format = "png", note = null } = message;
+    Object.assign(stitch, { phase: "save", width, height, bytes, count, failed, format, note, name: `${job.stitchBase}.${format}` });
     update(job);
     const base = `${BASE_FOLDER}/${job.stitchBase}`;
-    begin({ job, kind: "stitch", url: message.url, base, guess: "png", id: null, named: false, ended: false });
+    begin({ job, kind: "stitch", url: message.url, base, guess: format, id: null, named: false, ended: false });
   } else if (message.type === "stitch-error") {
     Object.assign(stitch, { state: "failed", error: message.message });
     closeOffscreen();
@@ -255,7 +256,8 @@ function onStitchMessage(message) {
 // naming: 사진 따로 받을 때의 파일 이름. original(주소에 적힌 원래 이름, 기본) · number(고른 순서 번호 001…)
 // stitchName: 이어 붙인 그림의 이름(확장자 빼고). 비어 있으면 폴더 이름(페이지 제목)과 같게 한다.
 // 처음엔 "<폴더>_합본"이었는데, 페이지 이름으로 받을 때는 "_합본"을 붙이지 말자고 해서 뺐다
-async function startJob({ folder, urls, mode = "files", naming = "original", stitchName = "" }) {
+// stitchFormat: 이어 붙인 그림의 형식(jpg · png). jpg여도 너무 길면 png로 받는다. jpgQuality: JPG 품질(1~100)
+async function startJob({ folder, urls, mode = "files", naming = "original", stitchName = "", stitchFormat = "png", jpgQuality = 95 }) {
   if (current?.running) throw new Error("앞의 사진을 아직 받는 중입니다. 다 받은 뒤에 다시 누르세요.");
   if (!urls?.length) throw new Error("고른 사진이 없습니다.");
   const withFiles = mode !== "stitch";
@@ -267,6 +269,8 @@ async function startJob({ folder, urls, mode = "files", naming = "original", sti
     id: ++jobCount,
     dir,
     stitchBase,
+    stitchFormat: stitchFormat === "jpg" ? "jpg" : "png",
+    jpgQuality: Number(jpgQuality) || 95,
     running: true,
     files: withFiles ? { total: urls.length, done: 0, failed: 0, canceled: 0, reasons: {}, shownId: null } : null,
     stitch: withStitch
@@ -275,7 +279,9 @@ async function startJob({ folder, urls, mode = "files", naming = "original", sti
           phase: "fetch",
           done: 0,
           total: urls.length,
-          name: `${stitchBase}.png`,
+          name: `${stitchBase}.${stitchFormat === "jpg" ? "jpg" : "png"}`,
+          format: "", // 실제로 만든 형식 (다 만든 뒤에 안다)
+          note: null, // JPG를 바랐는데 PNG로 만든 까닭
           width: 0,
           height: 0,
           bytes: 0,

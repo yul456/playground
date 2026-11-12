@@ -1,0 +1,46 @@
+.card h2 { margin: 0; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.cv-muted { color: var(--muted); }
+
+/* 고르기 칸 */
+.cv-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 12px; padding: 0; border: 0; }
+.cv-options legend { float: left; margin-right: 4px; padding: 0; }
+.cv-options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.cv-hint { margin: -4px 0 14px; color: var(--muted); font-size: 0.9rem; }
+.cv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cv-save { margin: 12px 0 0; color: var(--muted); font-size: 0.9rem; }
+.cv-notice { margin: 12px 0 0; color: #d97706; }
+
+/* 폴더와 파일 목록 */
+.cv-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.cv-summary span { color: var(--muted); }
+.cv-all { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.cv-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.cv-list > li { padding: 10px 0; border-top: 1px solid var(--border); }
+.cv-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.cv-row input, .cv-all input, .cv-options input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.cv-folder { flex: 1; font-weight: 600; word-break: break-all; }
+.cv-row .cv-muted { white-space: nowrap; }
+/* 체크를 끈 폴더는 흐리게 (체크박스는 그대로 보이게) */
+.cv-list > li.off .cv-files,
+.cv-list > li.off .cv-row > :not(input) { opacity: 0.45; }
+/* 파일 줄은 폴더 이름과 같은 자리에서 시작한다 */
+.cv-files { margin: 4px 0 0 26px; padding: 0; list-style: none; color: var(--muted); font-size: 0.9rem; }
+.cv-files li { padding: 2px 0; }
+.cv-files li.current { color: var(--text); }
+.cv-out { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.cv-name { word-break: break-all; }
+.cv-ok { color: #16a34a; }
+.cv-warn { color: #d97706; }
+.cv-error { color: #dc2626; }
+.cv-fallback { margin: 2px 0 0; color: #d97706; font-size: 0.85rem; }
+.cv-bar { height: 6px; margin-top: 10px; overflow: hidden; border-radius: 3px; background: var(--border); }
+.cv-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+.cv-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; }
+
+/* 알아 둘 것 */
+.cv-notes { color: var(--muted); font-size: 0.9rem; }
+.cv-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.cv-notes ul { margin: 0; padding-left: 1.2em; }
+.cv-notes li { margin-bottom: 4px; }

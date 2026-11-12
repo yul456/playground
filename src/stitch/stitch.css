@@ -28,6 +28,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   font-size: 0.85rem;
   word-break: break-all;
 }
+.st-hint { margin: -6px 0 14px; color: var(--muted); font-size: 0.9rem; }
 .st-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .st-save { margin: 12px 0 0; color: var(--muted); font-size: 0.9rem; }
 .st-notice { margin: 12px 0 0; color: #d97706; }
@@ -57,6 +58,31 @@ button:disabled { opacity: 0.5; cursor: default; }
 .st-bar { height: 6px; margin-top: 6px; overflow: hidden; border-radius: 3px; background: var(--border); }
 .st-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
 .st-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; }
+
+/* 직접 고른 사진 목록 */
+.st-photo-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 0.9rem; }
+.st-photo-tools .link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.st-photo-tools .link:disabled { color: var(--muted); }
+.st-photos { margin: 8px 0 0; padding: 0; list-style: none; }
+.st-photos li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-top: 1px solid var(--border);
+  cursor: grab;
+}
+/* 끌어다 놓을 자리 */
+.st-photos li.over { box-shadow: inset 0 2px 0 var(--accent); }
+.st-photos li.bad .st-photo-name { color: #d97706; }
+.st-photo-num { width: 1.8em; color: var(--muted); font-size: 0.85rem; text-align: right; }
+.st-thumb { width: 44px; height: 44px; flex: none; border-radius: 6px; background: var(--border); object-fit: cover; }
+.st-photo-name { flex: 1; min-width: 0; word-break: break-all; }
+.st-photo-name small { display: block; color: var(--muted); font-size: 0.8rem; }
+.st-photos li.bad .st-photo-name small { color: inherit; }
+.st-photo-actions { display: flex; flex: none; gap: 4px; }
+.st-photo-actions button { min-width: 30px; padding: 4px 8px; font-size: 0.85rem; }
+.st-picked-out { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 
 /* 알아 둘 것 */
 .st-notes { color: var(--muted); font-size: 0.9rem; }

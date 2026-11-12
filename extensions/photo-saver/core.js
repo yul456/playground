@@ -15,6 +15,11 @@ export const SMALL = 100;
 export const NO_EXT = "?";
 // 받는 방식: 사진 따로, 세로로 이어 붙인 한 장, 둘 다
 export const MODES = ["files", "stitch", "both"];
+// 이어 붙인 그림의 형식: jpg(작다. 너무 길거나 커서 JPG로 만들 수 없으면 png로 받는다) · png(화질 그대로, 크다)
+export const STITCH_FORMATS = ["jpg", "png"];
+// JPG 품질과 기본값. 사이트의 src/shared/jpgQuality.js와 같은 값이다 (바꾸면 함께 바꾼다. 기본 95를 고른 까닭도 거기 있다)
+export const JPG_QUALITIES = [100, 95, 90, 80];
+export const DEFAULT_JPG_QUALITY = 95;
 
 const SETTINGS_KEY = "settings";
 // 빼 둔 파일 이름. 받기를 누를 때 직접 끈 사진의 이름을 넣고, 다시 켜고 받으면 뺀다. 넣은 차례대로 두고 오래된 것부터 버린다
@@ -29,14 +34,26 @@ export function loadSettings() {
   // fileNames: 사진 따로 받을 때의 파일 이름 (original 원본 이름 · number 번호)
   // stitchName: 이어 붙인 그림의 이름 (page 페이지 이름 · custom 직접 입력), customName: 직접 입력한 이름
   // 기본은 원본 이름과 페이지 이름이다 (사용자 요청). 화면에서도 기본을 왼쪽에 둔다
+  // stitchFormat: 이어 붙인 그림의 형식 (jpg · png), jpgQuality: JPG 품질
   // closeTabs: 열린 탭 받기에서 다 받은 탭을 닫을지
-  const fallback = { hideDecor: true, mode: "files", fileNames: "original", stitchName: "page", customName: "", closeTabs: false };
+  const fallback = {
+    hideDecor: true,
+    mode: "files",
+    fileNames: "original",
+    stitchName: "page",
+    customName: "",
+    stitchFormat: STITCH_FORMATS[0],
+    jpgQuality: DEFAULT_JPG_QUALITY,
+    closeTabs: false,
+  };
   try {
     const saved = { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
     if (!MODES.includes(saved.mode)) saved.mode = fallback.mode;
     if (!["original", "number"].includes(saved.fileNames)) saved.fileNames = fallback.fileNames;
     if (!["page", "custom"].includes(saved.stitchName)) saved.stitchName = fallback.stitchName;
     if (typeof saved.customName !== "string") saved.customName = "";
+    if (!STITCH_FORMATS.includes(saved.stitchFormat)) saved.stitchFormat = fallback.stitchFormat;
+    if (!JPG_QUALITIES.includes(saved.jpgQuality)) saved.jpgQuality = fallback.jpgQuality;
     saved.closeTabs = Boolean(saved.closeTabs);
     return saved;
   } catch {

@@ -27,12 +27,14 @@ function getWorker() {
   return worker;
 }
 
-// files: File 목록. 결과는 done(blob: 다 만든 PNG) · cancelled · error 메시지 그대로 돌려준다
-export function runJob(files, onProgress) {
+// files: File 목록, format: 바라는 형식("jpg" · "png"), quality: JPG 품질(1~100),
+// sizes: 이미 잰 사진 크기 [{ width, height }] (없으면 작업자가 잰다).
+// 결과는 done(blob: 다 만든 그림, format: 실제로 만든 형식, note: JPG로 만들지 못한 까닭) · cancelled · error 메시지 그대로 돌려준다
+export function runJob(files, format, quality, onProgress, sizes = null) {
   if (current) return Promise.reject(new Error("이미 만드는 중입니다"));
   return new Promise((resolve) => {
     current = { id: nextId++, resolve, onProgress };
-    getWorker().postMessage({ type: "run", id: current.id, files });
+    getWorker().postMessage({ type: "run", id: current.id, files, format, quality, sizes });
   });
 }
 

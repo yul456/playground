@@ -93,6 +93,8 @@ h1 { margin: 0; font-size: 15px; }
 .modes label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .modes input { margin: 0; accent-color: var(--accent); }
 .modes small { color: var(--muted); font-size: 11px; }
+.modes select { padding: 1px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; }
+.modes label[hidden] { display: none; }
 /* 이어 붙인 그림 이름을 직접 적는 칸 */
 .modes .text {
   flex: 1;

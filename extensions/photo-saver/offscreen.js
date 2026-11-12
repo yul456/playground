@@ -9,12 +9,13 @@ chrome.runtime.onMessage.addListener((message) => {
   else if (message.type === "revoke") URL.revokeObjectURL(message.url);
 });
 
-async function run({ jobId, urls }) {
+async function run({ jobId, urls, format, quality }) {
   const send = (message) => chrome.runtime.sendMessage({ target: "background", jobId, ...message }).catch(() => {});
   try {
-    const result = await stitchImages(urls, (progress) => send({ type: "stitch-progress", ...progress }));
-    const { width, height, bytes, count, failed } = result;
-    send({ type: "stitch-done", url: URL.createObjectURL(result.blob), width, height, bytes, count, failed });
+    const result = await stitchImages(urls, (progress) => send({ type: "stitch-progress", ...progress }), { format, quality });
+    const { width, height, bytes, count, failed, note } = result;
+    // format은 실제로 만든 형식이다 (JPG를 바랐어도 너무 길면 png)
+    send({ type: "stitch-done", url: URL.createObjectURL(result.blob), width, height, bytes, count, failed, format: result.format, note });
   } catch (err) {
     send({ type: "stitch-error", message: err?.message || String(err) });
   }
