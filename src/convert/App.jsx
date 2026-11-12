@@ -62,8 +62,9 @@ export default function App() {
   // 고른 폴더: { name, folders: [{ path, dir, files }] (folders.js scanDirectory), canSave: 원본 옆에 저장할 수 있는지 }.
   // 파일을 직접 골랐으면 picked가 붙고 폴더가 하나뿐이다 (folders.js pickedScan). 저장할 폴더는 바꿀 때 묻는다
   const [source, setSource] = useState(null);
-  // 체크를 끈 폴더(folderKey). 폴더를 새로 고르면 모두 다시 켠다
-  const [unchecked, setUnchecked] = useState(() => new Set());
+  // 체크를 끈 파일(itemKey). 폴더나 파일을 새로 고르면 모두 다시 켠다.
+  // 폴더를 고른 뒤 바꿀 파일만 골라 둘 수 있다. 그러면 묻지 않고 원래 자리에 저장한다
+  const [off, setOff] = useState(() => new Set());
   const [status, setStatus] = useState("idle"); // idle · scanning · ready · running · done
   // 파일마다의 결과 { [itemKey]: done · skipped · error · cancelled }
   const [results, setResults] = useState({});
@@ -104,7 +105,7 @@ export default function App() {
 
   function open(scan, canSave) {
     setSource({ ...scan, canSave });
-    setUnchecked(new Set());
+    setOff(new Set());
     setResults({});
     setProgress(null);
     setStatus("ready");
@@ -225,8 +226,8 @@ export default function App() {
     }
     pickedDirRef.current = pickedDir;
     const jobs = planFolders(source, direction)
-      .filter((folder) => !unchecked.has(folderKey(folder)))
-      .flatMap((folder) => folder.items.map((item) => ({ folder, item, key: itemKey(folder, item) })));
+      .flatMap((folder) => folder.items.map((item) => ({ folder, item, key: itemKey(folder, item) })))
+      .filter((job) => !off.has(job.key));
     stopRef.current = false;
     setStatus("running");
     setResults({});
@@ -270,19 +271,34 @@ export default function App() {
     }
   }
 
-  function toggleFolder(key) {
-    setUnchecked((set) => {
+  function toggleFile(key) {
+    setOff((set) => {
       const next = new Set(set);
       if (!next.delete(key)) next.add(key);
       return next;
     });
   }
 
+  // 폴더 체크박스: 그 폴더의 파일이 모두 켜져 있으면 모두 끄고, 하나라도 꺼져 있으면 모두 켠다
+  function toggleFolder(folder) {
+    const keysOf = folder.items.map((item) => itemKey(folder, item));
+    setOff((set) => {
+      const next = new Set(set);
+      const allOn = keysOf.every((key) => !next.has(key));
+      for (const key of keysOf) {
+        if (allOn) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  }
+
   const folders = source ? planFolders(source, direction) : [];
   const keys = folders.map(folderKey);
-  const checkedCount = keys.filter((k) => !unchecked.has(k)).length;
-  const fileCount = folders.reduce((sum, folder) => sum + folder.items.length, 0);
-  const chosen = folders.filter((folder) => !unchecked.has(folderKey(folder))).flatMap((folder) => folder.items);
+  const allKeys = folders.flatMap((folder) => folder.items.map((item) => itemKey(folder, item)));
+  const fileCount = allKeys.length;
+  // 체크해 둔 파일
+  const chosen = folders.flatMap((folder) => folder.items.filter((item) => !off.has(itemKey(folder, item))));
   const existingCount = chosen.filter((item) => item.exists).length;
   const all = Object.values(results);
   const made = all.filter((r) => r.type === "done");
@@ -294,16 +310,16 @@ export default function App() {
 
   // 모두 고르기 체크박스는 일부만 골랐을 때 가운데 줄(indeterminate)로 보인다. 이 상태는 HTML 속성이 없어 직접 넣는다
   useEffect(() => {
-    if (allRef.current) allRef.current.indeterminate = checkedCount > 0 && checkedCount < folders.length;
+    if (allRef.current) allRef.current.indeterminate = chosen.length > 0 && chosen.length < fileCount;
   });
 
   function toggleAll() {
-    setUnchecked(checkedCount === folders.length ? new Set(keys) : new Set());
+    setOff(chosen.length === fileCount ? new Set(allKeys) : new Set());
   }
 
   let saveNote;
   if (source?.picked && canPickFolder() && !writeBlocked) {
-    saveNote = `바꿀 때 저장할 폴더를 묻습니다. 창은 첫 파일이 있는 폴더에서 열리고, 그 폴더를 그대로 고르면 원본 옆에 저장됩니다. 원본 ${direction.from}는 그대로 둡니다.`;
+    saveNote = `바꿀 때 저장할 폴더를 묻습니다. 창은 첫 파일이 있는 폴더에서 열리고, 그 폴더를 그대로 고르면 원본 옆에 저장됩니다. 묻지 않고 원래 자리에 저장하려면 "폴더 고르기"로 폴더를 고른 뒤 바꿀 파일만 체크하세요.`;
   } else if (source) {
     saveNote = source.canSave
       ? `바꾼 파일은 원본과 같은 폴더에 저장합니다. 원본 ${direction.from}는 그대로 둡니다.`
@@ -412,27 +428,27 @@ export default function App() {
             <p>이 폴더와 그 안의 폴더에는 {direction.from} 파일이 없습니다.</p>
           ) : (
             <>
-              {/* 파일을 직접 골랐으면 묶음이 하나라 고르는 칸이 필요 없다 */}
-              {!source.picked && (
-                <label className="cv-all">
-                  <input
-                    ref={allRef}
-                    type="checkbox"
-                    checked={checkedCount === folders.length}
-                    disabled={running}
-                    onChange={toggleAll}
-                  />
-                  모두 고르기 ({checkedCount}/{folders.length})
-                </label>
-              )}
+              <label className="cv-all">
+                <input ref={allRef} type="checkbox" checked={chosen.length === fileCount} disabled={running} onChange={toggleAll} />
+                모두 고르기 ({number(chosen.length)}/{number(fileCount)})
+              </label>
               <ol className="cv-list">
                 {folders.map((folder, i) => {
-                  const checked = !unchecked.has(keys[i]);
+                  // 이 폴더에서 체크해 둔 파일 수. 일부만 골랐으면 폴더 체크박스가 가운데 줄로 보인다
+                  const on = folder.items.filter((item) => !off.has(itemKey(folder, item))).length;
                   return (
-                    <li key={keys[i]} className={[!checked && "off", source.picked && "picked"].filter(Boolean).join(" ") || undefined}>
+                    <li key={keys[i]} className={[!on && "off", source.picked && "picked"].filter(Boolean).join(" ") || undefined}>
                       <label className="cv-row">
                         {!source.picked && (
-                          <input type="checkbox" checked={checked} disabled={running} onChange={() => toggleFolder(keys[i])} />
+                          <input
+                            type="checkbox"
+                            ref={(el) => {
+                              if (el) el.indeterminate = on > 0 && on < folder.items.length;
+                            }}
+                            checked={on === folder.items.length}
+                            disabled={running}
+                            onChange={() => toggleFolder(folder)}
+                          />
                         )}
                         <span className="cv-folder">
                           {folder.path.length ? folder.path.join(" / ") : source.picked ? source.name : `${source.name} (고른 폴더)`}
@@ -446,12 +462,16 @@ export default function App() {
                           const key = itemKey(folder, item);
                           const result = results[key];
                           const current = running && progress?.key === key;
+                          const checked = !off.has(key);
                           return (
-                            <li key={item.name} className={current ? "current" : undefined}>
+                            <li key={item.name} className={[current && "current", !checked && "off"].filter(Boolean).join(" ") || undefined}>
                               <div className="cv-out">
-                                <span className="cv-name">
-                                  {item.name} → {item.out}
-                                </span>
+                                <label className="cv-file">
+                                  <input type="checkbox" checked={checked} disabled={running} onChange={() => toggleFile(key)} />
+                                  <span className="cv-name">
+                                    {item.name} → {item.out}
+                                  </span>
+                                </label>
                                 {current ? (
                                   <span>{progress.text}</span>
                                 ) : (
@@ -499,8 +519,11 @@ export default function App() {
         <ul>
           <li>바꾼 파일은 원본과 같은 폴더에 같은 이름으로 저장합니다(x.png → x.jpg). 원본은 지우지 않습니다.</li>
           <li>
+            폴더를 고르면 그 안의 PNG가 폴더별로 나옵니다. 바꿀 파일만 체크해 두면 그 파일만 바꿔 원래 자리에 저장합니다.
+          </li>
+          <li>
             파일 고르기는 고른 PNG만 바꿉니다. 브라우저가 고른 파일의 폴더에 쓸 권한은 주지 않아서, 바꿀 때 저장할 폴더를
-            한 번 묻습니다.
+            한 번 묻습니다. 묻지 않게 하려면 폴더 고르기를 쓰세요.
           </li>
           <li>같은 이름의 JPG가 이미 있으면 덮어쓰지 않고 건너뜁니다. 다시 만들려면 그 JPG를 지우거나 옮긴 뒤 하세요.</li>
           <li>
