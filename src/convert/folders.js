@@ -3,8 +3,10 @@
 import { compareNames, comparePaths, isSkippedFolder } from "../shared/fileNames.js";
 
 // 바꿀 방향. 지금은 PNG → JPG 하나다. 방향을 더하려면 여기에 넣고, 작업자(convertWorker.js)가 그 형식을 만들 수 있게 한다.
-// source: 읽을 파일 이름, ext: 저장할 확장자, type: 만들 형식
-export const DIRECTIONS = [{ key: "png-jpg", from: "PNG", to: "JPG", source: /\.png$/i, ext: "jpg", type: "image/jpeg" }];
+// source: 읽을 파일 이름, accept: 파일 고르기 창에 보일 형식, ext: 저장할 확장자, type: 만들 형식
+export const DIRECTIONS = [
+  { key: "png-jpg", from: "PNG", to: "JPG", source: /\.png$/i, accept: { "image/png": [".png"] }, ext: "jpg", type: "image/jpeg" },
+];
 
 export const directionOf = (key) => DIRECTIONS.find((direction) => direction.key === key) ?? DIRECTIONS[0];
 
@@ -50,6 +52,13 @@ export function groupFileList(list) {
   const folders = [...byFolder.values()].sort((a, b) => comparePaths(a.path, b.path));
   for (const folder of folders) folder.files.sort((a, b) => compareNames(a.name, b.name));
   return { name, folders };
+}
+
+// 직접 고른 파일을 폴더 하나처럼 만든다 (scanDirectory와 같은 모양에 picked 표시). entries: [{ name, handle 또는 file }].
+// 고른 파일의 폴더에는 쓸 권한이 없어 dir은 없다. 저장할 폴더는 바꿀 때 묻는다. 파일 이름순으로 놓는다
+export function pickedScan(entries) {
+  const files = entries.filter((entry) => !entry.name.startsWith(".")).sort((a, b) => compareNames(a.name, b.name));
+  return { name: "고른 파일", picked: true, folders: [{ path: [], dir: null, files }] };
 }
 
 // 바꿀 파일과 저장할 이름을 정한다. 바꿀 파일이 있는 폴더만 남긴다.

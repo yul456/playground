@@ -25,6 +25,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 /* 체크를 끈 폴더는 흐리게 (체크박스는 그대로 보이게) */
 .cv-list > li.off .cv-files,
 .cv-list > li.off .cv-row > :not(input) { opacity: 0.45; }
+/* 파일을 직접 골랐으면 묶음이 하나뿐이라 묶음 이름 줄은 보이지 않게 한다 (위에 이미 "고른 파일"이라고 나온다) */
+.cv-list > li.picked > .cv-row { display: none; }
+.cv-list > li.picked .cv-files { margin: 0; }
 /* 파일 줄은 폴더 이름과 같은 자리에서 시작한다 */
 .cv-files { margin: 4px 0 0 26px; padding: 0; list-style: none; color: var(--muted); font-size: 0.9rem; }
 .cv-files li { padding: 2px 0; }

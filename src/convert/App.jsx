@@ -5,7 +5,7 @@ import { JPG_MAX_SIDE } from "../shared/imageInfo.js";
 import { DEFAULT_JPG_QUALITY } from "../shared/jpgQuality.js";
 import { explainSaveError, fileExists, SAVE_TRIES, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
-import { addFile, directionOf, DIRECTIONS, folderKey, groupFileList, planFolders, scanDirectory } from "./folders.js";
+import { addFile, directionOf, DIRECTIONS, folderKey, groupFileList, pickedScan, planFolders, scanDirectory } from "./folders.js";
 import { cancelJob, runJob } from "./jobs.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
@@ -59,7 +59,8 @@ export default function App() {
   const [settings, setSettings] = useState(loadSettings);
   const direction = directionOf(settings.direction);
   const quality = QUALITIES.find((q) => q.value === settings.quality) ?? QUALITIES.find((q) => q.value === DEFAULT_JPG_QUALITY);
-  // 고른 폴더: { name, folders: [{ path, dir, files }] (folders.js scanDirectory), canSave: 원본 옆에 저장할 수 있는지 }
+  // 고른 폴더: { name, folders: [{ path, dir, files }] (folders.js scanDirectory), canSave: 원본 옆에 저장할 수 있는지 }.
+  // 파일을 직접 골랐으면 picked가 붙고 폴더가 하나뿐이다 (folders.js pickedScan). 저장할 폴더는 바꿀 때 묻는다
   const [source, setSource] = useState(null);
   // 체크를 끈 폴더(folderKey). 폴더를 새로 고르면 모두 다시 켠다
   const [unchecked, setUnchecked] = useState(() => new Set());
@@ -72,6 +73,9 @@ export default function App() {
   // 브라우저가 폴더에 쓰기를 막아 두었으면(회사 PC 정책 등) 읽기만 하고 결과는 다운로드로 받는다
   const [writeBlocked, setWriteBlocked] = useState(false);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  // 파일을 직접 골랐을 때, 바꾸기를 누르고 고른 저장 폴더
+  const pickedDirRef = useRef(null);
   const allRef = useRef(null);
   const stopRef = useRef(false);
   // 폴더에 쓰는 중인 스트림. 멈추기를 누르면 그만 쓰게 한다
@@ -143,9 +147,41 @@ export default function App() {
     if (files.length) open(groupFileList(files), false);
   }
 
-  // 파일 하나를 바꿔 원본과 같은 폴더에 저장한다. 그 폴더에 쓸 수 없으면(또는 끝내 저장하지 못하면) 다운로드로 받는다
+  // 폴더 대신 바꿀 파일을 직접 고른다
+  async function pickFiles() {
+    setNotice("");
+    if (typeof window.showOpenFilePicker !== "function") {
+      fileInputRef.current.click();
+      return;
+    }
+    let handles;
+    try {
+      handles = await window.showOpenFilePicker({
+        id: "convert-files",
+        startIn: "pictures",
+        multiple: true,
+        types: [{ description: `${direction.from} 그림`, accept: direction.accept }],
+      });
+    } catch (err) {
+      if (err.name === "AbortError") return; // 고르지 않고 닫음
+      setNotice(`파일을 열지 못했습니다. ${err.message}`);
+      return;
+    }
+    open(pickedScan(handles.map((handle) => ({ name: handle.name, handle }))), false);
+  }
+
+  function onPickedFiles(e) {
+    const files = [...e.target.files];
+    e.target.value = "";
+    if (files.length) open(pickedScan(files.map((file) => ({ name: file.name, file }))), false);
+  }
+
+  // 파일 하나를 바꿔 원본과 같은 폴더에 저장한다. 그 폴더에 쓸 수 없으면(또는 끝내 저장하지 못하면) 다운로드로 받는다.
+  // 파일을 직접 골랐으면 바꾸기를 누를 때 고른 폴더에 저장한다
   async function convertOne(folder, item, report) {
-    const dir = source.canSave ? folder.dir : null;
+    let dir = null;
+    if (source.picked) dir = pickedDirRef.current;
+    else if (source.canSave) dir = folder.dir;
     // 폴더를 읽은 뒤에 같은 이름의 파일이 생겼을 수도 있다. 덮어쓰지 않도록 바꾸기 전에 한 번 더 본다
     if (dir && (await fileExists(dir, item.out))) return { type: "skipped" };
     const file = item.source.file ?? (await item.source.handle.getFile());
@@ -172,6 +208,22 @@ export default function App() {
   }
 
   async function start() {
+    // 파일을 직접 골랐으면 그 폴더에 쓸 권한이 없어 저장할 폴더를 한 번 묻는다. 첫 파일이 있는 폴더에서 열린다.
+    // 이 창은 버튼을 누른 바로 그때만 띄울 수 있어서 맨 먼저 한다
+    let pickedDir = null;
+    if (source.picked && canPickFolder() && !writeBlocked) {
+      try {
+        pickedDir = await window.showDirectoryPicker({
+          id: "convert-save",
+          startIn: source.folders[0].files[0]?.handle ?? "pictures",
+          mode: "readwrite",
+        });
+      } catch (err) {
+        if (err.name === "AbortError") return; // 고르지 않고 닫음
+        // 폴더를 열지 못하면(쓰기를 막아 둔 브라우저 등) 다운로드로 받는다
+      }
+    }
+    pickedDirRef.current = pickedDir;
     const jobs = planFolders(source, direction)
       .filter((folder) => !unchecked.has(folderKey(folder)))
       .flatMap((folder) => folder.items.map((item) => ({ folder, item, key: itemKey(folder, item) })));
@@ -193,8 +245,9 @@ export default function App() {
         }
       }
       setResults((all) => ({ ...all, [key]: result }));
-      // 저장한 파일을 폴더 목록에 적어 둔다. 다시 돌리면 이미 있는 것으로 보고 건너뛴다
-      if (result.savedTo === "folder") setSource((s) => addFile(s, folder.path, item.out));
+      // 저장한 파일을 폴더 목록에 적어 둔다. 다시 돌리면 이미 있는 것으로 보고 건너뛴다.
+      // 파일을 직접 골랐을 때는 적지 않는다. 다음에 다른 폴더를 고를 수 있어, 있는지는 고른 폴더에서 그때 본다
+      if (result.savedTo === "folder" && !source.picked) setSource((s) => addFile(s, folder.path, item.out));
       if (result.type === "cancelled") break;
     }
     setProgress(null);
@@ -249,7 +302,9 @@ export default function App() {
   }
 
   let saveNote;
-  if (source) {
+  if (source?.picked && canPickFolder() && !writeBlocked) {
+    saveNote = `바꿀 때 저장할 폴더를 묻습니다. 창은 첫 파일이 있는 폴더에서 열리고, 그 폴더를 그대로 고르면 원본 옆에 저장됩니다. 원본 ${direction.from}는 그대로 둡니다.`;
+  } else if (source) {
     saveNote = source.canSave
       ? `바꾼 파일은 원본과 같은 폴더에 저장합니다. 원본 ${direction.from}는 그대로 둡니다.`
       : "다운로드 폴더로 받습니다. 브라우저가 여러 파일 다운로드를 물으면 허용을 눌러 주세요.";
@@ -289,8 +344,8 @@ export default function App() {
       <header>
         <h1>사진 형식 바꾸기</h1>
         <p className="subtitle">
-          폴더를 고르면 그 폴더와 안의 폴더에 있는 PNG를 JPG로 바꿔 원본과 같은 자리에 저장합니다. 사진은 이 PC 밖으로
-          나가지 않고 브라우저 안에서만 처리합니다.
+          폴더를 고르면 그 폴더와 안의 폴더에 있는 PNG를 JPG로 바꿔 원본과 같은 자리에 저장합니다. 바꿀 파일을 직접 고를
+          수도 있습니다. 사진은 이 PC 밖으로 나가지 않고 브라우저 안에서만 처리합니다.
         </p>
       </header>
 
@@ -326,9 +381,13 @@ export default function App() {
         <p className="cv-hint">{quality.hint}</p>
         <div className="cv-actions">
           <button type="button" onClick={pickFolder} disabled={busy}>
-            {source ? "다른 폴더 고르기" : "폴더 고르기"}
+            {source && !source.picked ? "다른 폴더 고르기" : "폴더 고르기"}
+          </button>
+          <button type="button" className="secondary" onClick={pickFiles} disabled={busy}>
+            {source?.picked ? "다른 파일 고르기" : "파일 고르기"}
           </button>
           <input ref={inputRef} type="file" webkitdirectory="" multiple hidden onChange={onFiles} />
+          <input ref={fileInputRef} type="file" accept=".png,image/png" multiple hidden onChange={onPickedFiles} />
         </div>
         {!source && <p className="cv-save">{saveNote}</p>}
         {notice && (
@@ -345,32 +404,38 @@ export default function App() {
           <div className="cv-summary">
             <h2>{source.name}</h2>
             <span>
-              {direction.from}가 든 폴더 {number(folders.length)}개 · {direction.from} {number(fileCount)}개
+              {!source.picked && `${direction.from}가 든 폴더 ${number(folders.length)}개 · `}
+              {direction.from} {number(fileCount)}개
             </span>
           </div>
           {folders.length === 0 ? (
             <p>이 폴더와 그 안의 폴더에는 {direction.from} 파일이 없습니다.</p>
           ) : (
             <>
-              <label className="cv-all">
-                <input
-                  ref={allRef}
-                  type="checkbox"
-                  checked={checkedCount === folders.length}
-                  disabled={running}
-                  onChange={toggleAll}
-                />
-                모두 고르기 ({checkedCount}/{folders.length})
-              </label>
+              {/* 파일을 직접 골랐으면 묶음이 하나라 고르는 칸이 필요 없다 */}
+              {!source.picked && (
+                <label className="cv-all">
+                  <input
+                    ref={allRef}
+                    type="checkbox"
+                    checked={checkedCount === folders.length}
+                    disabled={running}
+                    onChange={toggleAll}
+                  />
+                  모두 고르기 ({checkedCount}/{folders.length})
+                </label>
+              )}
               <ol className="cv-list">
                 {folders.map((folder, i) => {
                   const checked = !unchecked.has(keys[i]);
                   return (
-                    <li key={keys[i]} className={checked ? undefined : "off"}>
+                    <li key={keys[i]} className={[!checked && "off", source.picked && "picked"].filter(Boolean).join(" ") || undefined}>
                       <label className="cv-row">
-                        <input type="checkbox" checked={checked} disabled={running} onChange={() => toggleFolder(keys[i])} />
+                        {!source.picked && (
+                          <input type="checkbox" checked={checked} disabled={running} onChange={() => toggleFolder(keys[i])} />
+                        )}
                         <span className="cv-folder">
-                          {folder.path.length ? folder.path.join(" / ") : `${source.name} (고른 폴더)`}
+                          {folder.path.length ? folder.path.join(" / ") : source.picked ? source.name : `${source.name} (고른 폴더)`}
                         </span>
                         <span className="cv-muted">
                           {direction.from} {number(folder.items.length)}개
@@ -395,7 +460,7 @@ export default function App() {
                               </div>
                               {result?.saveError && (
                                 <p className="cv-fallback" title={result.saveError.detail}>
-                                  원본 옆에 저장하지 못해 다운로드 폴더로 받았습니다. {result.saveError.text}
+                                  {source.picked ? "고른 폴더에" : "원본 옆에"} 저장하지 못해 다운로드 폴더로 받았습니다. {result.saveError.text}
                                 </p>
                               )}
                             </li>
@@ -433,6 +498,10 @@ export default function App() {
         <h2>알아 둘 것</h2>
         <ul>
           <li>바꾼 파일은 원본과 같은 폴더에 같은 이름으로 저장합니다(x.png → x.jpg). 원본은 지우지 않습니다.</li>
+          <li>
+            파일 고르기는 고른 PNG만 바꿉니다. 브라우저가 고른 파일의 폴더에 쓸 권한은 주지 않아서, 바꿀 때 저장할 폴더를
+            한 번 묻습니다.
+          </li>
           <li>같은 이름의 JPG가 이미 있으면 덮어쓰지 않고 건너뜁니다. 다시 만들려면 그 JPG를 지우거나 옮긴 뒤 하세요.</li>
           <li>
             JPG는 품질이 100이어도 PNG와 완전히 같지는 않습니다. 하나도 달라지면 안 되는 그림은 PNG로 두세요. 색 글자가
