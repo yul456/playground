@@ -304,7 +304,7 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
     - "WAV로 저장"도 고를 수 있다(16비트 PCM).
 - Mediabunny는 1.62.1을 쓴다. 2026-11-13 최신 1.65.x는 나온 지 2주가 안 되었다. 라이선스는 MPL-2.0이다.
 - 태그(MP3·WAV 말고 다른 형식)
-  - Mediabunny가 옮긴다. 저장한 뒤 결과를 다시 읽어 빠진 태그(제목·아티스트·앨범·작곡가·앨범 아트)를 알린다(`missingTags`).
+  - Mediabunny가 옮긴다. 저장한 뒤 결과를 다시 읽어 빠진 태그(제목·아티스트·앨범·작곡가·앨범 아트)를 알린다(`missingTags`, 오디오 형식 바꾸기와 함께 쓰는 `src/shared/audioTags.js`).
   - OGG는 다른 재생기처럼 엄격하게 다시 읽는다(`oggTags.js`의 `readOggTagNames`). Mediabunny 자신은 너그럽게 읽어서 빠진 것을 못 알아챘다.
 - Mediabunny 1.62.1의 OGG Vorbis 문제: 태그 칸(comment header) 끝의 표시 1바이트(framing bit)를 빠뜨린다.
   - 그래서 FFmpeg는 마지막 태그를 버리고(시험에서 작곡가가 빠짐), libvorbis는 그 칸을 틀렸다고 거부할 수 있다.
@@ -320,6 +320,32 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
   - `test-media.mjs`: Mediabunny 길을 본다.
   - `e2e.mjs`: 화면을 시험용 크롬으로 돌린다. 듣기는 `--mute-audio`로 소리를 끄고 재생 위치만 본다.
 - 확인하지 못한 것: 윈도우 탐색기의 자세히 보기, foobar·아이튠즈 같은 다른 재생기, 실제 브라우저에서 소리 듣기(시험은 headless라 소리를 듣지 못한다).
+
+## 오디오 형식 바꾸기 주의점
+
+- 사용자 요청(2026-11-13): 오디오 파일 형식 변환을 따로 메뉴로 만들고, 형식을 잘 모르니 내가 추천하는 내용으로 하라고 했다(`audio-convert/`, `src/audio-convert/`). 사진 형식 바꾸기처럼 폴더째 바꿔 원본 옆에 같은 이름으로 저장하고(x.m4a → x.mp3), 원본은 지우지 않고, 같은 이름이 있으면 건너뛴다. 폴더 고르기·파일 고르기와 파일마다 체크하는 화면도 같다.
+- 폴더 읽기(`scanDirectory`·`groupFileList`·`pickedScan`·`addFile`)는 사진 형식 바꾸기와 함께 쓰려고 `src/shared/folderScan.js`로 옮겼다(사진 쪽 `folders.js`는 다시 내보낸다). 태그를 보이고 견주는 `describeTags`·`missingTags`는 오디오 자르기와 함께 `src/shared/audioTags.js`에 있다.
+- 바꿀 형식은 MP3(기본)·M4A·FLAC·WAV 넷이다(`formats.js`의 `TARGETS`, 화면에 한 줄씩 설명). OGG·Opus는 못 트는 기기가 많아 넣지 않았다. 비트레이트는 MP3 320(기본)·256·192·128, M4A 256(기본)·192·128kbps이고 설정에 저장한다. 손실 압축끼리 바꾸면 한 번 더 깎이므로 기본은 가장 높은 값이다.
+- 이미 그 형식인 파일(확장자로 본다)은 목록에 넣지 않고 수만 알린다. 다시 압축하면 음질만 깎인다. 목록에 올리는 확장자는 `SOURCE_EXTENSIONS`다(.mp4·.mov는 대개 동영상이라 뺐다).
+- 만들기(`convert.js`)는 Mediabunny `Conversion`이다. 바꾸기를 누를 때 받는다.
+  - 원본과 만들 소리 형식이 같으면(.aac → M4A 등) 다시 압축하지 않고 옮겨 담는다(`copied`).
+  - MP3·FLAC 인코더는 크롬에 없어 라이브러리(WASM, 작업자에서 돈다)를 그 형식을 처음 만들 때 받는다. AAC는 크롬 것(맥은 애플 인코더)을 쓰고, `canEncodeAudio`가 그 설정을 못 한다고 하면(윈도우 크롬은 AAC 비트레이트가 96~192뿐인 것으로 안다, 확인 못 함) `@mediabunny/aac-encoder`를 받는다. 라이브러리를 등록하면 그 뒤로는 크롬 것보다 먼저 쓰인다. 크롬의 AAC는 VBR이라 소리가 단순하면 고른 값보다 적게 쓴다.
+  - MP3·M4A는 32k·44.1k·48kHz만 쓰고 다른 샘플레이트는 바꾼다(`lossySampleRate`: 44.1k 계열 → 44,100, 그 밖 → 48,000. 16kHz 음성 녹음도 올린다). 3채널 이상은 스테레오로 줄인다. FLAC·WAV는 샘플레이트·채널을 그대로 두고, 비트 깊이는 원본이 24비트 이상인 손실 없는 형식이면 24, 아니면 16이다(`losslessBits`, FLAC은 STREAMINFO에서 읽는다, `sampleFormat`으로 정한다).
+  - 만든 MP3·M4A는 인코더 지연 때문에 앞에 0.05초쯤 빈 소리가 생긴다(LAME 태그를 쓰지 않아 재생기가 빼 주지 못한다). 화면 안내에 적었다.
+- 태그(`tags.js`)
+  - 원본 형식의 원래 이름(raw)을 그대로 넘기면 다른 형식에 엉뚱한 칸이 생겨서(M4A에 TIT2 칸 등) 표준 칸만 옮기고, 작곡가는 그 형식의 이름(M4A ©wrt, FLAC COMPOSER)으로 넣는다. Mediabunny는 원본과 형식이 다르면 raw를 버리므로 그냥 두면 작곡가가 빠졌다.
+  - 날짜는 원본에 적힌 글을 그대로 옮긴다(`dateTextOf`). Mediabunny는 날짜를 Date로 바꿔 써서 "2019"가 "2019-01-01"이 되었다.
+  - M4A는 앞표지만 담으므로 앞표지가 따로 없으면 첫 그림을 앞표지로 한다(`normalizeImages`).
+  - MP3 태그는 Mediabunny가 쓰지 않게 하고(Mediabunny는 ID3v2.4) 윈도우와 오래된 기기가 잘 읽는 ID3v2.3으로 직접 붙인다(`id3.js`). 글은 라틴 문자만 있으면 ISO-8859-1, 아니면 UTF-16이고, 뒤에 1KB를 비워 둔다.
+  - WAV의 LIST INFO는 라틴 문자만 담아서(Mediabunny는 한글 값을 쓰지 않는다) 같은 ID3v2.3 태그를 "id3 " 조각으로 data 앞에 넣는다(`wavChunk.js`). 앨범 아트·작곡가도 들어간다. 윈도우 탐색기는 LIST INFO만 읽는 것으로 안다(확인 못 함).
+  - 원본 태그 바로잡기(`sourceTags.js`): WAV의 LIST INFO, ID3의 ISO-8859-1 칸은 바이트 그대로 읽혀서 UTF-8(ffmpeg가 쓴 것)이나 EUC-KR(예전 윈도우 프로그램)로 적은 한글이 깨진다. 라틴 범위 글자만 있으면 UTF-8로, 안 되면 EUC-KR로 읽어 한글이 나올 때 쓴다(`repairText`). "Björk", "Café" 같은 이름은 그대로 남는 것을 시험했다. WebM·MKA는 ffmpeg(yt-dlp 등)가 제목을 Segment Info의 Title에 넣는데 Mediabunny가 읽지 않아 직접 읽는다(`matroskaTitle`).
+  - 저장할 파일을 다시 읽어 원본에 있던 제목·아티스트·앨범·작곡가·앨범 아트 가운데 빠진 것을 그 파일 줄에 알린다.
+- 멈추기는 하던 변환을 `conversion.cancel()`로 그만두고, 저장 중이면 스트림을 abort한다.
+- 시험은 `local-tests/audio-convert/`에서 한다(그 폴더의 README.md 참고). 기본 시험 파일은 오디오 자르기 것을 쓰고, `make-files.sh`가 96kHz·24비트 FLAC, 5.1채널, 16kHz 모노 WAV, .aac, WebM, 앨범 아트 종류가 다른 MP3, EUC-KR 태그 MP3, 번호·연도·장르 태그 M4A 등을 더 만든다.
+  - `test-node.mjs`: 규칙, ID3v2.3(ffprobe와 오디오 자르기의 ID3 읽기로 다시 읽음), 태그 옮기기, 바로잡기, WAV 조각.
+  - `test-convert.mjs`: 원본 19가지를 네 형식으로 바꿔 ffprobe·ffmpeg로 형식·샘플레이트·채널·비트 깊이·길이·태그·앨범 아트를 본다. 크롬에 AAC가 없는 경우도 본다.
+  - `e2e.mjs`: 화면 (OPFS 폴더, 건너뛰기, 형식·음질, 멈추기, 파일 고르기).
+- 확인하지 못한 것: 윈도우 크롬(AAC 인코더, 탐색기의 태그 보기), 아이폰·카오디오 등 실제 기기 재생, 귀로 듣기, 큰 폴더(수백 곡)에서의 시간과 메모리.
 
 ## 날씨 기능 주의점
 

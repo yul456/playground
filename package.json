@@ -13,7 +13,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mediabunny/aac-encoder": "^1.62.1",
     "@mediabunny/flac-encoder": "^1.62.1",
+    "@mediabunny/mp3-encoder": "^1.62.1",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^6.16.0",
     "mediabunny": "^1.62.1",

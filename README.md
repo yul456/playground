@@ -16,6 +16,7 @@
 - 사진 형식 바꾸기: https://yul456.github.io/playground/convert/
 - 페이지 사진 받기(크롬 확장 프로그램 안내·ZIP): https://yul456.github.io/playground/photo-saver/
 - 오디오 자르기: https://yul456.github.io/playground/audio-cut/
+- 오디오 형식 바꾸기: https://yul456.github.io/playground/audio-convert/
 
 ## 실행
 
@@ -48,12 +49,14 @@ stitch/index.html       사진 세로로 붙이기 입구
 convert/index.html      사진 형식 바꾸기 입구
 photo-saver/index.html  페이지 사진 받기(크롬 확장 프로그램) 안내 페이지 입구. 빌드하면 옆에 photo-saver.zip이 생긴다
 audio-cut/index.html    오디오 자르기 입구
+audio-convert/index.html 오디오 형식 바꾸기 입구
 extensions/
   photo-saver/          페이지 사진 받기 크롬 확장 프로그램. 빌드 없이 이 폴더째 설치한다
 src/
   shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, WeatherIcon.jsx, geo.js, Confetti.jsx, random.js,
                         고른 폴더에 저장하는 saveToFolder.js, download.js, format.js, fileNames.js,
-                        그림 머리와 JPG 크기 한계 imageInfo.js, JPG 품질 jpgQuality.js)
+                        그림 머리와 JPG 크기 한계 imageInfo.js, JPG 품질 jpgQuality.js,
+                        고른 폴더 읽기 folderScan.js, 오디오 태그 보이기·견주기 audioTags.js)
   home/                 첫 화면. FEATURES 배열에 기능 카드를 둔다
   weather/              날씨 기능
   ladder/               사다리 타기
@@ -68,6 +71,9 @@ src/
   photo-saver/          페이지 사진 받기 안내 페이지 (설치 방법, ZIP 받기)
   audio-cut/            오디오 자르기 (MP3를 조각 단위로 자르는 mp3.js, WAV를 자르는 wav.js, 태그 읽기 tags.js,
                         다른 형식을 Mediabunny로 자르는 media.js, OGG 태그 칸 보정 oggTags.js, 파형 analyze.js·Waveform.jsx)
+  audio-convert/        오디오 형식 바꾸기 (형식·저장할 이름 규칙 formats.js, Mediabunny로 바꾸기 convert.js,
+                        MP3의 ID3v2.3 태그 id3.js, 형식별 태그 tags.js, 깨진 한글·WebM 제목 바로잡기 sourceTags.js,
+                        WAV에 ID3 조각 넣기 wavChunk.js)
 scripts/
   zip-folder.mjs        폴더를 ZIP으로 묶는다 (vite.config.js가 확장 프로그램 ZIP을 만들 때 쓴다)
   check-copies.mjs      확장 프로그램이 복사해 쓰는 파일(png.js, imageInfo.js)이 원본과 같은지 검사 (npm run check에서 돈다)
@@ -90,6 +96,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 사진 세로로 붙이기 | `src/stitch/`, `stitch/` | 없음 (PNG 압축은 브라우저 내장 CompressionStream, JPG는 브라우저 내장 인코더) |
 | 사진 형식 바꾸기 | `src/convert/`, `convert/` | 없음 (JPG는 브라우저 내장 인코더로 만든다) |
 | 오디오 자르기 | `src/audio-cut/`, `audio-cut/` | `mediabunny` (MP3·WAV가 아닌 형식을 다시 압축하지 않고 자르기, MPL-2.0, 그런 파일을 열 때만 받음), `@mediabunny/flac-encoder` (FLAC을 다시 압축해야 할 때만 받음, MPL-2.0). MP3·WAV는 패키지 없이 자체 코드 |
+| 오디오 형식 바꾸기 | `src/audio-convert/`, `audio-convert/` | `mediabunny` (풀고 다시 만들기, 바꾸기를 누를 때 받음), `@mediabunny/mp3-encoder` (LAME, MP3로 바꿀 때만 받음), `@mediabunny/flac-encoder` (FLAC으로 바꿀 때만 받음), `@mediabunny/aac-encoder` (FFmpeg의 AAC 인코더, 크롬이 그 설정으로 AAC를 만들지 못할 때만 받음). 모두 MPL-2.0 |
 | 페이지 사진 받기 | `extensions/photo-saver/`, `src/photo-saver/`, `photo-saver/` | 없음 (확장 프로그램은 빌드 없이 쓰는 자바스크립트, 이어 붙이기는 `src/stitch/png.js`와 `src/shared/imageInfo.js` 복사본을 쓰고, ZIP은 Node 내장 zlib로 묶음) |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.

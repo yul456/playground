@@ -81,6 +81,12 @@ const FEATURES = [
     title: "오디오 자르기",
     description: "오디오 파일의 앞뒤 잡음 같은 부분을 잘라 내고 저장합니다. MP3는 다시 압축하지 않아 음질과 태그가 그대로입니다.",
   },
+  {
+    path: "audio-convert/",
+    icon: "🎵",
+    title: "오디오 형식 바꾸기",
+    description: "오디오 파일을 MP3·M4A·FLAC·WAV 가운데 고른 형식으로 바꿉니다. 폴더째 한꺼번에 바꾸고, 앨범 아트 같은 태그도 옮깁니다.",
+  },
 ];
 
 export default function App() {

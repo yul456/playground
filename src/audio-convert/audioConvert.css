@@ -1,0 +1,51 @@
+.card h2 { margin: 0; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.au-muted { color: var(--muted); }
+
+/* 고르기 칸 */
+.au-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 12px; padding: 0; border: 0; }
+.au-options legend { float: left; margin-right: 4px; padding: 0; }
+.au-options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.au-hint { margin: -4px 0 14px; color: var(--muted); font-size: 0.9rem; }
+.au-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.au-save { margin: 12px 0 0; color: var(--muted); font-size: 0.9rem; }
+.au-notice { margin: 12px 0 0; color: #d97706; }
+
+/* 폴더와 파일 목록 */
+.au-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.au-summary span { color: var(--muted); }
+.au-all { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.au-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.au-list > li { padding: 10px 0; border-top: 1px solid var(--border); }
+.au-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.au-row input, .au-all input, .au-options input, .au-file input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.au-folder { flex: 1; font-weight: 600; word-break: break-all; }
+.au-row .au-muted { white-space: nowrap; }
+/* 체크를 모두 끈 폴더와 체크를 끈 파일은 흐리게 (체크박스는 그대로 보이게) */
+.au-list > li.off .au-row > :not(input),
+.au-files li.off .au-name { opacity: 0.45; }
+/* 파일을 직접 골랐으면 묶음이 하나뿐이라 묶음 이름 줄은 보이지 않게 한다 (위에 이미 "고른 파일"이라고 나온다) */
+.au-list > li.picked > .au-row { display: none; }
+.au-list > li.picked .au-files { margin: 0; }
+/* 파일 줄은 폴더 이름과 같은 자리에서 시작한다 */
+.au-files { margin: 4px 0 0 26px; padding: 0; list-style: none; color: var(--muted); font-size: 0.9rem; }
+.au-files li { padding: 2px 0; }
+.au-files li.current { color: var(--text); }
+.au-out { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.au-file { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.au-name { word-break: break-all; }
+.au-ok { color: #16a34a; }
+.au-warn { color: #d97706; }
+.au-error { color: #dc2626; }
+/* 파일 줄 아래의 덧붙임 (옮기지 못한 태그, 다운로드로 받은 까닭) */
+.au-sub { margin: 2px 0 0 24px; font-size: 0.85rem; }
+.au-bar { height: 6px; margin-top: 10px; overflow: hidden; border-radius: 3px; background: var(--border); }
+.au-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+.au-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; }
+
+/* 알아 둘 것 */
+.au-notes { color: var(--muted); font-size: 0.9rem; }
+.au-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.au-notes ul { margin: 0; padding-left: 1.2em; }
+.au-notes li { margin-bottom: 4px; }

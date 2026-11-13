@@ -29,6 +29,7 @@ import {
   WEBM,
   WebMOutputFormat,
 } from "mediabunny";
+import { describeTags, missingTags } from "../shared/audioTags.js";
 import { fixVorbisFraming, readOggTagNames } from "./oggTags.js";
 
 // 읽은 형식에 맞는 같은 형식의 쓰기 설정
@@ -55,29 +56,8 @@ export async function openMedia(file) {
   return { input, formatName: format.name, duration, tags, sameFormatSupported: Boolean(sameFormat(format)), sampleRate: track.sampleRate, channels: track.numberOfChannels, codec: track.codec };
 }
 
-// 태그 가운데 화면에 보일 것: 제목, 아티스트, 앨범, 작곡가, 앨범 아트
-export function describeTags(tags) {
-  const raw = tags?.raw ?? {};
-  const composerKey = Object.keys(raw).find((key) => /^(©wrt|composer|tcom)$/i.test(key));
-  const composer = composerKey && typeof raw[composerKey] === "string" ? raw[composerKey] : "";
-  const image = tags?.images?.find((img) => img.kind === "coverFront") ?? tags?.images?.[0] ?? null;
-  return {
-    title: tags?.title ?? "",
-    artist: tags?.artist ?? "",
-    album: tags?.album ?? "",
-    composer,
-    cover: image && { data: image.data, mimeType: image.mimeType },
-    count: Object.keys(raw).length + (tags?.images?.length ?? 0),
-  };
-}
-
-// 잘라 낸 파일에서 빠진 태그 이름들 (저장한 뒤 원본과 견준다). before·after는 describeTags 결과
-export function missingTags(before, after) {
-  const names = { title: "제목", artist: "아티스트", album: "앨범", composer: "작곡가" };
-  const missing = Object.keys(names).filter((key) => before[key] && !after[key]).map((key) => names[key]);
-  if (before.cover && !after.cover) missing.push("앨범 아트");
-  return missing;
-}
+// 태그를 화면에 보일 모양으로 꺼내고 저장 전후를 견주는 일은 오디오 형식 바꾸기와 함께 쓴다 (shared/audioTags.js)
+export { describeTags, missingTags };
 
 // Ogg 태그 이름 가운데 화면에 보이는 칸에 해당하는 것
 const OGG_NAMES = { title: ["title"], artist: ["artist"], album: ["album"], composer: ["composer"] };
