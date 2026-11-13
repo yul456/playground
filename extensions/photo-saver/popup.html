@@ -17,6 +17,26 @@
       </span>
     </div>
     <p class="page" id="page">&nbsp;</p>
+    <!-- 링크를 열린 탭 받기 목록에 넣기 (links.js) -->
+    <div class="links-bar">
+      <span class="links-label">링크</span>
+      <button type="button" class="link" id="pickLinks" aria-pressed="false">고르기</button>
+      <button type="button" class="link" id="showLinks" title="이 페이지의 링크를 주소 모양별로 묶어 보이고, 고른 것을 열린 탭 받기 목록에 넣습니다">이 페이지 링크</button>
+      <span class="links-count" id="queueCount"></span>
+    </div>
+    <p class="pick-hint" id="pickHint" hidden></p>
+    <section class="links" id="links" hidden>
+      <div class="links-head">
+        <strong id="linksTitle">이 페이지 링크</strong>
+        <button type="button" class="link" id="closeLinks">닫기</button>
+      </div>
+      <input class="links-filter" id="linkFilter" placeholder="글자나 주소 일부로 거르기" spellcheck="false" autocomplete="off" aria-label="링크 거르기">
+      <div class="link-groups" id="linkGroups"></div>
+      <div class="links-actions">
+        <button type="button" id="addLinks" disabled>열린 탭 받기 목록에 넣기</button>
+        <span class="links-note" id="linksNote"></span>
+      </div>
+    </section>
     <div class="sets" id="sets"></div>
     <div class="message" id="message" hidden></div>
 

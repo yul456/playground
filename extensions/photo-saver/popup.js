@@ -4,6 +4,7 @@
 import { JPG_QUALITIES, NO_EXT, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, newItem, saveExts, saveRules, saveSettings, typeOf } from "./core.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
+import { mountLinks } from "./links.js";
 import { applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
 import { mountSets } from "./sets.js";
 
@@ -25,6 +26,8 @@ const inPanel = !(chrome.extension?.getViews?.({ type: "popup" }) ?? [window]).i
 
 let tabId = null;
 let windowId = null;
+// 링크 줄 (열린 탭 받기 목록에 링크 넣기)
+let links = null;
 // 사진 찾기를 시작한 차례. 탭을 빨리 바꾸면 늦게 끝난 앞 탭의 결과를 버린다
 let scanRun = 0;
 let pageTitle = "";
@@ -517,6 +520,7 @@ function follow(id) {
   tabId = id;
   items = [];
   folderEdited = false;
+  links?.setTab(id);
   scan();
 }
 
@@ -624,6 +628,7 @@ async function init() {
   loadOpenIn()
     .then(applyOpenIn)
     .catch(() => {});
+  links = mountLinks({ inPanel, openPanel });
   renderRules();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -631,6 +636,7 @@ async function init() {
   windowId = tab?.windowId ?? null;
   $("openPanel").disabled = windowId == null;
   $("openPopup").disabled = windowId == null;
+  links.setTab(tabId);
   if (inPanel) {
     chrome.tabs.onActivated.addListener((info) => {
       if (info.windowId === windowId) follow(info.tabId);

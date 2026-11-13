@@ -1,6 +1,6 @@
 // 확장 프로그램 창(popup.js)과 열린 탭 받기(batch.js)가 함께 쓰는 것: 저장해 둔 옵션, 꾸밈 그림 기준, 사진 찾기와 크기 재기.
 // 옵션은 확장 프로그램 페이지의 localStorage에 둔다 (창과 열린 탭 받기 화면이 같은 저장소를 본다. 서비스 워커는 못 읽는다)
-import { collectImages } from "./collect.js";
+import { collectImages, collectLinks } from "./collect.js";
 import { SPLIT_MODES } from "./imageInfo.js";
 import { extFromMime, extFromUrl, imageName, siteOf, validName } from "./names.js";
 
@@ -208,13 +208,15 @@ export function hostOf(url) {
 }
 
 // 탭의 페이지에서 사진을 찾는다. { title, host, images }를 돌려주고, 크롬이 막는 페이지(크롬 설정, 웹 스토어 등)면 오류를 던진다
-export async function findImages(tabId) {
+// 탭의 프레임마다 func(collect.js)을 돌려, 맨 위 페이지와 같은 사이트의 프레임 결과만 맨 위 페이지부터 차례로 돌려준다.
+// field는 결과에서 모을 목록 이름(images·links). 같은 주소는 한 번만 넣는다. { top, list }
+async function inFrames(tabId, func, field) {
   let results;
   try {
-    results = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: collectImages });
+    results = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func });
   } catch {
     // 프레임 가운데 들어갈 수 없는 것이 있으면 맨 위 페이지만 본다
-    results = await chrome.scripting.executeScript({ target: { tabId }, func: collectImages });
+    results = await chrome.scripting.executeScript({ target: { tabId }, func });
   }
   // 맨 위 페이지(frameId 0)를 먼저, 그 안의 프레임은 만들어진 순서대로 붙인다.
   // 프레임은 맨 위 페이지와 같은 사이트(naver.com처럼 도메인 뒤쪽이 같은 것)의 것만 쓴다.
@@ -224,18 +226,29 @@ export async function findImages(tabId) {
   const topSite = top ? siteOf(top.origin) : null;
   const sameSite = (origin) => origin === top.origin || (topSite !== null && siteOf(origin) === topSite);
   const frames = results
-    .filter((r) => r.result?.images && (!top || r.frameId === 0 || sameSite(r.result.origin)))
+    .filter((r) => r.result?.[field] && (!top || r.frameId === 0 || sameSite(r.result.origin)))
     .sort((a, b) => a.frameId - b.frameId);
   const seen = new Set();
-  const images = [];
+  const list = [];
   for (const { result } of frames) {
-    for (const found of result.images) {
+    for (const found of result[field]) {
       if (seen.has(found.url)) continue;
       seen.add(found.url);
-      images.push(found);
+      list.push(found);
     }
   }
-  return { title: top?.title ?? "", host: hostOf(top?.url), images };
+  return { top, list };
+}
+
+export async function findImages(tabId) {
+  const { top, list } = await inFrames(tabId, collectImages, "images");
+  return { title: top?.title ?? "", host: hostOf(top?.url), images: list };
+}
+
+// 탭의 페이지에서 링크를 찾는다 (열린 탭 받기 목록에 넣으려고). { title, url, links: [{ url, text }] }
+export async function findLinks(tabId) {
+  const { top, list } = await inFrames(tabId, collectLinks, "links");
+  return { title: top?.title ?? "", url: top?.url ?? "", links: list };
 }
 
 // 찾은 그림에 이름(빼 둔 이름과 맞춰 볼 것)과 확장자를 붙인다.

@@ -4,8 +4,11 @@
 // - 세로로 이어 붙이기: 보이지 않는 문서(offscreen.js)가 사진을 받아 그림을 만들고,
 //   그 Blob 주소를 넘겨받아 여기서 받는다 (서비스 워커는 Blob 주소를 만들지 못한다).
 //   JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 와서 "제목_1.jpg", "제목_2.jpg" …로 받는다
+import { parseUrl } from "./addresses.js";
+import { linkTextOf, showToast } from "./collect.js";
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase } from "./names.js";
 import { applyOpenIn, loadOpenIn } from "./opener.js";
+import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
 
 // 아이콘을 누르면 팝업과 사이드바 가운데 무엇을 열지 다시 맞춘다 (브라우저를 켤 때, 확장 프로그램을 설치하거나 새로 고칠 때).
 // 크롬이 이 설정을 기억하는지 문서에 없어서 그때마다 맞춘다
@@ -391,10 +394,102 @@ async function startJob({
   return publicJob(job);
 }
 
+// 열린 탭 받기 목록(주소로 더한 페이지) ---------------------------------------------
+// 열린 탭 받기 화면, 사이드바(링크 고르기·이 페이지 링크), 오른쪽 클릭 메뉴가 함께 쓰는 목록이라 chrome.storage.local에 둔다.
+// 여러 곳에서 동시에 고쳐도 빠지지 않게 고치는 일은 여기서 하나씩 차례로 한다(queued). 읽기는 저장소에서 바로 해도 된다
+let queueLock = Promise.resolve();
+function queued(task) {
+  const run = queueLock.then(task);
+  queueLock = run.catch(() => {});
+  return run;
+}
+const readQueue = async () => (await chrome.storage.local.get(QUEUE_KEY))[QUEUE_KEY] ?? [];
+const writeQueue = (pages) => chrome.storage.local.set({ [QUEUE_KEY]: pages });
+
+// pages: [{ url, title }]. 웹 주소가 아니거나 이미 있는 것은 빼고 뒤에 더한다. { added, skipped, full, pages }
+function queueAdd(pages) {
+  return queued(async () => {
+    const list = await readQueue();
+    const have = new Set(list.map((page) => page.url));
+    let added = 0;
+    let skipped = 0;
+    let full = 0;
+    for (const page of pages) {
+      const url = parseUrl(page?.url);
+      if (!url || have.has(url)) skipped++;
+      else if (list.length >= QUEUE_MAX) full++;
+      else {
+        have.add(url);
+        list.push({ url, title: String(page.title ?? "").slice(0, 200) });
+        added++;
+      }
+    }
+    if (added) await writeQueue(list);
+    return { added, skipped, full, pages: list };
+  });
+}
+
+function queueRemove(urls) {
+  return queued(async () => {
+    const drop = new Set(urls);
+    const list = (await readQueue()).filter((page) => !drop.has(page.url));
+    await writeQueue(list);
+    return { pages: list };
+  });
+}
+
+// 있으면 빼고 없으면 넣는다 (링크 고르기). { inList, full, pages }
+function queueToggle(page) {
+  return queued(async () => {
+    const url = parseUrl(page?.url);
+    const list = await readQueue();
+    if (!url) return { inList: false, invalid: true, pages: list };
+    const at = list.findIndex((item) => item.url === url);
+    if (at >= 0) list.splice(at, 1);
+    else if (list.length >= QUEUE_MAX) return { inList: false, full: true, pages: list };
+    else list.push({ url, title: String(page.title ?? "").slice(0, 200) });
+    await writeQueue(list);
+    return { inList: at < 0, pages: list };
+  });
+}
+
+const QUEUE_OPS = {
+  "queue-add": (message) => queueAdd(message.pages ?? []),
+  "queue-remove": (message) => queueRemove(message.urls ?? []),
+  "queue-toggle": (message) => queueToggle(message.page),
+};
+
+// 링크 오른쪽 클릭 메뉴: "열린 탭 받기 목록에 넣기". 넣었는지는 그 페이지 아래쪽에 잠깐 글로 알린다
+// (툴바 배지는 받기 진행을 보이는 데 쓴다)
+const MENU_ID = "add-link";
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: MENU_ID, title: "열린 탭 받기 목록에 넣기", contexts: ["link"] });
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== MENU_ID) return;
+  const target = tab?.id != null ? { tabId: tab.id, frameIds: [info.frameId ?? 0] } : null;
+  const inPage = async (func, args) => (target ? (await chrome.scripting.executeScript({ target, func, args }).catch(() => []))[0]?.result : undefined);
+  const title = (await inPage(linkTextOf, [info.linkUrl])) ?? "";
+  const result = await queueAdd([{ url: info.linkUrl, title }]);
+  let text;
+  if (result.added) text = `열린 탭 받기 목록에 넣었습니다 (목록 ${result.pages.length}개)`;
+  else if (result.full) text = `목록이 가득 찼습니다 (${QUEUE_MAX}개)`;
+  else if (!parseUrl(info.linkUrl)) text = "주소가 없는 링크라 넣을 수 없습니다";
+  else text = "이미 열린 탭 받기 목록에 있습니다";
+  await inPage(showToast, [text]);
+});
+
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message?.target === "background") {
     onStitchMessage(message);
     return false;
+  }
+  if (QUEUE_OPS[message?.type]) {
+    QUEUE_OPS[message.type](message).then(reply, (err) => reply({ error: err.message }));
+    return true;
   }
   if (message?.type === "status") {
     // 끝난 받기를 팝업에서 봤으니 툴바의 표시(!)를 지운다

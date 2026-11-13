@@ -120,3 +120,81 @@ export function collectImages() {
   // origin: 팝업이 맨 위 페이지와 같은 사이트의 프레임만 쓰려고 본다 (광고·다른 사이트 위젯은 뺀다)
   return { title: document.title, url: location.href, origin: location.origin, images };
 }
+
+// 페이지 안에서 링크(<a href>, <area href>)를 페이지에 나온 순서대로 모은다. 열린 shadow root 안도 본다.
+// 웹 주소(http·https)만, # 뒤는 떼고 같은 주소는 한 번만, 지금 페이지 자신은 뺀다.
+// 글은 링크 안의 글(textContent), 없으면 title·aria-label·그림 설명(alt).
+// collectImages처럼 함수 코드만 떼어 프레임마다 넣으므로 함수 밖의 이름을 쓰면 안 된다
+export function collectLinks() {
+  const links = [];
+  const seen = new Set();
+  const strip = (value) => {
+    try {
+      const url = new URL(value, document.baseURI);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+      url.hash = "";
+      return url.href;
+    } catch {
+      return null;
+    }
+  };
+  const here = strip(location.href);
+  const visit = (el) => {
+    const href = el.getAttribute("href");
+    if (!href) return;
+    const url = strip(href.trim());
+    if (!url || url === here || seen.has(url)) return;
+    seen.add(url);
+    const text = (el.textContent || el.getAttribute("title") || el.getAttribute("aria-label") || el.querySelector?.("img[alt]")?.alt || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 200);
+    links.push({ url, text });
+  };
+  const walk = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    for (let el = walker.nextNode(); el; el = walker.nextNode()) {
+      if (el.localName === "a" || el.localName === "area") visit(el);
+      if (el.shadowRoot) walk(el.shadowRoot);
+    }
+  };
+  if (document.documentElement) walk(document.documentElement);
+  return { title: document.title, url: location.href, origin: location.origin, links };
+}
+
+// 오른쪽 클릭 메뉴로 넣은 링크의 글을 찾는다 (크롬은 링크 주소만 알려 준다). 함수 밖의 이름을 쓰면 안 된다
+export function linkTextOf(linkUrl) {
+  for (const a of document.querySelectorAll("a[href], area[href]")) {
+    if (a.href !== linkUrl) continue;
+    const text = (a.textContent || a.getAttribute("title") || a.querySelector("img[alt]")?.alt || "").replace(/\s+/g, " ").trim();
+    if (text) return text.slice(0, 200);
+  }
+  return "";
+}
+
+// 페이지 아래쪽에 잠깐 알림 글을 띄운다 (오른쪽 클릭 메뉴로 넣었을 때). 함수 밖의 이름을 쓰면 안 된다
+export function showToast(text) {
+  const id = "photo-saver-toast";
+  document.getElementById(id)?.remove();
+  const box = document.createElement("div");
+  box.id = id;
+  box.textContent = text;
+  box.setAttribute("role", "status");
+  box.style.cssText = [
+    "position:fixed",
+    "left:50%",
+    "bottom:24px",
+    "transform:translateX(-50%)",
+    "z-index:2147483647",
+    "max-width:80vw",
+    "padding:10px 16px",
+    "border-radius:10px",
+    "background:rgba(28,39,51,.92)",
+    "color:#fff",
+    "font:14px/1.4 -apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif",
+    "box-shadow:0 4px 16px rgba(0,0,0,.25)",
+    "pointer-events:none",
+  ].join(";");
+  (document.body || document.documentElement).append(box);
+  setTimeout(() => box.remove(), 2500);
+}

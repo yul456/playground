@@ -11,7 +11,8 @@
   <main>
     <h1>열린 탭 받기</h1>
     <p class="lead">
-      이 창에 열려 있는 탭을 하나씩, 그 페이지에서 "받기"를 누른 것과 똑같이 받습니다. 받는 동안 이 탭은 닫지 마세요.
+      이 창에 열려 있는 탭과 주소로 더한 페이지를 하나씩, 그 페이지에서 "받기"를 누른 것과 똑같이 받습니다. 받는 동안 이
+      탭은 닫지 마세요.
     </p>
     <div class="message" id="message" hidden></div>
 
@@ -45,10 +46,32 @@
       <label class="option"><input type="checkbox" id="closeTabs"> <span>다 받은 탭은 닫기</span></label>
     </section>
 
+    <section class="box" id="addBox">
+      <h2>주소로 더하기</h2>
+      <p class="hint">
+        넣은 주소는 아래 목록 끝에 들어가고, 받을 차례가 되면 탭으로 열어 받습니다. 여러 개를 넣을 때는 위의 "다 받은 탭은
+        닫기"를 켜 두면 받은 페이지를 닫아 탭이 쌓이지 않습니다. 확장 프로그램 창의 "링크" 줄(이 페이지 링크, 고르기)이나
+        링크 오른쪽 클릭으로도 넣을 수 있고, 넣은 주소는 이 화면을 닫아도 남습니다. 받은 주소는 목록에서 빠집니다.
+      </p>
+      <div class="add-row">
+        <label class="add-field">주소 앞부분 <input id="rangePrefix" spellcheck="false" autocomplete="off" placeholder="https://사이트/상품/"></label>
+        <span class="add-numbers">번호 <input id="rangeFrom" inputmode="numeric" autocomplete="off" aria-label="시작 번호"> ~ <input id="rangeTo" inputmode="numeric" autocomplete="off" aria-label="끝 번호"></span>
+        <label class="add-field">뒷부분 <input id="rangeSuffix" spellcheck="false" autocomplete="off" placeholder="없으면 비워 둡니다"></label>
+        <button type="button" class="secondary" id="addRange" disabled>목록에 더하기</button>
+      </div>
+      <p class="add-note" id="rangeNote"></p>
+      <div class="add-row">
+        <textarea id="urlList" rows="2" spellcheck="false" placeholder="주소를 하나씩 넣을 때는 여기에 한 줄에 하나씩 넣습니다"></textarea>
+        <button type="button" class="secondary" id="addList" disabled>목록에 더하기</button>
+      </div>
+      <p class="add-note" id="listNote"></p>
+    </section>
+
     <section class="box">
       <div class="toolbar">
         <span class="count" id="count"></span>
         <button type="button" class="link" id="toggleAll">모두 끄기</button>
+        <button type="button" class="link" id="clearAdded" hidden>더한 주소 빼기</button>
         <button type="button" class="link" id="reload">탭 다시 읽기</button>
       </div>
       <ol class="tabs" id="tabs"></ol>

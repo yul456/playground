@@ -26,3 +26,30 @@ h1 { font-size: 20px; }
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .actions .status { margin: 0; }
+
+/* 주소로 더하기: 주소 앞부분 · 번호 · 뒷부분 한 줄, 한 줄에 하나씩 넣는 칸 */
+.box h2 { margin: 0 0 4px; font-size: 15px; }
+.add-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.add-row + .add-note + .add-row { margin-top: 10px; }
+.add-field { display: flex; flex: 1 1 220px; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
+.add-numbers { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.add-field input,
+.add-numbers input,
+.add-row textarea {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.add-field input { flex: 1; min-width: 0; }
+.add-numbers input { width: 7em; }
+.add-row textarea { flex: 1 1 300px; min-height: 3.4em; resize: vertical; }
+.add-note { margin: 6px 0 0; color: var(--muted); font-size: 12px; word-break: break-all; }
+.add-note.warn { color: var(--warn); }
+.add-note:empty { display: none; }
+.toolbar [hidden] { display: none; }
+
+/* 목록의 더한 주소를 빼는 단추 */
+.tabs .remove { flex: none; padding: 0 4px; background: none; color: var(--muted); font-size: 16px; line-height: 1; }

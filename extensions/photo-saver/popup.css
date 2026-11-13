@@ -44,6 +44,39 @@ h1 { margin: 0; font-size: 15px; }
 
 .message { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); }
 
+/* 링크 줄: 고르기, 이 페이지 링크, 열린 탭 받기 목록의 수 (links.js) */
+.links-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 8px; }
+.links-label { color: var(--muted); }
+.links-bar [aria-pressed="true"] { font-weight: 700; }
+.links-count { margin-left: auto; color: var(--muted); font-size: 12px; }
+.pick-hint { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--card); font-size: 12px; }
+.pick-hint[hidden] { display: none; }
+
+/* 이 페이지 링크: 주소 모양별 묶음과 링크 체크박스 */
+.links { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.links[hidden] { display: none; }
+.links-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.links-filter { width: 100%; margin: 0 0 6px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+.link-groups { max-height: 320px; overflow: auto; }
+html.panel .link-groups { max-height: 50vh; }
+.link-group { padding: 4px 0; border-top: 1px solid var(--border); }
+.group-head { display: flex; align-items: center; gap: 8px; }
+.group-name { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
+.group-name span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.group-count { flex: none; color: var(--muted); font-size: 12px; }
+.group-toggle { flex: none; font-size: 12px; }
+.group-links { margin: 2px 0 4px 22px; padding: 0; list-style: none; }
+.group-links li { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+.group-links label { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
+.link-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.group-links li.listed .link-text { color: var(--muted); }
+.link-tag { flex: none; color: var(--muted); font-size: 11px; }
+.links input[type="checkbox"] { flex: none; margin: 0; accent-color: var(--accent); }
+.links-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; }
+.links-note { color: var(--muted); font-size: 12px; }
+.links-note.warn { color: var(--warn); }
+.links-note:empty { display: none; }
+
 /* 설정 세트: 고르는 칸과 새 세트·이름 바꾸기·지우기, 그 아래 이름을 묻는 칸 */
 .sets { margin: 0 0 8px; }
 .set-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
