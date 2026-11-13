@@ -2,7 +2,7 @@
 // 브라우저 API를 직접 부르지 않아 Node에서 시험할 수 있다.
 // 사진 하나: { id, name, file, handle(파일 고르기 창으로 고른 것만), bytes, modified, width, height, error(열지 못하는 사진) }
 import { compareNames, partName } from "../shared/fileNames.js";
-import { jpgMaxHeight, splitAtPhotos, widthProblem } from "../shared/imageInfo.js";
+import { jpgMaxHeight, sizeProblem, splitAtPhotos, widthProblem } from "../shared/imageInfo.js";
 
 // 파일 이름순. 폴더로 붙일 때와 같은 순서다 (숫자는 크기대로: 1, 2, 10)
 export const sortByName = (photos) => [...photos].sort((a, b) => compareNames(a.name, b.name));
@@ -47,15 +47,16 @@ export function stitchedSize(photos) {
 }
 
 // 저장할 형식과 장수 { ext, note, parts }. 아직 크기를 다 재지 못했으면 null.
-// JPG는 한 장에 담기에 너무 길면 사진과 사진 사이에서 나눠 여러 장(parts)으로 만든다. 작업자(stitchWorker.js)와 같은 규칙이다.
-// 폭이 너무 넓어 JPG로 만들 수 없으면 png이고, note가 그 까닭이다
-export function plannedFormat(format, photos) {
+// JPG는 한 장에 담기에 너무 길면 사진과 사진 사이에서 나눠 여러 장(parts)으로 만든다. 작업자(stitchWorker.js)와 같은 규칙이다
+// (장수는 나누는 방법과 상관없이 같다). split이 false(나누지 않기)거나 폭이 너무 넓어 JPG로 만들 수 없으면 png이고,
+// note가 그 까닭이다
+export function plannedFormat(format, photos, split = true) {
   const size = stitchedSize(photos);
   if (!size) return null;
   if (format !== "jpg") return { ext: "png", note: null, parts: 1 };
-  const note = widthProblem(size.width);
-  if (note) return { ext: "png", note, parts: 1 };
   const maxHeight = jpgMaxHeight(size.width);
+  const note = widthProblem(size.width) ?? (!split && size.height > maxHeight ? sizeProblem(size.width, size.height) : null);
+  if (note) return { ext: "png", note, parts: 1 };
   const parts = size.height > maxHeight ? splitAtPhotos(usable(photos).map((photo) => photo.height), maxHeight).length : 1;
   return { ext: "jpg", note: null, parts };
 }

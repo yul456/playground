@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { download } from "../shared/download.js";
 import { partRange } from "../shared/fileNames.js";
 import { fileSize, number } from "../shared/format.js";
-import { JPG_MAX_SIDE } from "../shared/imageInfo.js";
+import { JPG_MAX_SIDE, SPLIT_EXAMPLES, SPLIT_LABELS, SPLIT_MODES } from "../shared/imageInfo.js";
 import { DEFAULT_JPG_QUALITY } from "../shared/jpgQuality.js";
 import { explainSaveError, fileExists, SAVE_TRIES, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
@@ -31,13 +31,19 @@ const QUALITIES = [
   { value: 80, hint: "확대하면 차이가 보일 수 있습니다. 사진은 PNG의 9%쯤으로 줄어듭니다." },
 ];
 
-// 설정: { direction: 바꿀 방향(folders.js DIRECTIONS의 key), quality: JPG 품질 }
+// JPG 한 장에 담기에 너무 긴 그림(높이 65,500px 넘음)은 여러 장으로 나누거나(기본) 바꾸지 않는다.
+// 나누는 방법은 균등하게(기본) · 최대 + 나머지 (shared/imageInfo.js의 SPLIT_MODES)
+
+// 설정: { direction: 바꿀 방향(folders.js DIRECTIONS의 key), quality: JPG 품질,
+//   split: 너무 긴 그림을 여러 장으로 나눌지, splitMode: 나누는 방법(shared/imageInfo.js SPLIT_MODES) }
 function loadSettings() {
-  const settings = { direction: DIRECTIONS[0].key, quality: DEFAULT_JPG_QUALITY };
+  const settings = { direction: DIRECTIONS[0].key, quality: DEFAULT_JPG_QUALITY, split: true, splitMode: SPLIT_MODES[0] };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (DIRECTIONS.some((d) => d.key === saved?.direction)) settings.direction = saved.direction;
     if (QUALITIES.some((q) => q.value === saved?.quality)) settings.quality = saved.quality;
+    if (typeof saved?.split === "boolean") settings.split = saved.split;
+    if (SPLIT_MODES.includes(saved?.splitMode)) settings.splitMode = saved.splitMode;
   } catch {
     // 저장소를 못 쓰는 환경(사생활 보호 모드 등)이면 기본값으로 시작한다
   }
@@ -50,8 +56,11 @@ const canPickFolder = () => typeof window.showDirectoryPicker === "function";
 // 결과를 기억할 이름. 폴더 경로와 파일 이름으로 만든다
 const itemKey = (folder, item) => `${folder.path.join("/")}/${item.name}`;
 
-function ResultText({ result, exists, to }) {
-  if (!result) return exists ? <span className="cv-warn">같은 이름의 {to}가 이미 있어 건너뜁니다</span> : null;
+function ResultText({ result, exists, tooLong, to }) {
+  if (!result) {
+    if (exists) return <span className="cv-warn">같은 이름의 {to}가 이미 있어 건너뜁니다</span>;
+    return tooLong ? <span className="cv-warn">{to} 한 장보다 길어 바꾸지 않습니다</span> : null;
+  }
   if (result.type === "done") {
     // 단색이나 글자가 많은 그림은 JPG가 PNG보다 커지기도 한다. 그런 결과는 눈에 띄게 알린다
     const bigger = result.to > result.from;
@@ -64,6 +73,7 @@ function ResultText({ result, exists, to }) {
     );
   }
   if (result.type === "skipped") return <span className="cv-warn">건너뜀: 같은 이름의 {to}가 이미 있습니다</span>;
+  if (result.type === "long") return <span className="cv-warn">건너뜀: {to} 한 장보다 깁니다</span>;
   if (result.type === "cancelled") return <span>멈춤</span>;
   return <span className="cv-error">바꾸지 못함: {result.message}</span>;
 }
@@ -223,7 +233,8 @@ export default function App() {
     // 폴더를 읽은 뒤에 같은 이름의 파일이 생겼을 수도 있다. 덮어쓰지 않도록 바꾸기 전에 한 번 더 본다
     if (dir && (await anyExists(dir, item.outs))) return { type: "skipped" };
     const file = item.source.file ?? (await item.source.handle.getFile());
-    const made = await runJob(file, direction.type, settings.quality, (p) => report(describe(p)));
+    const options = { mime: direction.type, quality: settings.quality, split: settings.split, splitMode: settings.splitMode };
+    const made = await runJob(file, options, (p) => report(describe(p)));
     if (made.type !== "done") return made;
     // 크기를 미리 읽지 못했으면(머리가 이상한 파일) 장수가 계획과 다를 수 있다. 그때는 새 이름들이 있는지 다시 본다
     const names = outNames(item.out, made.parts.length);
@@ -273,7 +284,7 @@ export default function App() {
       }
     }
     pickedDirRef.current = pickedDir;
-    const jobs = planFolders(source, direction)
+    const jobs = planFolders(source, direction, settings.split)
       .flatMap((folder) => folder.items.map((item) => ({ folder, item, key: itemKey(folder, item) })))
       .filter((job) => !off.has(job.key));
     stopRef.current = false;
@@ -285,6 +296,9 @@ export default function App() {
       let result;
       if (item.exists) {
         result = { type: "skipped" };
+      } else if (item.tooLong) {
+        // 너무 긴 그림은 나누지 않기로 했다 (열지도 않는다)
+        result = { type: "long" };
       } else {
         setProgress({ ...at, fraction: 0, text: "여는 중" });
         try {
@@ -343,7 +357,7 @@ export default function App() {
     });
   }
 
-  const folders = source ? planFolders(source, direction) : [];
+  const folders = source ? planFolders(source, direction, settings.split) : [];
   const keys = folders.map(folderKey);
   const allKeys = folders.flatMap((folder) => folder.items.map((item) => itemKey(folder, item)));
   const fileCount = allKeys.length;
@@ -352,9 +366,12 @@ export default function App() {
   const existingCount = chosen.filter((item) => item.exists).length;
   // 너무 길어 여러 장으로 나눌 파일 수 (건너뛸 파일은 빼고)
   const splitCount = chosen.filter((item) => !item.exists && item.outs.length > 1).length;
+  // 너무 길어 바꾸지 않을 파일 수 (나누지 않기로 했을 때)
+  const longCount = chosen.filter((item) => item.tooLong).length;
   const all = Object.values(results);
   const made = all.filter((r) => r.type === "done");
   const skippedCount = all.filter((r) => r.type === "skipped").length;
+  const longSkipped = all.filter((r) => r.type === "long").length;
   const failedCount = all.filter((r) => r.type === "error").length;
   const fallbackCount = made.filter((r) => r.saveError).length;
   const biggerCount = made.filter((r) => r.to > r.from).length;
@@ -394,6 +411,7 @@ export default function App() {
       parts[0] += ` (${fileSize(from)} → ${fileSize(to)})`;
     }
     if (skippedCount) parts.push(`${number(skippedCount)}개는 이미 ${direction.to}가 있어 건너뛰었습니다`);
+    if (longSkipped) parts.push(`${number(longSkipped)}개는 ${direction.to} 한 장보다 길어 건너뛰었습니다`);
     if (failedCount) parts.push(`${number(failedCount)}개는 바꾸지 못했습니다`);
     if (biggerCount) parts.push(`${number(biggerCount)}개는 원본보다 커졌습니다`);
     if (fallbackCount) {
@@ -401,10 +419,11 @@ export default function App() {
     }
     footerText = `${parts.join(". ")}.`;
   } else if (chosen.length) {
-    const count = chosen.length - existingCount;
+    const count = chosen.length - existingCount - longCount;
     footerText = count ? `${direction.from} ${number(count)}개를 바꿉니다.` : `바꿀 ${direction.from}가 없습니다.`;
     if (splitCount) footerText += ` ${number(splitCount)}개는 길어서 여러 장으로 나눕니다.`;
     if (existingCount) footerText += ` ${number(existingCount)}개는 이미 ${direction.to}가 있어 건너뜁니다.`;
+    if (longCount) footerText += ` ${number(longCount)}개는 ${direction.to} 한 장보다 길어 건너뜁니다.`;
   }
 
   return (
@@ -448,6 +467,38 @@ export default function App() {
           ))}
         </fieldset>
         <p className="cv-hint">{quality.hint}</p>
+        <fieldset className="cv-options" disabled={running}>
+          <legend>너무 긴 그림</legend>
+          <label>
+            <input type="radio" name="split" checked={settings.split} onChange={() => changeSettings({ split: true })} />
+            {direction.to} 여러 장으로 나누기
+          </label>
+          <label>
+            <input type="radio" name="split" checked={!settings.split} onChange={() => changeSettings({ split: false })} />
+            바꾸지 않기
+          </label>
+        </fieldset>
+        {settings.split && (
+          <fieldset className="cv-options" disabled={running}>
+            <legend>나누는 방법</legend>
+            {SPLIT_MODES.map((mode) => (
+              <label key={mode}>
+                <input
+                  type="radio"
+                  name="splitMode"
+                  checked={settings.splitMode === mode}
+                  onChange={() => changeSettings({ splitMode: mode })}
+                />
+                {SPLIT_LABELS[mode]}
+              </label>
+            ))}
+          </fieldset>
+        )}
+        <p className="cv-hint">
+          {settings.split
+            ? `높이가 ${number(JPG_MAX_SIDE)}px을 넘는 그림은 ${direction.to} 여러 장(x_1.jpg, x_2.jpg …)으로 나눠 저장합니다. 예: 높이 150,000px → ${SPLIT_EXAMPLES[settings.splitMode]}. 자를 자리 근처의 빈 줄이나 사진 경계에서 자르므로 조금씩 다릅니다.`
+            : `높이가 ${number(JPG_MAX_SIDE)}px을 넘는 그림은 ${direction.to} 한 장에 담을 수 없어 바꾸지 않습니다.`}
+        </p>
         <div className="cv-actions">
           <button type="button" onClick={pickFolder} disabled={busy}>
             {source && !source.picked ? "다른 폴더 고르기" : "폴더 고르기"}
@@ -528,7 +579,7 @@ export default function App() {
                                 {current ? (
                                   <span>{progress.text}</span>
                                 ) : (
-                                  <ResultText result={result} exists={checked && item.exists} to={direction.to} />
+                                  <ResultText result={result} exists={checked && item.exists} tooLong={checked && item.tooLong} to={direction.to} />
                                 )}
                               </div>
                               {result?.saveError && (
@@ -558,7 +609,7 @@ export default function App() {
                 멈추기
               </button>
             ) : (
-              <button type="button" onClick={start} disabled={chosen.length === existingCount}>
+              <button type="button" onClick={start} disabled={chosen.length === existingCount + longCount}>
                 {status === "done" ? "다시 바꾸기" : "바꾸기"}
               </button>
             )}
@@ -573,10 +624,14 @@ export default function App() {
         <ul>
           <li>바꾼 파일은 원본과 같은 폴더에 같은 이름으로 저장합니다(x.png → x.jpg). 원본은 지우지 않습니다.</li>
           <li>
-            JPG 한 장에는 높이 {number(JPG_MAX_SIDE)}px까지 담을 수 있어서, 그보다 긴 그림은 높이를 고르게 나눠 여러 장(x_1.jpg,
-            x_2.jpg …)으로 저장합니다. 폭이 넓으면 한 장의 높이가 더 짧아집니다. 자를 자리 근처에서 한 가지 색으로만 된 줄(빈
-            줄)을 찾아 자르고, 그런 줄이 없으면 위아래가 가장 크게 달라지는 줄(사진을 이어 붙인 그림에서는 대개 사진과 사진의
-            경계)에서 자릅니다. 그래도 사진이나 글자의 중간이 잘릴 수 있습니다.
+            JPG 한 장에는 높이 {number(JPG_MAX_SIDE)}px까지 담을 수 있어서, 그보다 긴 그림은 여러 장(x_1.jpg, x_2.jpg …)으로
+            나눠 저장합니다. 폭이 넓으면 한 장의 높이가 더 짧아집니다. 나누지 않기로 하면 그런 그림은 바꾸지 않습니다.
+          </li>
+          <li>
+            나누는 방법은 둘입니다. 균등하게는 장마다 비슷한 길이로, 최대 + 나머지는 앞에서부터 한 장에 최대한 담고 남은 것을
+            마지막 장에 담습니다. 장수는 같습니다. 어느 쪽이든 자를 자리 근처에서 한 가지 색으로만 된 줄(빈 줄)을 찾아 자르고,
+            그런 줄이 없으면 위아래가 가장 크게 달라지는 줄(사진을 이어 붙인 그림에서는 대개 사진과 사진의 경계)에서 자릅니다.
+            그래도 사진이나 글자의 중간이 잘릴 수 있습니다.
           </li>
           <li>
             폴더를 고르면 그 안의 PNG가 폴더별로 나옵니다. 바꿀 파일만 체크해 두면 그 파일만 바꿔 원래 자리에 저장합니다.

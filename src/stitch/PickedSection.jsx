@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { download } from "../shared/download.js";
 import { partRange } from "../shared/fileNames.js";
 import { fileSize, number } from "../shared/format.js";
+import { SPLIT_LABELS } from "../shared/imageInfo.js";
 import { explainSaveError, fileExists, removeEmptyFile, SAVE_TRIES, saveToFile, saveToFolder } from "../shared/saveToFolder.js";
 import { cancelJob, runJob } from "./jobs.js";
 import { movePhoto, outputName, partNames, plannedFormat, sortByName, stitchedSize, usable } from "./photos.js";
@@ -52,9 +53,9 @@ async function freeNames(dir, name, parts) {
 
 // 직접 고른 사진을 목록 순서대로 한 장으로 붙인다. JPG 한 장에 담기에 너무 길면 사진 사이에서 나눠 여러 장으로 저장한다.
 // photos: 고른 사진(photos.js), setPhotos: 목록을 바꾼다(순서, 잰 크기), onAdd: 사진 더하기, onRemove(id): 사진 빼기,
-// suffix: 이름 뒤에 붙일 말, format·quality: 저장 형식과 JPG 품질,
+// suffix: 이름 뒤에 붙일 말, format·quality: 저장 형식과 JPG 품질, split·splitMode: 너무 긴 묶음을 나눌지와 나누는 방법,
 // canAskWhere: 저장 창을 띄울 수 있는지(크롬·엣지), onRunning(만드는 중인지): 만드는 동안 위쪽 설정을 잠그게 알린다
-export default function PickedSection({ photos, setPhotos, onAdd, onRemove, suffix, format, quality, canAskWhere, onRunning }) {
+export default function PickedSection({ photos, setPhotos, onAdd, onRemove, suffix, format, quality, split, splitMode, canAskWhere, onRunning }) {
   const [running, setRunning] = useState(false);
   // { fraction, text }
   const [progress, setProgress] = useState(null);
@@ -81,7 +82,7 @@ export default function PickedSection({ photos, setPhotos, onAdd, onRemove, suff
   }, [photos, setPhotos]);
 
   // 사진이나 순서, 설정이 바뀌면 지난 결과는 지운다. 남겨 두면 지금 목록의 결과처럼 보인다
-  const signature = `${photos.map((photo) => photo.id).join()}|${suffix}|${format}|${quality}`;
+  const signature = `${photos.map((photo) => photo.id).join()}|${suffix}|${format}|${quality}|${split}|${splitMode}`;
   useEffect(() => {
     setResult(null);
   }, [signature]);
@@ -101,7 +102,7 @@ export default function PickedSection({ photos, setPhotos, onAdd, onRemove, suff
   const list = usable(photos);
   const size = stitchedSize(photos);
   // { ext, note, parts }: 저장할 형식과 장수. 사진 크기를 다 재야 안다
-  const plan = plannedFormat(format, photos);
+  const plan = plannedFormat(format, photos, split);
   const name = outputName(photos, suffix, plan?.ext ?? format, plan?.parts ?? 1);
   const shownName = plan?.parts > 1 ? partRange(partNames(name, plan.parts)) : name;
   const measured = photos.filter((photo) => photo.width || photo.error).length;
@@ -186,8 +187,7 @@ export default function PickedSection({ photos, setPhotos, onAdd, onRemove, suff
     try {
       const made = await runJob(
         list.map((photo) => photo.file),
-        format,
-        quality,
+        { format, quality, split, splitMode },
         (p) => setProgress(describe(p)),
         list.map(({ width, height }) => ({ width, height })),
       );
@@ -306,10 +306,14 @@ export default function PickedSection({ photos, setPhotos, onAdd, onRemove, suff
         </div>
       )}
       {!result && plan?.parts > 1 && (
-        <p className="st-split">JPG 한 장에 담기에는 길어 사진과 사진 사이에서 {plan.parts}장으로 나눠 저장합니다.</p>
+        <p className="st-split">
+          JPG 한 장에 담기에는 길어 사진과 사진 사이에서 {plan.parts}장으로 나눠 저장합니다 ({SPLIT_LABELS[splitMode]}).
+        </p>
       )}
       {result?.parts > 1 && (
-        <p className="st-split">JPG 한 장에 담기에는 길어 사진과 사진 사이에서 {result.parts}장으로 나눠 저장했습니다.</p>
+        <p className="st-split">
+          JPG 한 장에 담기에는 길어 사진과 사진 사이에서 {result.parts}장으로 나눠 저장했습니다 ({SPLIT_LABELS[result.splitMode]}).
+        </p>
       )}
       {!result && plan?.note && <p className="st-fallback">JPG로 만들 수 없어 PNG로 저장합니다. {plan.note}.</p>}
       {result?.note && <p className="st-fallback">PNG로 저장했습니다. {result.note}.</p>}

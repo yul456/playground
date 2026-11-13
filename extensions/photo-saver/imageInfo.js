@@ -40,16 +40,28 @@ export function widthProblem(width) {
   return `폭이 ${JPG_MAX_SIDE.toLocaleString("ko-KR")}px을 넘어 JPG로 만들 수 없습니다 (폭 ${width.toLocaleString("ko-KR")}px)`;
 }
 
-// 세로로 이어 붙일 사진들을 사진과 사진 사이에서 나눈다. heights: 위에서부터 사진마다의 높이, maxHeight: 한 장의 가장 긴 높이.
-// 장수를 가장 적게 하고, 그 장수 안에서 가장 긴 장이 가장 짧아지게(고르게) 나눈다.
-// 한 장보다 긴 사진은 그 사진 안을 고르게 자른다.
+// 긴 그림을 나누는 방법 (사용자가 고른다).
+// even(균등하게, 기본): 장마다 비슷한 길이로 나눈다. 150,000줄이면 50,000줄쯤씩 세 장
+// max(최대 + 나머지): 앞에서부터 한 장을 가장 긴 높이까지 채우고 나머지는 마지막 장에 담는다. 150,000줄이면 65,500 + 65,500 + 19,000줄쯤
+// 장수는 둘 다 같다(가장 적게). 자르는 자리만 다르다
+export const SPLIT_MODES = ["even", "max"];
+// 화면에 보일 이름과 예 (사진 세로로 붙이기, 사진 형식 바꾸기, 확장 프로그램이 함께 쓴다)
+export const SPLIT_LABELS = { even: "균등하게", max: "최대 + 나머지" };
+export const SPLIT_EXAMPLES = { even: "50,000px쯤씩 3장", max: "65,500 + 65,500 + 19,000px쯤" };
+
+// 세로로 이어 붙일 사진들을 사진과 사진 사이에서 나눈다. heights: 위에서부터 사진마다의 높이, maxHeight: 한 장의 가장 긴 높이,
+// mode: 나누는 방법(SPLIT_MODES). 장수는 가장 적게 한다.
+// even이면 그 장수 안에서 가장 긴 장이 가장 짧아지게(고르게) 나누고, max면 앞에서부터 한 장에 사진을 담을 수 있는 만큼 담는다.
+// 한 장보다 긴 사진은 그 사진 안을 자른다 (even은 고르게, max는 위에서부터 maxHeight씩).
 // 돌려주는 것: 장마다 [시작 줄, 끝 줄] (끝 줄은 들지 않는다). 모두 이어 붙인 그림의 줄 번호다
-export function splitAtPhotos(heights, maxHeight) {
+export function splitAtPhotos(heights, maxHeight, mode = "even") {
   // 자를 수 있는 자리(사진 경계)로 나뉜 조각들의 높이
   const pieces = [];
   for (const height of heights) {
     const n = Math.ceil(height / maxHeight);
-    for (let k = 0; k < n; k++) pieces.push(Math.round(((k + 1) * height) / n) - Math.round((k * height) / n));
+    for (let k = 0; k < n; k++) {
+      pieces.push(mode === "max" ? Math.min(maxHeight, height - k * maxHeight) : Math.round(((k + 1) * height) / n) - Math.round((k * height) / n));
+    }
   }
   const total = pieces.reduce((sum, piece) => sum + piece, 0);
   // 한 장을 cap 줄까지 채우며 앞에서부터 담으면 몇 장이 되나
@@ -64,20 +76,23 @@ export function splitAtPhotos(heights, maxHeight) {
     }
     return parts;
   };
-  const fewest = countWith(maxHeight);
-  // 같은 장수로 나뉘는 가장 작은 cap을 찾는다. 그만큼 장마다의 길이가 고르다
-  let low = Math.max(...pieces, Math.ceil(total / fewest));
-  let high = maxHeight;
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (countWith(mid) <= fewest) high = mid;
-    else low = mid + 1;
+  let cap = maxHeight;
+  if (mode !== "max") {
+    // 같은 장수로 나뉘는 가장 작은 cap을 찾는다. 그만큼 장마다의 길이가 고르다
+    const fewest = countWith(maxHeight);
+    let high = maxHeight;
+    cap = Math.max(...pieces, Math.ceil(total / fewest));
+    while (cap < high) {
+      const mid = Math.floor((cap + high) / 2);
+      if (countWith(mid) <= fewest) high = mid;
+      else cap = mid + 1;
+    }
   }
   const parts = [];
   let start = 0;
   let sum = 0;
   for (const piece of pieces) {
-    if (sum + piece > low) {
+    if (sum + piece > cap) {
       parts.push([start, start + sum]);
       start += sum;
       sum = piece;
@@ -87,11 +102,18 @@ export function splitAtPhotos(heights, maxHeight) {
   return parts;
 }
 
-// 사진 경계를 모르는 긴 그림(이미 이어 붙인 PNG 등)을 나눌 자리. 높이를 고르게 나눈 자리(targets: 다음 장이 시작하는 줄)와,
-// 그 자리에서 앞뒤로 더 나은 줄(빈 줄 등)을 찾아도 되는 줄 수(radius)를 돌려준다. 장수는 가장 적게(높이 ÷ 한 장의 가장 긴 높이) 하고,
-// radius는 자를 자리를 옮겨도 한 장이 maxHeight를 넘지 않을 만큼만 준다
-export function evenSplit(height, maxHeight) {
+// 사진 경계를 모르는 긴 그림(이미 이어 붙인 PNG 등)을 나눌 자리. 장수는 가장 적게(높이 ÷ 한 장의 가장 긴 높이를 올림) 한다.
+// 자를 자리 근처에서 더 나은 줄(빈 줄 등)을 찾아도 되는 줄 수(radius)는 자를 자리를 옮겨도 한 장이 maxHeight를 넘지 않고
+// 장수도 늘지 않을 만큼만 준다.
+// even: { count, radius, targets } — 높이를 고르게 나눈 자리(targets: 다음 장이 시작하는 줄)에서 앞뒤로 radius 줄까지 찾는다
+// max: { count, radius } — 앞에서부터 한 장을 maxHeight까지 채운다. 자를 자리는 앞 장이 시작한 줄 + maxHeight이고,
+//      거기서 위로만 radius 줄까지 찾는다 (위로 옮긴 만큼 다음 장들이 밀려 마지막 장이 길어진다)
+export function rowSplit(height, maxHeight, mode = "even") {
   const count = Math.ceil(height / maxHeight);
+  if (mode === "max") {
+    const room = count > 1 ? Math.floor((count * maxHeight - height) / (count - 1)) : 0;
+    return { count, radius: Math.max(0, Math.min(SPLIT_RADIUS, room)) };
+  }
   const room = Math.floor((maxHeight - height / count) / 2);
   const targets = Array.from({ length: count - 1 }, (_, k) => Math.round(((k + 1) * height) / count));
   return { count, targets, radius: Math.max(0, Math.min(SPLIT_RADIUS, room)) };

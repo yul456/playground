@@ -1,12 +1,13 @@
 // 사진 묶음 하나를 받아 세로로 이어 붙인 그림을 만든다. 화면이 멈추지 않게 따로 돈다(Web Worker).
 // 받는 것: { type: "run", id, files: File[], format: 바라는 형식("jpg" · "png"), quality: JPG 품질(1~100),
-//            sizes: 화면이 이미 잰 사진 크기 [{ width, height }] (없으면 여기서 잰다) }
+//            split: JPG 한 장에 담기에 너무 긴 묶음을 여러 장으로 나눌지(아니면 PNG 한 장),
+//            splitMode: 나누는 방법(shared/imageInfo.js의 SPLIT_MODES), sizes: 화면이 이미 잰 사진 크기 [{ width, height }] (없으면 여기서 잰다) }
 //          { type: "cancel", id }
 // 보내는 것: progress(measure·draw·encode), done(parts: 다 만든 그림 [{ blob, height }], format: 실제로 만든 형식,
 //          note: JPG로 만들지 못한 까닭), cancelled, error
-// JPG 한 장에 담기에 너무 긴 묶음은 사진과 사진 사이에서 고르게 나눠 JPG 여러 장(parts)으로 만든다. 나머지는 한 장이다.
+// JPG 한 장에 담기에 너무 긴 묶음은 사진과 사진 사이에서 나눠 JPG 여러 장(parts)으로 만든다. 나머지는 한 장이다.
 // 파일로 저장하는 일은 화면 쪽(shared/saveToFolder.js)이 한다. 여기서 고른 폴더의 파일에 조각마다 바로 쓰지 않는 까닭도 거기 적었다
-import { jpegSize, jpgMaxHeight, splitAtPhotos, widthProblem } from "../shared/imageInfo.js";
+import { jpegSize, jpgMaxHeight, sizeProblem, splitAtPhotos, widthProblem } from "../shared/imageInfo.js";
 import { openPng } from "./png.js";
 
 // 한 번에 그려 PNG로 넘길 화소 수(약 800만 개, 32MB). 폭이 넓으면 줄 수가 줄어든다
@@ -158,7 +159,7 @@ async function makePng(items, width, height, check, post) {
   }
 }
 
-async function run({ id, files, format = "png", quality = 95, sizes = null }) {
+async function run({ id, files, format = "png", quality = 95, split = true, splitMode = "even", sizes = null }) {
   const current = { id, cancelled: false };
   job = current;
   const post = (message) => self.postMessage({ id, ...message });
@@ -198,20 +199,22 @@ async function run({ id, files, format = "png", quality = 95, sizes = null }) {
         count: items.length,
         skipped,
         parts,
+        // 여러 장으로 나눴으면 나눈 방법 (화면이 알려 준다)
+        splitMode: parts.length > 1 ? splitMode : null,
         format: made,
         note,
       });
 
-    // 2. JPG를 바라면 JPG로 만든다. JPG 한 장에 담기에 너무 길면 사진과 사진 사이에서 고르게 나눠 여러 장으로 만든다
+    // 2. JPG를 바라면 JPG로 만든다. JPG 한 장에 담기에 너무 길면 사진과 사진 사이에서 나눠 여러 장으로 만든다
     //    (shared/imageInfo.js의 splitAtPhotos. 사진을 직접 고른 화면도 같은 규칙으로 장수를 미리 센다).
-    //    폭이 너무 넓어 JPG로 만들 수 없으면, 또는 만들다 실패하면 PNG로 만들고 까닭을 알린다
+    //    나누지 않기로 했거나 폭이 너무 넓어 JPG로 만들 수 없으면, 또는 만들다 실패하면 PNG로 만들고 까닭을 알린다
     let note = null;
     if (format === "jpg") {
-      note = widthProblem(width);
+      const maxHeight = jpgMaxHeight(width);
+      note = widthProblem(width) ?? (!split && height > maxHeight ? sizeProblem(width, height) : null);
       if (!note) {
         try {
-          const maxHeight = jpgMaxHeight(width);
-          const ranges = height > maxHeight ? splitAtPhotos(items.map((item) => item.height), maxHeight) : [[0, height]];
+          const ranges = height > maxHeight ? splitAtPhotos(items.map((item) => item.height), maxHeight, splitMode) : [[0, height]];
           const parts = [];
           for (const [k, range] of ranges.entries()) {
             const part = { index: k + 1, count: ranges.length, totalRows: height };

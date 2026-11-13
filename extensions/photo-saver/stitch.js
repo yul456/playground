@@ -1,10 +1,10 @@
 // 고른 사진을 받아 세로로 이어 붙인 그림(Blob)을 만든다. 보이지 않는 문서(offscreen.js)에서 돈다.
 // 규칙은 사진 세로로 붙이기(src/stitch)와 같다: 폭은 가장 넓은 사진에 맞추고 크기는 줄이지 않으며,
 // 좁은 사진은 가운데에 두고 양옆을 흰색으로 채운다.
-// JPG를 바라면 JPG로 만들고, JPG 한 장에 담기에 너무 길면 사진과 사진 사이에서 고르게 나눠 JPG 여러 장으로 만든다.
-// 폭이 너무 넓어 JPG로 만들 수 없으면 PNG로 만든다.
+// JPG를 바라면 JPG로 만들고, JPG 한 장에 담기에 너무 길면 사진과 사진 사이에서 나눠 JPG 여러 장으로 만든다
+// (나누는 방법은 균등하게 · 최대 + 나머지). 나누지 않기로 했거나 폭이 너무 넓어 JPG로 만들 수 없으면 PNG로 만든다.
 // PNG는 png.js(src/stitch/png.js 복사본)로 줄 단위로 이어 쓴다. 크기 한계와 나눌 자리는 imageInfo.js(src/shared/imageInfo.js 복사본)에 있다
-import { jpegSize, jpgMaxHeight, splitAtPhotos, widthProblem } from "./imageInfo.js";
+import { jpegSize, jpgMaxHeight, sizeProblem, splitAtPhotos, widthProblem } from "./imageInfo.js";
 import { openPng } from "./png.js";
 
 // 한 번에 그려 PNG로 넘길 화소 수(약 800만 개, 32MB)
@@ -175,10 +175,11 @@ async function makePng(items, width, height, onProgress) {
 }
 
 // urls 순서대로 이어 붙인다. onProgress({ phase: "fetch" | "draw" | "encode", done, total, part, parts }).
-// format: 바라는 형식("jpg" · "png"), quality: JPG 품질(1~100).
+// format: 바라는 형식("jpg" · "png"), quality: JPG 품질(1~100),
+// split: JPG 한 장에 담기에 너무 길 때 여러 장으로 나눌지(아니면 PNG 한 장), splitMode: 나누는 방법(imageInfo.js의 SPLIT_MODES).
 // 결과의 parts는 다 만든 그림 [{ blob, height }]이다. JPG 한 장에 담기에 너무 길어 나눴으면 둘 이상이다.
 // format은 실제로 만든 형식이고, note는 JPG를 바랐는데 PNG로 만든 까닭이다
-export async function stitchImages(urls, onProgress, { format = "png", quality = 95 } = {}) {
+export async function stitchImages(urls, onProgress, { format = "png", quality = 95, split = true, splitMode = "even" } = {}) {
   // 1. 받기와 크기 재기. 폭과 높이를 알아야 형식을 정하고 PNG 머리를 쓸 수 있어서 다 받아 본 뒤에 그린다
   const loaded = new Array(urls.length);
   let next = 0;
@@ -209,15 +210,15 @@ export async function stitchImages(urls, onProgress, { format = "png", quality =
   });
 
   // 2. JPG를 바라면 JPG로 만든다. JPG 한 장에 담기에 너무 길면 사진과 사진 사이에서 고르게 나눠 여러 장으로 만든다
-  //    (imageInfo.js의 splitAtPhotos, 사진 세로로 붙이기와 같은 규칙). 폭이 너무 넓어 만들 수 없으면,
+  //    (imageInfo.js의 splitAtPhotos, 사진 세로로 붙이기와 같은 규칙). 나누지 않기로 했거나 폭이 너무 넓어 만들 수 없으면,
   //    또는 만들다 실패하면 PNG로 만들고 까닭을 알린다
   let note = null;
   if (format === "jpg") {
-    note = widthProblem(width);
+    const maxHeight = jpgMaxHeight(width);
+    note = widthProblem(width) ?? (!split && height > maxHeight ? sizeProblem(width, height) : null);
     if (!note) {
       try {
-        const maxHeight = jpgMaxHeight(width);
-        const ranges = height > maxHeight ? splitAtPhotos(items.map((item) => item.height), maxHeight) : [[0, height]];
+        const ranges = height > maxHeight ? splitAtPhotos(items.map((item) => item.height), maxHeight, splitMode) : [[0, height]];
         const parts = [];
         for (const [k, range] of ranges.entries()) {
           const blob = await makeJpg(items, width, range, quality, onProgress, { index: k + 1, count: ranges.length });

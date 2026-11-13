@@ -1,6 +1,7 @@
 // 확장 프로그램 창(popup.js)과 열린 탭 받기(batch.js)가 함께 쓰는 것: 저장해 둔 옵션, 꾸밈 그림 기준, 사진 찾기와 크기 재기.
 // 옵션은 확장 프로그램 페이지의 localStorage에 둔다 (창과 열린 탭 받기 화면이 같은 저장소를 본다. 서비스 워커는 못 읽는다)
 import { collectImages } from "./collect.js";
+import { SPLIT_MODES } from "./imageInfo.js";
 import { extFromMime, extFromUrl, imageName, siteOf, validName } from "./names.js";
 
 // 꾸밈 그림은 처음엔 체크를 꺼 둔다 (창에서는 "꾸밈 그림 숨기기"가 켜져 있으면 목록에서도 숨긴다).
@@ -18,6 +19,9 @@ export const MODES = ["files", "stitch", "both"];
 // 이어 붙인 그림의 형식: jpg(작다. JPG 한 장에 담기에 너무 길면 여러 장으로 나눠 받고, 폭이 너무 넓으면 png로 받는다) ·
 // png(화질 그대로, 크다)
 export const STITCH_FORMATS = ["jpg", "png"];
+// JPG 한 장에 담기에 너무 긴 이어 붙인 그림(높이 65,500px 넘음): split(여러 장으로 나눠 받기, 기본) · png(PNG 한 장으로 받기).
+// 나누는 방법(splitMode)은 imageInfo.js의 SPLIT_MODES(균등하게 · 최대 + 나머지)다. 사진 세로로 붙이기와 같은 옵션이다
+export const TOO_LONG = ["split", "png"];
 // JPG 품질과 기본값. 사이트의 src/shared/jpgQuality.js와 같은 값이다 (바꾸면 함께 바꾼다. 기본 95를 고른 까닭도 거기 있다)
 export const JPG_QUALITIES = [100, 95, 90, 80];
 export const DEFAULT_JPG_QUALITY = 95;
@@ -36,6 +40,7 @@ export function loadSettings() {
   // stitchName: 이어 붙인 그림의 이름 (page 페이지 이름 · custom 직접 입력), customName: 직접 입력한 이름
   // 기본은 원본 이름과 페이지 이름이다 (사용자 요청). 화면에서도 기본을 왼쪽에 둔다
   // stitchFormat: 이어 붙인 그림의 형식 (jpg · png), jpgQuality: JPG 품질
+  // tooLong: JPG 한 장에 담기에 너무 길 때 (split 여러 장으로 · png PNG 한 장), splitMode: 나누는 방법 (even 균등하게 · max 최대 + 나머지)
   // closeTabs: 열린 탭 받기에서 다 받은 탭을 닫을지
   const fallback = {
     hideDecor: true,
@@ -45,6 +50,8 @@ export function loadSettings() {
     customName: "",
     stitchFormat: STITCH_FORMATS[0],
     jpgQuality: DEFAULT_JPG_QUALITY,
+    tooLong: TOO_LONG[0],
+    splitMode: SPLIT_MODES[0],
     closeTabs: false,
   };
   try {
@@ -55,6 +62,8 @@ export function loadSettings() {
     if (typeof saved.customName !== "string") saved.customName = "";
     if (!STITCH_FORMATS.includes(saved.stitchFormat)) saved.stitchFormat = fallback.stitchFormat;
     if (!JPG_QUALITIES.includes(saved.jpgQuality)) saved.jpgQuality = fallback.jpgQuality;
+    if (!TOO_LONG.includes(saved.tooLong)) saved.tooLong = fallback.tooLong;
+    if (!SPLIT_MODES.includes(saved.splitMode)) saved.splitMode = fallback.splitMode;
     saved.closeTabs = Boolean(saved.closeTabs);
     return saved;
   } catch {

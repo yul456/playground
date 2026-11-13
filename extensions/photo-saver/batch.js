@@ -2,6 +2,7 @@
 // 확장 프로그램 창(popup)은 다른 곳을 누르면 닫혀서, 여러 탭을 받는 긴 일은 따로 연 이 탭이 맡는다.
 // 탭마다: 사진 찾기(core.js) → 크기 재기 → 꾸밈 그림·꺼 둔 확장자·빼 둔 이름 빼기 → 받기 맡기기(background.js) → 끝나기를 기다림
 import { JPG_QUALITIES, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
+import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
 
@@ -105,7 +106,7 @@ function refresh() {
   $("stop").disabled = stopping;
   $("stop").textContent = stopping ? "지금 탭까지 받고 멈춥니다" : "멈추기";
   setsUi?.setDisabled(running);
-  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], #jpgQuality, #closeTabs")) {
+  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], #jpgQuality, #splitMode, #closeTabs")) {
     input.disabled = running;
   }
 }
@@ -115,13 +116,19 @@ function showOptions() {
   $("fileNamesRow").hidden = settings.mode === "stitch";
   $("stitchFormatRow").hidden = settings.mode === "files";
   $("qualityBox").hidden = settings.stitchFormat !== "jpg";
+  // 너무 길 때의 옵션은 이어 붙인 그림을 JPG로 받을 때만, 나누는 방법은 나눠 받을 때만 고른다
+  $("splitRow").hidden = settings.mode === "files" || settings.stitchFormat !== "jpg";
+  $("splitModeBox").hidden = settings.tooLong !== "split";
   const lines = [];
   if (settings.mode !== "stitch") {
     const names = settings.fileNames === "original" ? "원본 이름.jpg …" : "001.jpg, 002.jpg …";
     lines.push(`사진: 다운로드/${BASE_FOLDER}/탭의 페이지 제목/${names}`);
   }
   if (settings.mode !== "files") {
-    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 _1.jpg, _2.jpg …로 나눔)" : "";
+    let tooLong = "";
+    if (settings.stitchFormat === "jpg") {
+      tooLong = settings.tooLong === "split" ? ` (너무 길면 _1.jpg, _2.jpg …로 나눔: ${SPLIT_LABELS[settings.splitMode]})` : " (너무 길면 .png)";
+    }
     lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/탭의 페이지 제목.${settings.stitchFormat}${tooLong}`);
   }
   $("preview").replaceChildren(
@@ -148,10 +155,11 @@ function readOptions() {
   settings = loadSettings();
   rules = loadRules();
   extOff = loadExts();
-  for (const name of ["mode", "fileNames", "stitchFormat"]) {
+  for (const name of ["mode", "fileNames", "stitchFormat", "tooLong"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) radio.checked = radio.value === settings[name];
   }
   $("jpgQuality").value = String(settings.jpgQuality);
+  $("splitMode").value = settings.splitMode;
   $("closeTabs").checked = settings.closeTabs;
   setsUi?.refresh(); // 확장 프로그램 창에서 세트를 바꾸거나 만들었을 수 있다
   showOptions();
@@ -242,7 +250,7 @@ function resultOf(job) {
     if (stitch.state === "done") {
       parts.push(`이어 붙임 ${stitch.width.toLocaleString()}×${stitch.height.toLocaleString()}`);
       // JPG 한 장에 담기에 너무 길어 여러 장으로 나눠 받은 탭
-      if (stitch.parts > 1) parts.push(`${stitch.parts}장으로 나눔`);
+      if (stitch.parts > 1) parts.push(`${stitch.parts}장으로 나눔(${SPLIT_LABELS[stitch.splitMode] ?? ""})`);
       // JPG를 골랐는데 폭이 너무 넓어(또는 만들다 실패해) PNG로 받은 탭
       if (stitch.note) parts.push("JPG로 만들 수 없어 PNG로 받음");
       got = true;
@@ -281,6 +289,8 @@ async function runTab(row) {
       stitchName: "",
       stitchFormat: settings.stitchFormat,
       jpgQuality: settings.jpgQuality,
+      tooLong: settings.tooLong,
+      splitMode: settings.splitMode,
     });
     setState(row, progressText(job), "now");
     const done = await waitJob(job.id, (now) => setState(row, progressText(now), "now"));
@@ -339,7 +349,14 @@ function init() {
     settings.jpgQuality = Number($("jpgQuality").value);
     saveSettings(settings);
   });
-  for (const name of ["mode", "fileNames", "stitchFormat"]) {
+  $("splitMode").replaceChildren(...SPLIT_MODES.map((mode) => new Option(SPLIT_LABELS[mode], mode)));
+  $("splitMode").value = settings.splitMode;
+  $("splitMode").addEventListener("change", () => {
+    settings.splitMode = $("splitMode").value;
+    saveSettings(settings);
+    showOptions();
+  });
+  for (const name of ["mode", "fileNames", "stitchFormat", "tooLong"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) {
       radio.checked = radio.value === settings[name];
       radio.addEventListener("change", () => {

@@ -95,6 +95,8 @@ h1 { margin: 0; font-size: 15px; }
 .modes small { color: var(--muted); font-size: 11px; }
 .modes select { padding: 1px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; }
 .modes label[hidden] { display: none; }
+/* 받는 방식·형식에 맞지 않는 줄은 숨긴다 (.modes가 display: flex라 hidden만으로는 숨겨지지 않는다) */
+.modes[hidden] { display: none; }
 /* 이어 붙인 그림 이름을 직접 적는 칸 */
 .modes .text {
   flex: 1;

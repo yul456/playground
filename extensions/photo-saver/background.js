@@ -242,7 +242,16 @@ async function begin(plan) {
 async function startStitch(job, urls) {
   try {
     await openOffscreen();
-    await chrome.runtime.sendMessage({ target: "offscreen", type: "stitch", jobId: job.id, urls, format: job.stitchFormat, quality: job.jpgQuality });
+    await chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "stitch",
+      jobId: job.id,
+      urls,
+      format: job.stitchFormat,
+      quality: job.jpgQuality,
+      split: job.split,
+      splitMode: job.splitMode,
+    });
   } catch (err) {
     Object.assign(job.stitch, { state: "failed", error: err?.message || String(err) });
     closeOffscreen();
@@ -271,7 +280,8 @@ function onStitchMessage(message) {
     }
     const bases = parts.map((_, k) => partBase(job.stitchBase, k + 1, parts.length));
     const name = parts.length > 1 ? `${bases[0]}.${format} ~ ${bases.at(-1)}.${format}` : `${bases[0]}.${format}`;
-    Object.assign(stitch, { phase: "save", width, height, bytes, count, failed, format, note, name, parts: parts.length, left: parts.length });
+    const splitMode = parts.length > 1 ? job.splitMode : null;
+    Object.assign(stitch, { phase: "save", width, height, bytes, count, failed, format, note, name, parts: parts.length, left: parts.length, splitMode });
     update(job);
     parts.forEach((part, k) => {
       const base = `${BASE_FOLDER}/${bases[k]}`;
@@ -288,9 +298,20 @@ function onStitchMessage(message) {
 // naming: 사진 따로 받을 때의 파일 이름. original(주소에 적힌 원래 이름, 기본) · number(고른 순서 번호 001…)
 // stitchName: 이어 붙인 그림의 이름(확장자 빼고). 비어 있으면 폴더 이름(페이지 제목)과 같게 한다.
 // 처음엔 "<폴더>_합본"이었는데, 페이지 이름으로 받을 때는 "_합본"을 붙이지 말자고 해서 뺐다
-// stitchFormat: 이어 붙인 그림의 형식(jpg · png). jpg여도 폭이 너무 넓으면 png로 받고, 너무 길면 여러 장으로 나눠 받는다.
-// jpgQuality: JPG 품질(1~100)
-async function startJob({ folder, urls, mode = "files", naming = "original", stitchName = "", stitchFormat = "png", jpgQuality = 95 }) {
+// stitchFormat: 이어 붙인 그림의 형식(jpg · png). jpg여도 폭이 너무 넓으면 png로 받는다. jpgQuality: JPG 품질(1~100).
+// tooLong: JPG 한 장에 담기에 너무 길 때 split(여러 장으로 나눠 받기) · png(PNG 한 장으로 받기),
+// splitMode: 나누는 방법(even 균등하게 · max 최대 + 나머지)
+async function startJob({
+  folder,
+  urls,
+  mode = "files",
+  naming = "original",
+  stitchName = "",
+  stitchFormat = "png",
+  jpgQuality = 95,
+  tooLong = "split",
+  splitMode = "even",
+}) {
   if (current?.running) throw new Error("앞의 사진을 아직 받는 중입니다. 다 받은 뒤에 다시 누르세요.");
   if (!urls?.length) throw new Error("고른 사진이 없습니다.");
   const withFiles = mode !== "stitch";
@@ -304,6 +325,8 @@ async function startJob({ folder, urls, mode = "files", naming = "original", sti
     stitchBase,
     stitchFormat: stitchFormat === "jpg" ? "jpg" : "png",
     jpgQuality: Number(jpgQuality) || 95,
+    split: tooLong !== "png",
+    splitMode: splitMode === "max" ? "max" : "even",
     running: true,
     files: withFiles ? { total: urls.length, done: 0, failed: 0, canceled: 0, reasons: {}, shownId: null } : null,
     stitch: withStitch
@@ -317,6 +340,7 @@ async function startJob({ folder, urls, mode = "files", naming = "original", sti
           note: null, // JPG를 바랐는데 PNG로 만든 까닭
           part: 0, // JPG를 여러 장으로 나눠 만들 때 지금 만드는 장 (1부터)
           parts: 0, // 만든 장수. 너무 길어 나눴으면 둘 이상
+          splitMode: null, // 나눴으면 나눈 방법 (even · max)
           names: [], // 장마다 실제로 저장된 이름
           ids: [], // 장마다의 다운로드 id
           left: 0, // 아직 끝나지 않은 장 수

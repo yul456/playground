@@ -27,15 +27,16 @@ function getWorker() {
   return worker;
 }
 
-// files: File 목록, format: 바라는 형식("jpg" · "png"), quality: JPG 품질(1~100),
+// files: File 목록, options: { format: 바라는 형식("jpg" · "png"), quality: JPG 품질(1~100),
+//   split: JPG 한 장에 담기에 너무 긴 묶음을 여러 장으로 나눌지, splitMode: 나누는 방법 },
 // sizes: 이미 잰 사진 크기 [{ width, height }] (없으면 작업자가 잰다).
 // 결과는 done(parts: 다 만든 그림 [{ blob, height }]. 길어서 JPG 여러 장으로 나눴으면 둘 이상,
 // format: 실제로 만든 형식, note: JPG로 만들지 못한 까닭) · cancelled · error 메시지 그대로 돌려준다
-export function runJob(files, format, quality, onProgress, sizes = null) {
+export function runJob(files, options, onProgress, sizes = null) {
   if (current) return Promise.reject(new Error("이미 만드는 중입니다"));
   return new Promise((resolve) => {
     current = { id: nextId++, resolve, onProgress };
-    getWorker().postMessage({ type: "run", id: current.id, files, format, quality, sizes });
+    getWorker().postMessage({ type: "run", id: current.id, files, ...options, sizes });
   });
 }
 

@@ -9,12 +9,12 @@ chrome.runtime.onMessage.addListener((message) => {
   else if (message.type === "revoke") URL.revokeObjectURL(message.url);
 });
 
-async function run({ jobId, urls, format, quality }) {
+async function run({ jobId, urls, format, quality, split, splitMode }) {
   const send = (message) => chrome.runtime.sendMessage({ target: "background", jobId, ...message }).catch(() => {});
   try {
-    const result = await stitchImages(urls, (progress) => send({ type: "stitch-progress", ...progress }), { format, quality });
+    const result = await stitchImages(urls, (progress) => send({ type: "stitch-progress", ...progress }), { format, quality, split, splitMode });
     const { width, height, bytes, count, failed, note } = result;
-    // format은 실제로 만든 형식이다 (JPG를 바랐어도 폭이 너무 넓으면 png).
+    // format은 실제로 만든 형식이다 (JPG를 바랐어도 폭이 너무 넓거나, 너무 긴데 나누지 않기로 했으면 png).
     // parts는 장마다의 Blob 주소다. JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 온다
     const parts = result.parts.map((part) => ({ url: URL.createObjectURL(part.blob), height: part.height, bytes: part.blob.size }));
     send({ type: "stitch-done", parts, width, height, bytes, count, failed, format: result.format, note });

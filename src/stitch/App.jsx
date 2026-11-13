@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { download } from "../shared/download.js";
 import { partName, partRange } from "../shared/fileNames.js";
 import { number } from "../shared/format.js";
-import { JPG_MAX_SIDE } from "../shared/imageInfo.js";
+import { JPG_MAX_SIDE, SPLIT_EXAMPLES, SPLIT_LABELS, SPLIT_MODES } from "../shared/imageInfo.js";
 import { DEFAULT_JPG_QUALITY, JPG_QUALITIES } from "../shared/jpgQuality.js";
 import { explainSaveError, SAVE_TRIES, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
@@ -29,16 +29,30 @@ const QUALITY_HINTS = {
   80: "받은 JPG 합계보다 작아질 수 있습니다. 확대하면 차이가 보일 수 있습니다.",
 };
 
+// JPG 한 장에 담기에 너무 긴 묶음(높이 65,500px 넘음)은 여러 장으로 나누거나(기본) PNG 한 장으로 저장한다.
+// 나누는 방법은 균등하게(기본) · 최대 + 나머지 (shared/imageInfo.js의 SPLIT_MODES)
+
 // 설정: { suffix: 붙일 말, naming: 이름 방식(folders.js NAMINGS), format: 저장 형식(folders.js FORMATS),
-//   quality: JPG 품질, used: 전에 만들 때 쓴 붙일 말(새것부터) }
+//   quality: JPG 품질, split: 너무 긴 묶음을 JPG 여러 장으로 나눌지(아니면 PNG 한 장), splitMode: 나누는 방법,
+//   used: 전에 만들 때 쓴 붙일 말(새것부터) }
 function loadSettings() {
-  const settings = { suffix: DEFAULT_SUFFIX, naming: NAMINGS[0], format: FORMATS[0], quality: DEFAULT_JPG_QUALITY, used: [] };
+  const settings = {
+    suffix: DEFAULT_SUFFIX,
+    naming: NAMINGS[0],
+    format: FORMATS[0],
+    quality: DEFAULT_JPG_QUALITY,
+    split: true,
+    splitMode: SPLIT_MODES[0],
+    used: [],
+  };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (typeof saved?.suffix === "string") settings.suffix = saved.suffix;
     if (NAMINGS.includes(saved?.naming)) settings.naming = saved.naming;
     if (FORMATS.includes(saved?.format)) settings.format = saved.format;
     if (JPG_QUALITIES.includes(saved?.quality)) settings.quality = saved.quality;
+    if (typeof saved?.split === "boolean") settings.split = saved.split;
+    if (SPLIT_MODES.includes(saved?.splitMode)) settings.splitMode = saved.splitMode;
     if (Array.isArray(saved?.used)) settings.used = saved.used.filter((s) => typeof s === "string").slice(0, MAX_USED);
   } catch {
     // 저장소를 못 쓰는 환경(사생활 보호 모드 등)이면 기본값으로 시작한다
@@ -54,7 +68,7 @@ const PHOTO_EXTENSIONS = [".jpg", ".jpeg", ".jfif", ".png", ".gif", ".webp", ".b
 
 export default function App() {
   const [settings, setSettings] = useState(loadSettings);
-  const { suffix, naming, format, quality, used } = settings;
+  const { suffix, naming, format, quality, split, splitMode, used } = settings;
   // 고른 폴더: { name, groups: 하위 폴더 묶음 [{ path, files }], rootFiles: 고른 폴더 바로 안의 사진,
   //   existing: 고른 폴더 바로 안 파일 이름(소문자), saveDir: 쓸 수 있으면 그 폴더 }
   const [source, setSource] = useState(null);
@@ -233,7 +247,7 @@ export default function App() {
   // planned는 고른 형식으로 지은 이름이다. JPG로 만들 수 없어 PNG로 만들어졌으면 확장자를 바꿔 저장하고,
   // 길어서 JPG 여러 장으로 나눴으면 이름에 번호를 붙인다(결과의 names, name은 "첫 이름 ~ 끝 이름")
   async function saveGroup(files, planned, report) {
-    const made = await runJob(files, format, quality, (p) => report(describe(p)));
+    const made = await runJob(files, { format, quality, split, splitMode }, (p) => report(describe(p)));
     if (made.type !== "done") return made;
     const { parts, ...rest } = made;
     const single = planned.replace(/\.[^.]*$/, `.${made.format}`);
@@ -428,11 +442,38 @@ export default function App() {
             ))}
           </fieldset>
         )}
-        <p className="st-hint">
-          {format === "jpg"
-            ? `${QUALITY_HINTS[quality]} 높이가 ${number(JPG_MAX_SIDE)}px을 넘는 묶음은 사진 사이에서 나눠 JPG 여러 장으로 저장합니다.`
-            : PNG_HINT}
-        </p>
+        <p className="st-hint">{format === "jpg" ? QUALITY_HINTS[quality] : PNG_HINT}</p>
+        {format === "jpg" && (
+          <>
+            <fieldset className="st-naming" disabled={working}>
+              <legend>너무 긴 묶음</legend>
+              <label>
+                <input type="radio" name="split" checked={split} onChange={() => changeSettings({ split: true })} />
+                JPG 여러 장으로 나누기
+              </label>
+              <label>
+                <input type="radio" name="split" checked={!split} onChange={() => changeSettings({ split: false })} />
+                PNG 한 장으로
+              </label>
+            </fieldset>
+            {split && (
+              <fieldset className="st-naming" disabled={working}>
+                <legend>나누는 방법</legend>
+                {SPLIT_MODES.map((mode) => (
+                  <label key={mode}>
+                    <input type="radio" name="splitMode" checked={splitMode === mode} onChange={() => changeSettings({ splitMode: mode })} />
+                    {SPLIT_LABELS[mode]}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <p className="st-hint st-split-hint">
+              {split
+                ? `높이가 ${number(JPG_MAX_SIDE)}px을 넘는 묶음은 사진과 사진 사이에서 나눠 JPG 여러 장으로 저장합니다. 예: 높이 150,000px → ${SPLIT_EXAMPLES[splitMode]}. 사진 사이에서 자르므로 조금씩 다릅니다.`
+                : `높이가 ${number(JPG_MAX_SIDE)}px을 넘는 묶음은 JPG 한 장에 담을 수 없어 PNG 한 장으로 저장합니다.`}
+            </p>
+          </>
+        )}
         <div className="st-actions">
           <button type="button" onClick={pickFolder} disabled={busy}>
             {source ? "다른 폴더 고르기" : "폴더 고르기"}
@@ -462,6 +503,8 @@ export default function App() {
           suffix={cleaned}
           format={format}
           quality={quality}
+          split={split}
+          splitMode={splitMode}
           canAskWhere={typeof window.showSaveFilePicker === "function" && !writeBlocked}
           onRunning={onPickedRunning}
         />
@@ -526,7 +569,8 @@ export default function App() {
                       )}
                       {result?.parts > 1 && (
                         <p className="st-split">
-                          JPG 한 장에 담기에는 길어 사진과 사진 사이에서 {result.parts}장으로 나눠 저장했습니다.
+                          JPG 한 장에 담기에는 길어 사진과 사진 사이에서 {result.parts}장으로 나눠 저장했습니다 (
+                          {SPLIT_LABELS[result.splitMode]}).
                         </p>
                       )}
                       {result?.note && <p className="st-fallback">PNG로 저장했습니다. {result.note}.</p>}
@@ -567,9 +611,13 @@ export default function App() {
           <li>폭은 폴더에서 가장 넓은 사진에 맞춥니다. 크기를 줄이지 않고, 좁은 사진은 가운데에 두고 양옆을 흰색으로 채웁니다.</li>
           <li>
             JPG는 사진에 알맞고 작습니다. JPG 한 장에는 높이 {number(JPG_MAX_SIDE)}px까지 담을 수 있어서, 그보다 긴 묶음은
-            사진과 사진 사이에서 고르게 나눠 여러 장(1_합본_1.jpg, 1_합본_2.jpg …)으로 저장합니다. 폭이 넓으면 한 장의 높이가
-            더 짧아집니다. 사진 한 장이 그보다 길면 그 사진만 중간에서 자릅니다. 폭이 {number(JPG_MAX_SIDE)}px을 넘는
-            묶음은 PNG로 저장합니다. 큰 묶음을 JPG로 만들 때는 메모리를 많이 씁니다.
+            사진과 사진 사이에서 나눠 여러 장(1_합본_1.jpg, 1_합본_2.jpg …)으로 저장합니다. 폭이 넓으면 한 장의 높이가 더
+            짧아집니다. 사진 한 장이 그보다 길면 그 사진만 중간에서 자릅니다. 나누지 않기로 하면 PNG 한 장으로 저장하고,
+            폭이 {number(JPG_MAX_SIDE)}px을 넘는 묶음도 PNG로 저장합니다. 큰 묶음을 JPG로 만들 때는 메모리를 많이 씁니다.
+          </li>
+          <li>
+            나누는 방법은 둘입니다. 균등하게는 장마다 비슷한 길이로, 최대 + 나머지는 앞에서부터 한 장에 사진을 담을 수 있는
+            만큼 담고 남은 사진을 마지막 장에 담습니다. 장수는 같습니다.
           </li>
           <li>
             PNG는 화질을 하나도 잃지 않지만 사진에서는 JPG보다 훨씬 큽니다. 색 글자가 많은 그림은 PNG가 더 또렷합니다. 이미

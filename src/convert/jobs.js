@@ -27,14 +27,14 @@ function getWorker() {
   return worker;
 }
 
-// file: 바꿀 파일, mime: 만들 형식, quality: 품질(1~100).
+// file: 바꿀 파일, options: { mime: 만들 형식, quality: 품질(1~100), split: 너무 긴 그림을 나눌지, splitMode: 나누는 방법 }.
 // 결과는 done(parts: [{ blob, height }]. 너무 길어 JPG 여러 장으로 나눴으면 둘 이상, width, height) · error(message) ·
 // cancelled 메시지 그대로 돌려준다
-export function runJob(file, mime, quality, onProgress) {
+export function runJob(file, options, onProgress) {
   if (current) return Promise.reject(new Error("이미 바꾸는 중입니다"));
   return new Promise((resolve) => {
     current = { id: nextId++, resolve, onProgress };
-    getWorker().postMessage({ type: "run", id: current.id, file, mime, quality });
+    getWorker().postMessage({ type: "run", id: current.id, file, ...options });
   });
 }
 

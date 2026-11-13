@@ -1,5 +1,6 @@
 // 확장 프로그램 버튼을 누르면 뜨는 창. 지금 탭의 사진을 찾아 보여 주고, 고른 사진을 받게 맡긴다(background.js)
 import { JPG_QUALITIES, NO_EXT, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, newItem, saveExts, saveRules, saveSettings, typeOf } from "./core.js";
+import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
 
@@ -303,13 +304,20 @@ function updateStart() {
   start.textContent = chosen ? START_TEXT[settings.mode](chosen) : "받기";
 }
 
-// 받는 방식에 맞는 옵션만 보인다 (사진 따로: 폴더와 사진 이름, 이어 붙이기: 그림 이름과 형식). 품질은 JPG일 때만 고른다
+// 받는 방식에 맞는 옵션만 보인다 (사진 따로: 폴더와 사진 이름, 이어 붙이기: 그림 이름과 형식).
+// 품질과 너무 길 때의 옵션은 JPG일 때만, 나누는 방법은 나눠 받을 때만 고른다
 function showOptions() {
   $("filesOptions").hidden = settings.mode === "stitch";
   $("stitchOptions").hidden = settings.mode === "files";
   $("customName").hidden = settings.stitchName !== "custom";
   $("qualityBox").hidden = settings.stitchFormat !== "jpg";
+  $("splitRow").hidden = settings.stitchFormat !== "jpg";
+  $("splitModeBox").hidden = settings.tooLong !== "split";
 }
+
+// 이어 붙인 그림이 JPG 한 장에 담기에 너무 길 때 어떻게 받는지 (미리보기 줄)
+const tooLongText = () =>
+  settings.stitchFormat !== "jpg" ? "" : settings.tooLong === "split" ? ` (너무 길면 _1.jpg, _2.jpg …로 나눔: ${SPLIT_LABELS[settings.splitMode]})` : " (너무 길면 .png)";
 
 // 받으면 생길 파일을 미리 보여 준다
 function updatePreview() {
@@ -320,8 +328,7 @@ function updatePreview() {
     lines.push(`사진: 다운로드/${BASE_FOLDER}/${folder}/${names}`);
   }
   if (settings.mode !== "files") {
-    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 _1.jpg, _2.jpg …로 나눔)" : "";
-    lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/${customStitchName() || folder}.${settings.stitchFormat}${tooLong}`);
+    lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/${customStitchName() || folder}.${settings.stitchFormat}${tooLongText()}`);
   }
   $("preview").replaceChildren(
     ...lines.map((text) => {
@@ -411,6 +418,8 @@ async function start() {
       stitchName: customStitchName(),
       stitchFormat: settings.stitchFormat,
       jpgQuality: settings.jpgQuality,
+      tooLong: settings.tooLong,
+      splitMode: settings.splitMode,
     })
     .catch((err) => ({ error: err.message }));
   if (reply?.error) {
@@ -466,7 +475,7 @@ function showJob(next) {
       // JPG를 골랐는데 폭이 너무 넓어(또는 만들다 실패해) PNG로 받았으면 그 까닭을 알린다
       const asPng = stitch.note ? ` · PNG로 받았습니다: ${stitch.note}` : "";
       // JPG 한 장에 담기에 너무 길면 여러 장으로 나눠 받는다
-      const split = stitch.parts > 1 ? `${stitch.parts}장으로 나눠 ` : "";
+      const split = stitch.parts > 1 ? `${stitch.parts}장으로 나눠(${SPLIT_LABELS[stitch.splitMode] ?? ""}) ` : "";
       line(`이어 붙인 그림을 ${split}저장했습니다 · 다운로드 › ${job.folder} › ${stitch.name} (${size})`, asPng + leftOut(stitch));
     } else {
       line("", `이어 붙이지 못했습니다: ${stitch.error}`);
@@ -494,8 +503,8 @@ async function init() {
     saveSettings(settings);
     refresh();
   });
-  // 받는 방식, 사진 이름, 이어 붙인 그림 이름과 형식: 고르면 바로 기억한다
-  for (const name of ["mode", "fileNames", "stitchName", "stitchFormat"]) {
+  // 받는 방식, 사진 이름, 이어 붙인 그림 이름과 형식, 너무 길 때: 고르면 바로 기억한다
+  for (const name of ["mode", "fileNames", "stitchName", "stitchFormat", "tooLong"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) {
       radio.checked = radio.value === settings[name];
       radio.addEventListener("change", () => {
@@ -513,6 +522,13 @@ async function init() {
   $("jpgQuality").addEventListener("change", () => {
     settings.jpgQuality = Number($("jpgQuality").value);
     saveSettings(settings);
+  });
+  $("splitMode").replaceChildren(...SPLIT_MODES.map((mode) => new Option(SPLIT_LABELS[mode], mode)));
+  $("splitMode").value = settings.splitMode;
+  $("splitMode").addEventListener("change", () => {
+    settings.splitMode = $("splitMode").value;
+    saveSettings(settings);
+    updatePreview();
   });
   $("customName").value = settings.customName;
   $("customName").addEventListener("input", () => {
