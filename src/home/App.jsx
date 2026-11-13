@@ -75,6 +75,12 @@ const FEATURES = [
     description:
       "크롬 확장 프로그램입니다. 보고 있는 웹 페이지의 사진을 한 폴더에 한꺼번에 받거나, 세로로 이어 붙여 한 장으로 받습니다.",
   },
+  {
+    path: "audio-cut/",
+    icon: "✂️",
+    title: "오디오 자르기",
+    description: "오디오 파일의 앞뒤 잡음 같은 부분을 잘라 내고 저장합니다. MP3는 다시 압축하지 않아 음질과 태그가 그대로입니다.",
+  },
 ];
 
 export default function App() {

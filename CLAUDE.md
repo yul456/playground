@@ -287,6 +287,40 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
   - 네이버 지도(map.naver.com)도 Claude in Chrome으로는 읽지 못하지만(막힌 사이트), 시험용 크롬에서는 열린다. `node test.mjs site <주소>`로 확장 프로그램을 돌려 보고, `node frames-info.mjs <주소>`로 프레임마다 출처와 그림 수를 본다.
   - 같은 사이트의 다른 주소 틀은 시험용 크롬을 `--host-resolver-rules`로 띄워 `*.shop.test`와 `other.test`를 이 컴퓨터로 보게 해서 시험한다.
 
+## 오디오 자르기 주의점
+
+- 사용자 요청(2026-11-13): 오디오 파일의 앞뒤 잡음을 잘라 내고 싶다(`audio-cut/`, `src/audio-cut/`). 주로 MP3지만 형식은 다 되게, 그리고 앨범 아트·작곡가 같은 상세 정보는 바뀌지 않아야 한다.
+- 길은 형식에 따라 셋이다(`audio.js`).
+  - MP3: 직접 자른다(`mp3.js`). MP3 조각(프레임, 44.1kHz에서 0.026초. MPEG2는 576샘플)을 그대로 옮겨 다시 압축하지 않는다.
+    - 앞의 ID3v2와 끝의 ID3v1·APE·Lyrics3 태그는 바이트 그대로 옮긴다. Mediabunny를 쓰지 않은 까닭은 태그를 새로 써서(ID3v2.4 등) 윈도우 탐색기가 잘 못 읽을 수 있어서다.
+    - 첫 조각의 길이 정보(Xing·Info)는 조각 수·바이트 수·찾아가기 표를 새로 쓰고, LAME 태그의 소리 길이·소리 CRC·태그 CRC(CRC-16, 0xA001)를 다시 계산한다. VBRI는 바이트 수·조각 수만 고치고 표를 비운다. CRC 계산은 LAME과 FFmpeg(Lavc)가 쓴 값과 같은 것을 확인했다.
+    - LAME 태그의 앞뒤 덧붙인 샘플 수(delay·padding)는 그대로 둔다. FFmpeg 기반 재생기(크롬 등)는 앞의 25ms쯤을 건너뛰어, 자른 첫 조각이 앞 조각의 데이터(bit reservoir)를 못 찾아 생기는 끊김이 가려진다.
+    - 재생 시각과 조각 번호는 delay + 529샘플만큼 밀어 맞춘다(`frameAt`). 화면의 시각은 조각에 맞춘 시각이다(`snap`).
+  - WAV: 직접 자른다(`wav.js`). data 조각의 바이트만 잘라 샘플 단위로 정확하다. 다른 조각(LIST INFO, id3 등)은 그대로, fact는 새 샘플 수로 고친다. PCM·부동소수·A-law·µ-law만, 나머지 WAV는 Mediabunny로 간다.
+  - 그 밖의 형식(M4A·AAC·OGG·Opus·FLAC·WebM 등): Mediabunny로 자른다(`media.js`, 그런 파일을 열 때만 받는다).
+    - 먼저 `copy: { mode: "forced", shiftTolerance: Infinity, boundaryPolicy: "shrink" }`로 다시 압축하지 않고 조각을 옮긴다. 고른 구간 밖의 소리는 넣지 않는다.
+    - 그렇게 못 하면 다시 압축한다(FLAC은 `@mediabunny/flac-encoder`로, 손실 없음).
+    - 시험한 M4A(AAC)·FLAC·Opus·Vorbis는 모두 다시 압축하지 않고 잘렸다.
+    - "WAV로 저장"도 고를 수 있다(16비트 PCM).
+- Mediabunny는 1.62.1을 쓴다. 2026-11-13 최신 1.65.x는 나온 지 2주가 안 되었다. 라이선스는 MPL-2.0이다.
+- 태그(MP3·WAV 말고 다른 형식)
+  - Mediabunny가 옮긴다. 저장한 뒤 결과를 다시 읽어 빠진 태그(제목·아티스트·앨범·작곡가·앨범 아트)를 알린다(`missingTags`).
+  - OGG는 다른 재생기처럼 엄격하게 다시 읽는다(`oggTags.js`의 `readOggTagNames`). Mediabunny 자신은 너그럽게 읽어서 빠진 것을 못 알아챘다.
+- Mediabunny 1.62.1의 OGG Vorbis 문제: 태그 칸(comment header) 끝의 표시 1바이트(framing bit)를 빠뜨린다.
+  - 그래서 FFmpeg는 마지막 태그를 버리고(시험에서 작곡가가 빠짐), libvorbis는 그 칸을 틀렸다고 거부할 수 있다.
+  - 잘라 낸 OGG에는 그 1바이트를 채워 넣는다(`fixVorbisFraming`: 그 쪽(page)의 조각 표 +1, CRC 다시 계산). 일부러 1바이트를 뺀 원본을 고치면 원본과 바이트까지 같아지는 것을 시험했다.
+- 파형과 앞뒤 찾기(`analyze.js`)
+  - 소리를 8,000Hz로 낮춰 풀어(OfflineAudioContext) 0.01초마다 크기를 잰다. 듣기는 원래 파일을 `<audio>`로 한다.
+  - 앞뒤 조용한 부분은 가장 큰 칸보다 기준(-50·-40·-30dB, 기본 -40, 설정에 저장)만큼 작은 소리가 이어지는 곳이다. 0.05초 넘게 큰 소리가 이어지는 첫 곳과 끝 곳을 찾고, 앞뒤로 0.1초를 남긴다.
+- 저장은 저장 창(`showSaveFilePicker`)으로 묻는다. 원본 파일의 폴더에서 열고, 이름은 `<원래 이름>_자름.<확장자>`다. 저장은 `saveToFile`로 하고, 저장 창이 없으면 다운로드로 받는다. 원본은 바꾸지 않는다.
+- 개발 서버가 새 패키지를 미리 묶는 동안 페이지를 다시 읽는다. 지운 패키지(gsap)를 찾다 실패하면 `npm run dev -- --force`로 다시 띄운다.
+- 시험은 `local-tests/audio-cut/`에서 한다(그 폴더의 README.md 참고).
+  - `make-files.sh`: ffmpeg·lame으로 앞뒤에 작은 잡음이 있는 시험 파일과 태그·앨범 아트를 만든다.
+  - `test-node.mjs`: MP3·WAV 자르기, 태그 읽기, Vorbis 보정을 보고, 결과를 ffprobe·ffmpeg·macOS afinfo로 확인한다.
+  - `test-media.mjs`: Mediabunny 길을 본다.
+  - `e2e.mjs`: 화면을 시험용 크롬으로 돌린다. 듣기는 `--mute-audio`로 소리를 끄고 재생 위치만 본다.
+- 확인하지 못한 것: 윈도우 탐색기의 자세히 보기, foobar·아이튠즈 같은 다른 재생기, 실제 브라우저에서 소리 듣기(시험은 headless라 소리를 듣지 못한다).
+
 ## 날씨 기능 주의점
 
 - 위치 요청은 `enableHighAccuracy: true`를 유지한다. macOS 크롬에서 false면 캐시된 위치가 없을 때 응답이 오지 않는다.

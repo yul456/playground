@@ -15,6 +15,7 @@
 - 사진 세로로 붙이기: https://yul456.github.io/playground/stitch/
 - 사진 형식 바꾸기: https://yul456.github.io/playground/convert/
 - 페이지 사진 받기(크롬 확장 프로그램 안내·ZIP): https://yul456.github.io/playground/photo-saver/
+- 오디오 자르기: https://yul456.github.io/playground/audio-cut/
 
 ## 실행
 
@@ -46,6 +47,7 @@ golf/3d/               골프 3D 코스 입구
 stitch/index.html       사진 세로로 붙이기 입구
 convert/index.html      사진 형식 바꾸기 입구
 photo-saver/index.html  페이지 사진 받기(크롬 확장 프로그램) 안내 페이지 입구. 빌드하면 옆에 photo-saver.zip이 생긴다
+audio-cut/index.html    오디오 자르기 입구
 extensions/
   photo-saver/          페이지 사진 받기 크롬 확장 프로그램. 빌드 없이 이 폴더째 설치한다
 src/
@@ -64,6 +66,8 @@ src/
                         폴더로 붙이기 folders.js, 사진을 골라 붙이기 photos.js·PickedSection.jsx)
   convert/              사진 형식 바꾸기 (폴더 읽기와 건너뛰기 규칙 folders.js, 백그라운드 작업 convertWorker.js)
   photo-saver/          페이지 사진 받기 안내 페이지 (설치 방법, ZIP 받기)
+  audio-cut/            오디오 자르기 (MP3를 조각 단위로 자르는 mp3.js, WAV를 자르는 wav.js, 태그 읽기 tags.js,
+                        다른 형식을 Mediabunny로 자르는 media.js, OGG 태그 칸 보정 oggTags.js, 파형 analyze.js·Waveform.jsx)
 scripts/
   zip-folder.mjs        폴더를 ZIP으로 묶는다 (vite.config.js가 확장 프로그램 ZIP을 만들 때 쓴다)
   check-copies.mjs      확장 프로그램이 복사해 쓰는 파일(png.js, imageInfo.js)이 원본과 같은지 검사 (npm run check에서 돈다)
@@ -85,6 +89,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 골프 (스코어카드·라운드 날씨·3D 코스) | `src/golf/`, `golf/` | `leaflet` (라운드 날씨 지도), `maplibre-gl` (3D 코스 지도). 사진 인식은 패키지 없이 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드 |
 | 사진 세로로 붙이기 | `src/stitch/`, `stitch/` | 없음 (PNG 압축은 브라우저 내장 CompressionStream, JPG는 브라우저 내장 인코더) |
 | 사진 형식 바꾸기 | `src/convert/`, `convert/` | 없음 (JPG는 브라우저 내장 인코더로 만든다) |
+| 오디오 자르기 | `src/audio-cut/`, `audio-cut/` | `mediabunny` (MP3·WAV가 아닌 형식을 다시 압축하지 않고 자르기, MPL-2.0, 그런 파일을 열 때만 받음), `@mediabunny/flac-encoder` (FLAC을 다시 압축해야 할 때만 받음, MPL-2.0). MP3·WAV는 패키지 없이 자체 코드 |
 | 페이지 사진 받기 | `extensions/photo-saver/`, `src/photo-saver/`, `photo-saver/` | 없음 (확장 프로그램은 빌드 없이 쓰는 자바스크립트, 이어 붙이기는 `src/stitch/png.js`와 `src/shared/imageInfo.js` 복사본을 쓰고, ZIP은 Node 내장 zlib로 묶음) |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.
