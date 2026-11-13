@@ -14,8 +14,10 @@ async function run({ jobId, urls, format, quality }) {
   try {
     const result = await stitchImages(urls, (progress) => send({ type: "stitch-progress", ...progress }), { format, quality });
     const { width, height, bytes, count, failed, note } = result;
-    // format은 실제로 만든 형식이다 (JPG를 바랐어도 너무 길면 png)
-    send({ type: "stitch-done", url: URL.createObjectURL(result.blob), width, height, bytes, count, failed, format: result.format, note });
+    // format은 실제로 만든 형식이다 (JPG를 바랐어도 폭이 너무 넓으면 png).
+    // parts는 장마다의 Blob 주소다. JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 온다
+    const parts = result.parts.map((part) => ({ url: URL.createObjectURL(part.blob), height: part.height, bytes: part.blob.size }));
+    send({ type: "stitch-done", parts, width, height, bytes, count, failed, format: result.format, note });
   } catch (err) {
     send({ type: "stitch-error", message: err?.message || String(err) });
   }

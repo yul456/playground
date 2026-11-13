@@ -54,6 +54,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .st-warn { color: #d97706; }
 .st-error { color: #dc2626; }
 .st-skipped, .st-fallback { margin: 4px 0 0; color: #d97706; font-size: 0.85rem; }
+/* 길어서 여러 장으로 나눠 저장했다는 알림 (잘못된 일이 아니라 흐리게) */
+.st-split { margin: 4px 0 0; color: var(--muted); font-size: 0.85rem; }
 .st-skipped { word-break: break-all; }
 .st-bar { height: 6px; margin-top: 6px; overflow: hidden; border-radius: 3px; background: var(--border); }
 .st-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }

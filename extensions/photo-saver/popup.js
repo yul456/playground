@@ -320,7 +320,7 @@ function updatePreview() {
     lines.push(`사진: 다운로드/${BASE_FOLDER}/${folder}/${names}`);
   }
   if (settings.mode !== "files") {
-    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 .png)" : "";
+    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 _1.jpg, _2.jpg …로 나눔)" : "";
     lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/${customStitchName() || folder}.${settings.stitchFormat}${tooLong}`);
   }
   $("preview").replaceChildren(
@@ -459,13 +459,15 @@ function showJob(next) {
     if (stitch.state === "running") {
       if (stitch.phase === "fetch") line(`이어 붙일 사진 받는 중 ${stitch.done}/${stitch.total}`);
       else if (stitch.phase === "draw") line(`이어 붙이는 중 ${stitch.done}/${stitch.total}`);
-      else if (stitch.phase === "encode") line("JPG로 만드는 중");
-      else line("이어 붙인 그림 저장하는 중");
+      else if (stitch.phase === "encode") line(stitch.parts > 1 ? `JPG로 만드는 중 (${stitch.part}/${stitch.parts}장)` : "JPG로 만드는 중");
+      else line(stitch.parts > 1 ? `이어 붙인 그림 ${stitch.parts}장 저장하는 중` : "이어 붙인 그림 저장하는 중");
     } else if (stitch.state === "done") {
       const size = `${stitch.width.toLocaleString()}×${stitch.height.toLocaleString()}`;
-      // JPG를 골랐는데 너무 길거나 커서 PNG로 받았으면 그 까닭을 알린다
+      // JPG를 골랐는데 폭이 너무 넓어(또는 만들다 실패해) PNG로 받았으면 그 까닭을 알린다
       const asPng = stitch.note ? ` · PNG로 받았습니다: ${stitch.note}` : "";
-      line(`이어 붙인 그림을 저장했습니다 · 다운로드 › ${job.folder} › ${stitch.name} (${size})`, asPng + leftOut(stitch));
+      // JPG 한 장에 담기에 너무 길면 여러 장으로 나눠 받는다
+      const split = stitch.parts > 1 ? `${stitch.parts}장으로 나눠 ` : "";
+      line(`이어 붙인 그림을 ${split}저장했습니다 · 다운로드 › ${job.folder} › ${stitch.name} (${size})`, asPng + leftOut(stitch));
     } else {
       line("", `이어 붙이지 못했습니다: ${stitch.error}`);
     }

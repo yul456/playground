@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { download } from "../shared/download.js";
+import { partName, partRange } from "../shared/fileNames.js";
 import { number } from "../shared/format.js";
 import { JPG_MAX_SIDE } from "../shared/imageInfo.js";
 import { DEFAULT_JPG_QUALITY, JPG_QUALITIES } from "../shared/jpgQuality.js";
@@ -228,30 +229,41 @@ export default function App() {
   const onPickedRunning = useCallback((value) => setPickedRunning(value), []);
 
   // 묶음 하나를 만든다. 그림을 다 만든 뒤, 고른 폴더에 쓸 수 있으면 거기에 저장하고 아니면 다운로드로 받는다.
-  // 고른 폴더에 끝내 저장하지 못해도 다운로드로 받고, 까닭(saveError)을 함께 돌려준다.
-  // planned는 고른 형식으로 지은 이름이다. JPG로 만들 수 없어 PNG로 만들어졌으면 확장자를 바꿔 저장한다(결과의 name)
+  // 고른 폴더에 끝내 저장하지 못한 장은 다운로드로 받고, 까닭(saveError)과 그 장수(fellBack)를 함께 돌려준다.
+  // planned는 고른 형식으로 지은 이름이다. JPG로 만들 수 없어 PNG로 만들어졌으면 확장자를 바꿔 저장하고,
+  // 길어서 JPG 여러 장으로 나눴으면 이름에 번호를 붙인다(결과의 names, name은 "첫 이름 ~ 끝 이름")
   async function saveGroup(files, planned, report) {
     const made = await runJob(files, format, quality, (p) => report(describe(p)));
     if (made.type !== "done") return made;
-    const { blob, ...rest } = made;
-    const name = planned.replace(/\.[^.]*$/, `.${made.format}`);
-    const result = { ...rest, name };
+    const { parts, ...rest } = made;
+    const single = planned.replace(/\.[^.]*$/, `.${made.format}`);
+    const names = parts.length > 1 ? parts.map((_, k) => partName(single, k + 1)) : [single];
+    const result = { ...rest, name: partRange(names), names, parts: parts.length };
     const dir = source.saveDir;
     if (!dir) {
-      download(blob, name);
+      parts.forEach((part, k) => download(part.blob, names[k]));
       return { ...result, savedTo: "download" };
     }
-    const saved = await saveToFolder(dir, name, blob, {
-      stopped: () => stopRef.current,
-      hold: (writable) => {
-        savingRef.current = writable;
-      },
-      onTry: (n) => report({ fraction: MADE, text: n === 1 ? "폴더에 저장하는 중" : `다시 저장하는 중 (${n}/${SAVE_TRIES})` }),
-    });
-    if (saved.ok) return { ...result, savedTo: "folder" };
-    if (saved.cancelled) return { type: "cancelled", skipped: result.skipped };
-    download(blob, name);
-    return { ...result, savedTo: "download", saveError: explainSaveError(saved.error) };
+    let saveError = null;
+    let fellBack = 0;
+    for (const [k, part] of parts.entries()) {
+      const which = parts.length > 1 ? ` (${k + 1}/${parts.length}장)` : "";
+      const saved = await saveToFolder(dir, names[k], part.blob, {
+        stopped: () => stopRef.current,
+        hold: (writable) => {
+          savingRef.current = writable;
+        },
+        onTry: (n) => report({ fraction: MADE, text: `${n === 1 ? "폴더에 저장하는 중" : `다시 저장하는 중 (${n}/${SAVE_TRIES})`}${which}` }),
+      });
+      if (saved.cancelled) return { type: "cancelled", skipped: result.skipped };
+      if (!saved.ok) {
+        download(part.blob, names[k]);
+        saveError ??= explainSaveError(saved.error);
+        fellBack++;
+      }
+    }
+    if (!fellBack) return { ...result, savedTo: "folder" };
+    return { ...result, savedTo: fellBack === parts.length ? "download" : "folder", saveError, fellBack };
   }
 
   async function start() {
@@ -279,8 +291,8 @@ export default function App() {
       }
       result = { ...result, ms: performance.now() - startedAt };
       if (result.savedTo === "folder") {
-        const saved = result.name.toLowerCase();
-        setSource((s) => ({ ...s, existing: new Set(s.existing).add(saved) }));
+        const saved = result.names.map((name) => name.toLowerCase());
+        setSource((s) => ({ ...s, existing: new Set([...s.existing, ...saved]) }));
       }
       setResults((list) => {
         const next = [...list];
@@ -418,7 +430,7 @@ export default function App() {
         )}
         <p className="st-hint">
           {format === "jpg"
-            ? `${QUALITY_HINTS[quality]} 한 변이 ${number(JPG_MAX_SIDE)}px을 넘는 묶음은 PNG로 저장합니다.`
+            ? `${QUALITY_HINTS[quality]} 높이가 ${number(JPG_MAX_SIDE)}px을 넘는 묶음은 사진 사이에서 나눠 JPG 여러 장으로 저장합니다.`
             : PNG_HINT}
         </p>
         <div className="st-actions">
@@ -512,9 +524,15 @@ export default function App() {
                           <span style={{ width: `${progress.fraction * 100}%` }} />
                         </div>
                       )}
+                      {result?.parts > 1 && (
+                        <p className="st-split">
+                          JPG 한 장에 담기에는 길어 사진과 사진 사이에서 {result.parts}장으로 나눠 저장했습니다.
+                        </p>
+                      )}
                       {result?.note && <p className="st-fallback">PNG로 저장했습니다. {result.note}.</p>}
                       {result?.saveError && (
                         <p className="st-fallback" title={result.saveError.detail}>
+                          {result.parts > 1 && result.fellBack < result.parts ? `${result.parts}장 중 ${result.fellBack}장은 ` : ""}
                           고른 폴더에 저장하지 못해 다운로드 폴더로 받았습니다. {result.saveError.text}
                         </p>
                       )}
@@ -548,8 +566,10 @@ export default function App() {
         <ul>
           <li>폭은 폴더에서 가장 넓은 사진에 맞춥니다. 크기를 줄이지 않고, 좁은 사진은 가운데에 두고 양옆을 흰색으로 채웁니다.</li>
           <li>
-            JPG는 사진에 알맞고 작습니다. 한 변이 {number(JPG_MAX_SIDE)}px을 넘거나 화소가 너무 많은 묶음은 JPG로 만들 수
-            없어 PNG로 저장합니다. 큰 묶음을 JPG로 만들 때는 메모리를 많이 씁니다.
+            JPG는 사진에 알맞고 작습니다. JPG 한 장에는 높이 {number(JPG_MAX_SIDE)}px까지 담을 수 있어서, 그보다 긴 묶음은
+            사진과 사진 사이에서 고르게 나눠 여러 장(1_합본_1.jpg, 1_합본_2.jpg …)으로 저장합니다. 폭이 넓으면 한 장의 높이가
+            더 짧아집니다. 사진 한 장이 그보다 길면 그 사진만 중간에서 자릅니다. 폭이 {number(JPG_MAX_SIDE)}px을 넘는
+            묶음은 PNG로 저장합니다. 큰 묶음을 JPG로 만들 때는 메모리를 많이 씁니다.
           </li>
           <li>
             PNG는 화질을 하나도 잃지 않지만 사진에서는 JPG보다 훨씬 큽니다. 색 글자가 많은 그림은 PNG가 더 또렷합니다. 이미
@@ -559,7 +579,10 @@ export default function App() {
             사진 고르기는 고른 사진을 한 장으로 붙입니다. 처음에는 파일 이름순으로 놓고, 끌어서 옮기거나 ↑ ↓로 순서를
             바꿉니다. 브라우저가 고른 사진의 폴더에 쓸 권한은 주지 않아서, 만들 때 저장할 자리를 한 번 묻습니다.
           </li>
-          <li>같은 이름 파일이 있으면 덮어씁니다. 다 만들기 전에 멈추면 원래 파일은 그대로 남습니다.</li>
+          <li>
+            같은 이름 파일이 있으면 덮어씁니다. 다 만들기 전에 멈추면 원래 파일은 그대로 남습니다. 여러 장으로 나눠 저장하다
+            멈추면 그때까지 저장한 장은 남습니다.
+          </li>
           <li>
             고른 폴더에 저장하지 못하면 잠깐 뒤 다시 해 보고, 그래도 안 되면 다운로드 폴더로 받습니다. 백신이나 클라우드
             백업 같은 다른 프로그램이 그 파일을 잡고 있을 때 생깁니다.

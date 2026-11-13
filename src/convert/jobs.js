@@ -28,7 +28,8 @@ function getWorker() {
 }
 
 // file: 바꿀 파일, mime: 만들 형식, quality: 품질(1~100).
-// 결과는 done(blob, width, height) · error(message) · cancelled 메시지 그대로 돌려준다
+// 결과는 done(parts: [{ blob, height }]. 너무 길어 JPG 여러 장으로 나눴으면 둘 이상, width, height) · error(message) ·
+// cancelled 메시지 그대로 돌려준다
 export function runJob(file, mime, quality, onProgress) {
   if (current) return Promise.reject(new Error("이미 바꾸는 중입니다"));
   return new Promise((resolve) => {

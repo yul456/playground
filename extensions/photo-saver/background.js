@@ -1,8 +1,9 @@
 // 사진 받기를 맡아 하는 서비스 워커. 팝업이 닫혀도 받기가 이어지도록 여기서 한다.
 // - 사진 따로 받기: chrome.downloads로 받는다. 파일 이름은 고른 순서 번호(001, 002…)이고,
 //   확장자는 받아 보고 안 그림 종류(MIME)로 정한다
-// - 세로로 이어 붙이기: 보이지 않는 문서(offscreen.js)가 사진을 받아 PNG 한 장을 만들고,
-//   그 Blob 주소를 넘겨받아 여기서 받는다 (서비스 워커는 Blob 주소를 만들지 못한다)
+// - 세로로 이어 붙이기: 보이지 않는 문서(offscreen.js)가 사진을 받아 그림을 만들고,
+//   그 Blob 주소를 넘겨받아 여기서 받는다 (서비스 워커는 Blob 주소를 만들지 못한다).
+//   JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 와서 "제목_1.jpg", "제목_2.jpg" …로 받는다
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase } from "./names.js";
 
 // 한 번에 시작을 기다리는 다운로드 수. 시작만 기다리고 끝나기는 기다리지 않아서 실제로는 여러 장을 함께 받는다
@@ -36,6 +37,9 @@ const byUrl = new Map(); // 주소 → [plan]. 이름 정하기(onDeterminingFil
 
 // plan.base는 다운로드 폴더 안의 경로에서 확장자만 뺀 것 (사진: 페이지 사진/제목/001, 이어 붙인 그림: 페이지 사진/제목)
 const target = (plan, ext) => `${plan.base}.${ext}`;
+// 여러 장으로 나눠 받는 이어 붙인 그림의 k번째(1부터) 이름: 제목 → 제목_1, 제목_2 … 한 장이면 그대로.
+// 사진 세로로 붙이기(src/shared/fileNames.js의 partName)와 같은 규칙이다
+const partBase = (base, k, count) => (count > 1 ? `${base}_${k}` : base);
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // 그림으로 받을 응답인가. 종류를 안 밝히거나(빈 값) 그냥 바이트(octet-stream)라고만 하는 곳도 있어 그것도 받는다
 const imageMime = (mime) => !mime || mime.startsWith("image/") || mime.endsWith("/octet-stream");
@@ -165,9 +169,25 @@ function end(plan, error) {
   // 크롬 설정의 "다운로드 전에 각 파일의 저장 위치 확인"이 켜져 있으면 장마다 저장 창이 뜨고, 닫으면 취소된다
   const canceled = !plan.reason && error === "USER_CANCELED";
   if (plan.kind === "stitch") {
-    closeOffscreen(); // Blob 주소도 함께 사라진다
-    if (error) Object.assign(job.stitch, { state: "failed", error: REASONS[plan.reason ?? error] ?? "저장 실패", canceled });
-    else Object.assign(job.stitch, { state: "done", id: plan.id });
+    // 이어 붙인 그림은 여러 장일 수 있다. 모든 장이 끝나야 이어 붙이기가 끝난다
+    const stitch = job.stitch;
+    stitch.left--;
+    if (error) {
+      stitch.failedParts++;
+      stitch.error ||= REASONS[plan.reason ?? error] ?? "저장 실패";
+      if (canceled) stitch.canceled = true;
+    } else stitch.ids[plan.part] = plan.id;
+    if (!stitch.left) {
+      closeOffscreen(); // Blob 주소도 함께 사라진다. 모든 장을 다 받은 뒤에 닫는다
+      const names = stitch.names.filter(Boolean);
+      if (names.length) stitch.name = names.length > 1 ? `${names[0]} ~ ${names.at(-1)}` : names[0];
+      stitch.id = stitch.ids.find((id) => id != null) ?? null;
+      if (!stitch.failedParts) stitch.state = "done";
+      else {
+        stitch.state = "failed";
+        if (stitch.parts > 1) stitch.error = `${stitch.parts}장 중 ${stitch.failedParts}장을 받지 못했습니다 (${stitch.error})`;
+      }
+    }
   } else if (error) {
     job.files.failed++;
     if (canceled) job.files.canceled++;
@@ -192,7 +212,7 @@ async function completed(plan) {
     return;
   }
   // 같은 이름이 있으면 크롬이 "(1)"을 붙이므로 실제로 저장된 이름을 알린다
-  if (plan.kind === "stitch" && item?.filename) plan.job.stitch.name = item.filename.split(/[\\/]/).pop();
+  if (plan.kind === "stitch" && item?.filename) plan.job.stitch.names[plan.part] = item.filename.split(/[\\/]/).pop();
   end(plan, null);
 }
 
@@ -236,15 +256,27 @@ function onStitchMessage(message) {
   if (!job?.stitch || job.id !== message.jobId || job.stitch.state !== "running") return;
   const stitch = job.stitch;
   if (message.type === "stitch-progress") {
-    Object.assign(stitch, { phase: message.phase, done: message.done, total: message.total });
+    // JPG를 여러 장으로 나눠 만들 때는 몇 번째 장을 만드는지(part/parts)도 온다
+    Object.assign(stitch, { phase: message.phase, done: message.done, total: message.total, part: message.part ?? 0, parts: message.parts ?? stitch.parts });
     update(job);
   } else if (message.type === "stitch-done") {
-    // format은 실제로 만든 형식이다. JPG를 바랐어도 너무 길면 PNG로 만들어지고, 그 까닭이 note에 온다
-    const { width, height, bytes, count, failed = [], format = "png", note = null } = message;
-    Object.assign(stitch, { phase: "save", width, height, bytes, count, failed, format, note, name: `${job.stitchBase}.${format}` });
+    // format은 실제로 만든 형식이다. JPG를 바랐어도 폭이 너무 넓으면 PNG로 만들어지고, 그 까닭이 note에 온다.
+    // parts는 장마다의 Blob 주소다. JPG 한 장에 담기에 너무 길면 여러 장이다
+    const { parts = [], width, height, bytes, count, failed = [], format = "png", note = null } = message;
+    if (!parts.length) {
+      Object.assign(stitch, { state: "failed", error: "만든 그림이 없습니다" });
+      closeOffscreen();
+      settle(job);
+      return;
+    }
+    const bases = parts.map((_, k) => partBase(job.stitchBase, k + 1, parts.length));
+    const name = parts.length > 1 ? `${bases[0]}.${format} ~ ${bases.at(-1)}.${format}` : `${bases[0]}.${format}`;
+    Object.assign(stitch, { phase: "save", width, height, bytes, count, failed, format, note, name, parts: parts.length, left: parts.length });
     update(job);
-    const base = `${BASE_FOLDER}/${job.stitchBase}`;
-    begin({ job, kind: "stitch", url: message.url, base, guess: format, id: null, named: false, ended: false });
+    parts.forEach((part, k) => {
+      const base = `${BASE_FOLDER}/${bases[k]}`;
+      begin({ job, kind: "stitch", part: k, url: part.url, base, guess: format, id: null, named: false, ended: false });
+    });
   } else if (message.type === "stitch-error") {
     Object.assign(stitch, { state: "failed", error: message.message });
     closeOffscreen();
@@ -256,7 +288,8 @@ function onStitchMessage(message) {
 // naming: 사진 따로 받을 때의 파일 이름. original(주소에 적힌 원래 이름, 기본) · number(고른 순서 번호 001…)
 // stitchName: 이어 붙인 그림의 이름(확장자 빼고). 비어 있으면 폴더 이름(페이지 제목)과 같게 한다.
 // 처음엔 "<폴더>_합본"이었는데, 페이지 이름으로 받을 때는 "_합본"을 붙이지 말자고 해서 뺐다
-// stitchFormat: 이어 붙인 그림의 형식(jpg · png). jpg여도 너무 길면 png로 받는다. jpgQuality: JPG 품질(1~100)
+// stitchFormat: 이어 붙인 그림의 형식(jpg · png). jpg여도 폭이 너무 넓으면 png로 받고, 너무 길면 여러 장으로 나눠 받는다.
+// jpgQuality: JPG 품질(1~100)
 async function startJob({ folder, urls, mode = "files", naming = "original", stitchName = "", stitchFormat = "png", jpgQuality = 95 }) {
   if (current?.running) throw new Error("앞의 사진을 아직 받는 중입니다. 다 받은 뒤에 다시 누르세요.");
   if (!urls?.length) throw new Error("고른 사진이 없습니다.");
@@ -279,9 +312,15 @@ async function startJob({ folder, urls, mode = "files", naming = "original", sti
           phase: "fetch",
           done: 0,
           total: urls.length,
-          name: `${stitchBase}.${stitchFormat === "jpg" ? "jpg" : "png"}`,
+          name: `${stitchBase}.${stitchFormat === "jpg" ? "jpg" : "png"}`, // 여러 장이면 "첫 이름 ~ 끝 이름"
           format: "", // 실제로 만든 형식 (다 만든 뒤에 안다)
           note: null, // JPG를 바랐는데 PNG로 만든 까닭
+          part: 0, // JPG를 여러 장으로 나눠 만들 때 지금 만드는 장 (1부터)
+          parts: 0, // 만든 장수. 너무 길어 나눴으면 둘 이상
+          names: [], // 장마다 실제로 저장된 이름
+          ids: [], // 장마다의 다운로드 id
+          left: 0, // 아직 끝나지 않은 장 수
+          failedParts: 0, // 받지 못한 장 수
           width: 0,
           height: 0,
           bytes: 0,

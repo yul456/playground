@@ -1,11 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { download } from "../shared/download.js";
+import { partRange } from "../shared/fileNames.js";
 import { fileSize, number } from "../shared/format.js";
 import { JPG_MAX_SIDE } from "../shared/imageInfo.js";
 import { DEFAULT_JPG_QUALITY } from "../shared/jpgQuality.js";
 import { explainSaveError, fileExists, SAVE_TRIES, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
-import { addFile, directionOf, DIRECTIONS, folderKey, groupFileList, pickedScan, planFolders, scanDirectory } from "./folders.js";
+import {
+  addFile,
+  directionOf,
+  DIRECTIONS,
+  folderKey,
+  groupFileList,
+  measureFiles,
+  outNames,
+  pickedScan,
+  planFolders,
+  scanDirectory,
+} from "./folders.js";
 import { cancelJob, runJob } from "./jobs.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
@@ -46,7 +58,8 @@ function ResultText({ result, exists, to }) {
     return (
       <span className={bigger ? "cv-warn" : "cv-ok"}>
         {result.savedTo === "folder" ? "저장함" : "다운로드함"} · {fileSize(result.from)} → {fileSize(result.to)} (
-        {Math.round((result.to / result.from) * 100)}%){bigger && " · 원본보다 커졌습니다"}
+        {Math.round((result.to / result.from) * 100)}%){result.parts > 1 && ` · ${result.parts}장으로 나눔`}
+        {bigger && " · 원본보다 커졌습니다"}
       </span>
     );
   }
@@ -132,7 +145,7 @@ export default function App() {
     }
     setStatus("scanning");
     try {
-      const scan = await scanDirectory(dir);
+      const scan = await measureFiles(await scanDirectory(dir), direction);
       const writable = !writeBlocked && (await dir.queryPermission?.({ mode: "readwrite" })) === "granted";
       open(scan, writable);
     } catch (err) {
@@ -142,10 +155,22 @@ export default function App() {
     }
   }
 
+  // 고른 파일들의 그림 크기를 읽은 뒤 목록에 올린다 (너무 길어 여러 장으로 나눌 파일을 미리 알려고)
+  async function openMeasured(scan, canSave) {
+    setStatus("scanning");
+    try {
+      open(await measureFiles(scan, direction), canSave);
+    } catch (err) {
+      setSource(null);
+      setStatus("idle");
+      setNotice(`파일을 읽지 못했습니다. ${err.message}`);
+    }
+  }
+
   function onFiles(e) {
     const files = [...e.target.files];
     e.target.value = "";
-    if (files.length) open(groupFileList(files), false);
+    if (files.length) openMeasured(groupFileList(files), false);
   }
 
   // 폴더 대신 바꿀 파일을 직접 고른다
@@ -168,44 +193,67 @@ export default function App() {
       setNotice(`파일을 열지 못했습니다. ${err.message}`);
       return;
     }
-    open(pickedScan(handles.map((handle) => ({ name: handle.name, handle }))), false);
+    openMeasured(pickedScan(handles.map((handle) => ({ name: handle.name, handle }))), false);
   }
 
   function onPickedFiles(e) {
     const files = [...e.target.files];
     e.target.value = "";
-    if (files.length) open(pickedScan(files.map((file) => ({ name: file.name, file }))), false);
+    if (files.length) openMeasured(pickedScan(files.map((file) => ({ name: file.name, file }))), false);
   }
 
+  // 작업자가 알려 오는 진행을 이 파일 안의 비율과 글로 바꾼다
+  const describe = ({ phase, part, parts }) => {
+    if (phase === "open") return { fraction: 0.1, text: "여는 중" };
+    if (phase === "find") return { fraction: 0.2, text: "자를 자리 찾는 중" };
+    const which = parts > 1 ? ` (${part}/${parts}장)` : "";
+    return { fraction: 0.3 + (0.6 * (part - 1)) / parts, text: `${direction.to}로 만드는 중${which}` };
+  };
+
+  // 하나라도 이미 있는 이름이 있나
+  const anyExists = async (dir, names) => (await Promise.all(names.map((name) => fileExists(dir, name)))).some(Boolean);
+
   // 파일 하나를 바꿔 원본과 같은 폴더에 저장한다. 그 폴더에 쓸 수 없으면(또는 끝내 저장하지 못하면) 다운로드로 받는다.
-  // 파일을 직접 골랐으면 바꾸기를 누를 때 고른 폴더에 저장한다
+  // 파일을 직접 골랐으면 바꾸기를 누를 때 고른 폴더에 저장한다.
+  // 너무 길어 JPG 여러 장으로 나눴으면 이름에 번호를 붙여(x_1.jpg …) 모두 저장한다. 끝내 저장하지 못한 장만 다운로드로 받는다
   async function convertOne(folder, item, report) {
     let dir = null;
     if (source.picked) dir = pickedDirRef.current;
     else if (source.canSave) dir = folder.dir;
     // 폴더를 읽은 뒤에 같은 이름의 파일이 생겼을 수도 있다. 덮어쓰지 않도록 바꾸기 전에 한 번 더 본다
-    if (dir && (await fileExists(dir, item.out))) return { type: "skipped" };
+    if (dir && (await anyExists(dir, item.outs))) return { type: "skipped" };
     const file = item.source.file ?? (await item.source.handle.getFile());
-    const made = await runJob(file, direction.type, settings.quality, ({ phase }) =>
-      report(phase === "open" ? { fraction: 0.1, text: "여는 중" } : { fraction: 0.4, text: `${direction.to}로 만드는 중` }),
-    );
+    const made = await runJob(file, direction.type, settings.quality, (p) => report(describe(p)));
     if (made.type !== "done") return made;
-    const result = { type: "done", from: file.size, to: made.blob.size };
+    // 크기를 미리 읽지 못했으면(머리가 이상한 파일) 장수가 계획과 다를 수 있다. 그때는 새 이름들이 있는지 다시 본다
+    const names = outNames(item.out, made.parts.length);
+    if (dir && names.length !== item.outs.length && (await anyExists(dir, names))) return { type: "skipped" };
+    const to = made.parts.reduce((sum, part) => sum + part.blob.size, 0);
+    const result = { type: "done", from: file.size, to, parts: names.length, names };
     if (!dir) {
-      download(made.blob, item.out);
+      made.parts.forEach((part, k) => download(part.blob, names[k]));
       return { ...result, savedTo: "download" };
     }
-    const saved = await saveToFolder(dir, item.out, made.blob, {
-      stopped: () => stopRef.current,
-      hold: (writable) => {
-        savingRef.current = writable;
-      },
-      onTry: (n) => report({ fraction: 0.9, text: n === 1 ? "저장하는 중" : `다시 저장하는 중 (${n}/${SAVE_TRIES})` }),
-    });
-    if (saved.ok) return { ...result, savedTo: "folder" };
-    if (saved.cancelled) return { type: "cancelled" };
-    download(made.blob, item.out);
-    return { ...result, savedTo: "download", saveError: explainSaveError(saved.error) };
+    let saveError = null;
+    let fellBack = 0;
+    for (const [k, part] of made.parts.entries()) {
+      const which = names.length > 1 ? ` (${k + 1}/${names.length}장)` : "";
+      const saved = await saveToFolder(dir, names[k], part.blob, {
+        stopped: () => stopRef.current,
+        hold: (writable) => {
+          savingRef.current = writable;
+        },
+        onTry: (n) => report({ fraction: 0.9, text: `${n === 1 ? "저장하는 중" : `다시 저장하는 중 (${n}/${SAVE_TRIES})`}${which}` }),
+      });
+      if (saved.cancelled) return { type: "cancelled" };
+      if (!saved.ok) {
+        download(part.blob, names[k]);
+        saveError ??= explainSaveError(saved.error);
+        fellBack++;
+      }
+    }
+    if (!fellBack) return { ...result, savedTo: "folder" };
+    return { ...result, savedTo: fellBack === names.length ? "download" : "folder", saveError, fellBack };
   }
 
   async function start() {
@@ -248,7 +296,9 @@ export default function App() {
       setResults((all) => ({ ...all, [key]: result }));
       // 저장한 파일을 폴더 목록에 적어 둔다. 다시 돌리면 이미 있는 것으로 보고 건너뛴다.
       // 파일을 직접 골랐을 때는 적지 않는다. 다음에 다른 폴더를 고를 수 있어, 있는지는 고른 폴더에서 그때 본다
-      if (result.savedTo === "folder" && !source.picked) setSource((s) => addFile(s, folder.path, item.out));
+      if (result.savedTo === "folder" && !source.picked) {
+        setSource((s) => result.names.reduce((scan, name) => addFile(scan, folder.path, name), s));
+      }
       if (result.type === "cancelled") break;
     }
     setProgress(null);
@@ -300,6 +350,8 @@ export default function App() {
   // 체크해 둔 파일
   const chosen = folders.flatMap((folder) => folder.items.filter((item) => !off.has(itemKey(folder, item))));
   const existingCount = chosen.filter((item) => item.exists).length;
+  // 너무 길어 여러 장으로 나눌 파일 수 (건너뛸 파일은 빼고)
+  const splitCount = chosen.filter((item) => !item.exists && item.outs.length > 1).length;
   const all = Object.values(results);
   const made = all.filter((r) => r.type === "done");
   const skippedCount = all.filter((r) => r.type === "skipped").length;
@@ -350,7 +402,8 @@ export default function App() {
     footerText = `${parts.join(". ")}.`;
   } else if (chosen.length) {
     const count = chosen.length - existingCount;
-    footerText = `${direction.from} ${number(count)}개를 바꿉니다.`;
+    footerText = count ? `${direction.from} ${number(count)}개를 바꿉니다.` : `바꿀 ${direction.from}가 없습니다.`;
+    if (splitCount) footerText += ` ${number(splitCount)}개는 길어서 여러 장으로 나눕니다.`;
     if (existingCount) footerText += ` ${number(existingCount)}개는 이미 ${direction.to}가 있어 건너뜁니다.`;
   }
 
@@ -469,7 +522,7 @@ export default function App() {
                                 <label className="cv-file">
                                   <input type="checkbox" checked={checked} disabled={running} onChange={() => toggleFile(key)} />
                                   <span className="cv-name">
-                                    {item.name} → {item.out}
+                                    {item.name} → {partRange(result?.names ?? item.outs)}
                                   </span>
                                 </label>
                                 {current ? (
@@ -480,6 +533,7 @@ export default function App() {
                               </div>
                               {result?.saveError && (
                                 <p className="cv-fallback" title={result.saveError.detail}>
+                                  {result.parts > 1 && result.fellBack < result.parts ? `${result.parts}장 중 ${result.fellBack}장은 ` : ""}
                                   {source.picked ? "고른 폴더에" : "원본 옆에"} 저장하지 못해 다운로드 폴더로 받았습니다. {result.saveError.text}
                                 </p>
                               )}
@@ -519,13 +573,22 @@ export default function App() {
         <ul>
           <li>바꾼 파일은 원본과 같은 폴더에 같은 이름으로 저장합니다(x.png → x.jpg). 원본은 지우지 않습니다.</li>
           <li>
+            JPG 한 장에는 높이 {number(JPG_MAX_SIDE)}px까지 담을 수 있어서, 그보다 긴 그림은 높이를 고르게 나눠 여러 장(x_1.jpg,
+            x_2.jpg …)으로 저장합니다. 폭이 넓으면 한 장의 높이가 더 짧아집니다. 자를 자리 근처에서 한 가지 색으로만 된 줄(빈
+            줄)을 찾아 자르고, 그런 줄이 없으면 위아래가 가장 크게 달라지는 줄(사진을 이어 붙인 그림에서는 대개 사진과 사진의
+            경계)에서 자릅니다. 그래도 사진이나 글자의 중간이 잘릴 수 있습니다.
+          </li>
+          <li>
             폴더를 고르면 그 안의 PNG가 폴더별로 나옵니다. 바꿀 파일만 체크해 두면 그 파일만 바꿔 원래 자리에 저장합니다.
           </li>
           <li>
             파일 고르기는 고른 PNG만 바꿉니다. 브라우저가 고른 파일의 폴더에 쓸 권한은 주지 않아서, 바꿀 때 저장할 폴더를
             한 번 묻습니다. 묻지 않게 하려면 폴더 고르기를 쓰세요.
           </li>
-          <li>같은 이름의 JPG가 이미 있으면 덮어쓰지 않고 건너뜁니다. 다시 만들려면 그 JPG를 지우거나 옮긴 뒤 하세요.</li>
+          <li>
+            같은 이름의 JPG가 이미 있으면 덮어쓰지 않고 건너뜁니다. 여러 장으로 나눌 그림은 나눈 이름 가운데 하나라도 있으면
+            건너뜁니다. 다시 만들려면 그 JPG를 지우거나 옮긴 뒤 하세요.
+          </li>
           <li>
             JPG는 품질이 100이어도 PNG와 완전히 같지는 않습니다. 하나도 달라지면 안 되는 그림은 PNG로 두세요. 색 글자가
             또렷해야 하면 100을 고르세요. 투명한 부분은 흰색이 됩니다.
@@ -535,8 +598,8 @@ export default function App() {
             바꾸기 전과 후의 크기가 나옵니다.
           </li>
           <li>
-            한 변이 {number(JPG_MAX_SIDE)}px을 넘는 그림은 JPG로 만들 수 없어 건너뜁니다. 큰 그림은 메모리를 많이 써서
-            바꾸지 못할 수도 있습니다.
+            폭이 {number(JPG_MAX_SIDE)}px을 넘는 그림은 JPG로 만들 수 없어 건너뜁니다. 큰 그림은 메모리를 많이 써서 바꾸지
+            못할 수도 있습니다.
           </li>
           <li>
             원본 옆에 저장하지 못하면 잠깐 뒤 다시 해 보고, 그래도 안 되면 다운로드 폴더로 받습니다. 백신이나 클라우드

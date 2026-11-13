@@ -121,7 +121,7 @@ function showOptions() {
     lines.push(`사진: 다운로드/${BASE_FOLDER}/탭의 페이지 제목/${names}`);
   }
   if (settings.mode !== "files") {
-    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 .png)" : "";
+    const tooLong = settings.stitchFormat === "jpg" ? " (너무 길면 _1.jpg, _2.jpg …로 나눔)" : "";
     lines.push(`이어 붙인 그림: 다운로드/${BASE_FOLDER}/탭의 페이지 제목.${settings.stitchFormat}${tooLong}`);
   }
   $("preview").replaceChildren(
@@ -218,8 +218,8 @@ function progressText(job) {
   if (stitch?.state === "running") {
     if (stitch.phase === "fetch") return `이어 붙일 사진 받는 중 ${stitch.done}/${stitch.total}`;
     if (stitch.phase === "draw") return `이어 붙이는 중 ${stitch.done}/${stitch.total}`;
-    if (stitch.phase === "encode") return "JPG로 만드는 중";
-    return "이어 붙인 그림 저장하는 중";
+    if (stitch.phase === "encode") return stitch.parts > 1 ? `JPG로 만드는 중 (${stitch.part}/${stitch.parts}장)` : "JPG로 만드는 중";
+    return stitch.parts > 1 ? `이어 붙인 그림 ${stitch.parts}장 저장하는 중` : "이어 붙인 그림 저장하는 중";
   }
   return "마무리하는 중";
 }
@@ -241,7 +241,9 @@ function resultOf(job) {
   if (stitch) {
     if (stitch.state === "done") {
       parts.push(`이어 붙임 ${stitch.width.toLocaleString()}×${stitch.height.toLocaleString()}`);
-      // JPG를 골랐는데 너무 길거나 커서 PNG로 받은 탭
+      // JPG 한 장에 담기에 너무 길어 여러 장으로 나눠 받은 탭
+      if (stitch.parts > 1) parts.push(`${stitch.parts}장으로 나눔`);
+      // JPG를 골랐는데 폭이 너무 넓어(또는 만들다 실패해) PNG로 받은 탭
       if (stitch.note) parts.push("JPG로 만들 수 없어 PNG로 받음");
       got = true;
       if (stitch.failed?.length) {

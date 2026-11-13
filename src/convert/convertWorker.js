@@ -1,20 +1,123 @@
 // 사진 하나를 받아 다른 형식으로 바꾼다. 화면이 멈추지 않게 따로 돈다(Web Worker).
 // 받는 것: { type: "run", id, file: File, mime: 만들 형식("image/jpeg"), quality: 품질(1~100) }
-// 보내는 것: progress(phase: open · make), done(blob, width, height), error(message)
+// 보내는 것: progress(phase: open · find · make), done(parts: [{ blob, height }], width, height), error(message)
+// JPG 한 장에 담기에 너무 긴 그림은 높이를 고르게 나눈 자리 근처에서 자를 줄을 찾아 여러 장(parts)으로 만든다. 나머지는 한 장이다.
 // 한 번에 하나만 맡는다. 멈출 때는 화면 쪽이 작업자를 통째로 끝낸다 (브라우저가 그림을 열고 만드는 일은 중간에 멈출 수 없다).
 // 파일로 저장하는 일은 화면 쪽이 한다 (shared/saveToFolder.js)
-import { jpegSize, pngInfo, sizeProblem } from "../shared/imageInfo.js";
+import { evenSplit, jpegSize, jpgMaxHeight, pngInfo, widthProblem } from "../shared/imageInfo.js";
+
+// 자를 줄을 찾을 때 한 번에 읽는 화소 수의 한계(약 1,600만 개, 64MB). 폭이 넓으면 찾는 범위가 좁아진다
+const WINDOW_PIXELS = 16_000_000;
+// 한 가지 색으로 된 줄로 볼 색 차이(0~255). JPG에서 온 그림은 흰 바탕도 몇씩 흔들린다
+const FLAT_TOLERANCE = 12;
 
 // 바꾸지 못하는 까닭을 화면에 그대로 보일 오류
 class Refused extends Error {}
 
 const reader = (blob) => async (start, end) => new Uint8Array(await blob.slice(start, end).arrayBuffer());
 
+// 캔버스를 새 형식으로 만든다. 만든 JPG의 크기가 맞는지도 본다. 인코더가 담지 못하는 크기는 오류 없이 잘려 나온 적이 있다
+async function encode(canvas, mime, quality) {
+  const blob = await canvas.convertToBlob({ type: mime, quality: quality / 100 });
+  // 브라우저가 그 형식을 만들지 못하면 PNG를 돌려준다
+  if (blob.type !== mime) throw new Refused("이 브라우저는 이 형식으로 만들지 못합니다");
+  if (mime === "image/jpeg") {
+    const made = await jpegSize(reader(blob));
+    if (!made || made.width !== canvas.width || made.height !== canvas.height) {
+      throw new Refused("브라우저가 그림을 끝까지 담지 못했습니다");
+    }
+  }
+  return blob;
+}
+
+// 그림의 [top, top + rows) 줄을 캔버스에 올린다. 투명한 곳이 있을 수 있으면 흰 바탕에 그린다 (JPG에는 투명도가 없어 검게 나온다)
+function drawRows(bitmap, top, rows, alpha, readable = false) {
+  const canvas = new OffscreenCanvas(bitmap.width, rows);
+  const ctx = canvas.getContext("2d", { alpha: false, willReadFrequently: readable });
+  if (alpha) {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, bitmap.width, rows);
+  }
+  ctx.drawImage(bitmap, 0, top, bitmap.width, rows, 0, 0, bitmap.width, rows);
+  return { canvas, ctx };
+}
+
+// 캔버스가 잡은 메모리를 바로 놓는다
+function release(canvas) {
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+// target 줄 앞뒤 radius 줄 안에서 자를 줄(다음 장의 첫 줄)을 고른다. 사진 경계를 모르는 그림이라 그림을 보고 고른다.
+// 1. 한 가지 색으로만 된 줄(빈 줄)이 있으면, 그런 줄이 이어진 띠 가운데 target에 가장 가까운 띠의 가운데에서 자른다.
+//    상세 페이지처럼 칸 사이가 비어 있는 그림은 글자나 사진을 자르지 않는다
+// 2. 없으면 위아래 줄이 가장 크게 달라지는 줄에서 자른다. 사진을 이어 붙인 그림에서는 사진과 사진의 경계일 때가 많다
+// 3. 그것도 없으면(위아래가 모두 같으면) target
+function findCut(bitmap, target, radius, alpha) {
+  const width = bitmap.width;
+  const top = target - radius;
+  const rows = 2 * radius + 1;
+  const { canvas, ctx } = drawRows(bitmap, top, rows, alpha, true);
+  const data = ctx.getImageData(0, 0, width, rows).data;
+  release(canvas);
+  const stride = width * 4;
+
+  const flat = new Uint8Array(rows);
+  for (let i = 0; i < rows; i++) {
+    const start = i * stride;
+    const r = data[start];
+    const g = data[start + 1];
+    const b = data[start + 2];
+    let same = 1;
+    for (let j = start + 4; j < start + stride; j += 4) {
+      if (Math.abs(data[j] - r) > FLAT_TOLERANCE || Math.abs(data[j + 1] - g) > FLAT_TOLERANCE || Math.abs(data[j + 2] - b) > FLAT_TOLERANCE) {
+        same = 0;
+        break;
+      }
+    }
+    flat[i] = same;
+  }
+  let best = -1;
+  let bestDistance = Infinity;
+  for (let i = 0; i < rows; ) {
+    if (!flat[i]) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < rows && flat[j]) j++;
+    const middle = Math.floor((i + j) / 2);
+    const distance = Math.abs(top + middle - target);
+    if (distance < bestDistance) {
+      best = middle;
+      bestDistance = distance;
+    }
+    i = j;
+  }
+  if (best >= 0) return top + best;
+
+  let edge = -1;
+  let edgeDiff = 0;
+  for (let i = 1; i < rows; i++) {
+    const above = (i - 1) * stride;
+    const here = i * stride;
+    let diff = 0;
+    for (let j = 0; j < stride; j += 4) {
+      diff += Math.abs(data[above + j] - data[here + j]) + Math.abs(data[above + j + 1] - data[here + j + 1]) + Math.abs(data[above + j + 2] - data[here + j + 2]);
+    }
+    if (diff > edgeDiff) {
+      edgeDiff = diff;
+      edge = i;
+    }
+  }
+  return edge > 0 ? top + edge : target;
+}
+
 async function convert({ file, mime, quality }, post) {
-  // 1. PNG 머리만 읽어 크기를 본다. 너무 큰 그림은 여는 데만도 메모리를 많이 쓰므로 열기 전에 거른다
+  // 1. PNG 머리만 읽어 크기를 본다. 폭이 너무 넓은 그림은 나눠도 JPG로 만들 수 없으므로 열기 전에 거른다
   const info = await pngInfo(reader(file)).catch(() => null);
   if (info) {
-    const problem = sizeProblem(info.width, info.height);
+    const problem = widthProblem(info.width);
     if (problem) throw new Refused(problem);
   }
 
@@ -28,42 +131,54 @@ async function convert({ file, mime, quality }, post) {
   }
   const { width, height } = bitmap;
   // 확장자만 PNG인 다른 형식이면 머리를 읽지 못했으므로 연 뒤에 한 번 더 본다
-  const problem = sizeProblem(width, height);
+  const problem = widthProblem(width);
   if (problem) {
     bitmap.close();
     throw new Refused(problem);
   }
+  const alpha = !info || info.alpha;
+  const maxHeight = mime === "image/jpeg" ? jpgMaxHeight(width) : height;
 
-  // 3. 캔버스에 올려 새 형식으로 만든다
-  post({ type: "progress", phase: "make" });
-  const canvas = new OffscreenCanvas(width, height);
-  try {
-    if (info && !info.alpha) {
-      // 투명한 곳이 없는 PNG는 연 그림을 캔버스에 그대로 넘긴다. 다시 그리면 같은 크기의 메모리를 한 벌 더 쓴다
-      canvas.getContext("bitmaprenderer").transferFromImageBitmap(bitmap);
-    } else {
-      // JPG에는 투명도가 없다. 투명한 곳이 검게 나오지 않도록 흰 바탕에 그린다
-      const ctx = canvas.getContext("2d", { alpha: false });
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(bitmap, 0, 0);
+  // 3. 한 장에 담기면 캔버스에 올려 새 형식으로 만든다
+  if (height <= maxHeight) {
+    post({ type: "progress", phase: "make", part: 1, parts: 1 });
+    let canvas;
+    if (alpha) {
+      canvas = drawRows(bitmap, 0, height, true).canvas;
       bitmap.close();
+    } else {
+      // 투명한 곳이 없는 PNG는 연 그림을 캔버스에 그대로 넘긴다. 다시 그리면 같은 크기의 메모리를 한 벌 더 쓴다
+      canvas = new OffscreenCanvas(width, height);
+      canvas.getContext("bitmaprenderer").transferFromImageBitmap(bitmap);
     }
-    const blob = await canvas.convertToBlob({ type: mime, quality: quality / 100 });
-    // 브라우저가 그 형식을 만들지 못하면 PNG를 돌려준다
-    if (blob.type !== mime) throw new Refused("이 브라우저는 이 형식으로 만들지 못합니다");
-    // 4. 만든 JPG의 크기가 원본과 같은지 본다. 인코더가 담지 못하는 크기는 오류 없이 잘려 나온 적이 있다
-    if (mime === "image/jpeg") {
-      const made = await jpegSize(reader(blob));
-      if (!made || made.width !== width || made.height !== height) {
-        throw new Refused("브라우저가 그림을 끝까지 담지 못했습니다");
+    try {
+      return { parts: [{ blob: await encode(canvas, mime, quality), height }], width, height };
+    } finally {
+      release(canvas);
+    }
+  }
+
+  // 4. 너무 길면 높이를 고르게 나눈 자리마다 그 근처에서 자를 줄을 찾아 여러 장으로 만든다 (shared/imageInfo.js의 evenSplit.
+  //    화면도 같은 규칙으로 장수를 미리 세어 저장할 이름을 정한다). 찾는 범위는 한 장이 maxHeight를 넘지 않을 만큼이다
+  try {
+    post({ type: "progress", phase: "find" });
+    const { targets, radius } = evenSplit(height, maxHeight);
+    const reach = Math.min(radius, Math.floor(WINDOW_PIXELS / width / 2));
+    const cuts = [0, ...targets.map((target) => (reach > 0 ? findCut(bitmap, target, reach, alpha) : target)), height];
+    const parts = [];
+    for (let k = 1; k < cuts.length; k++) {
+      post({ type: "progress", phase: "make", part: k, parts: cuts.length - 1 });
+      const rows = cuts[k] - cuts[k - 1];
+      const { canvas } = drawRows(bitmap, cuts[k - 1], rows, alpha);
+      try {
+        parts.push({ blob: await encode(canvas, mime, quality), height: rows });
+      } finally {
+        release(canvas);
       }
     }
-    return { blob, width, height };
+    return { parts, width, height };
   } finally {
-    // 캔버스가 잡은 메모리를 바로 놓는다
-    canvas.width = 0;
-    canvas.height = 0;
+    bitmap.close();
   }
 }
 

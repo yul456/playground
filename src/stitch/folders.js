@@ -73,7 +73,8 @@ export const cleanSuffix = (text) =>
 // parent: 바로 위 폴더 이름을 앞에 붙인다 (a/1 → a_1_합본.png, a/1/x → 1_x_합본.png). 폴더 이름이 1, 2처럼 짧을 때 쓴다
 export const NAMINGS = ["folder", "parent"];
 
-// 저장 형식(확장자). jpg는 사진에 알맞고 작다. 한 변이 너무 길어 JPG로 만들 수 없는 묶음은 png로 저장된다.
+// 저장 형식(확장자). jpg는 사진에 알맞고 작다. JPG 한 장에 담기에 너무 긴 묶음은 사진 사이에서 나눠
+// 여러 장(1_합본_1.jpg, 1_합본_2.jpg …)으로 저장되고, 폭이 너무 넓은 묶음만 png로 저장된다.
 // png는 화질을 하나도 잃지 않지만 크다
 export const FORMATS = ["jpg", "png"];
 
@@ -96,6 +97,8 @@ export function outputNames(groups, suffix, rootName = "", naming = "folder", ex
 // 결과는 모두 고른 폴더에 저장되므로, 고른 폴더의 사진에서 이 화면이 만들었을 이름의 그림은 뺀다.
 // 지금 붙일 말과 전에 쓴 붙일 말(pastSuffixes), 두 이름 방식, 두 저장 형식으로 만들 이름을 모두 본다.
 // 붙일 말이나 이름 방식, 저장 형식을 바꿔 다시 돌려도 지난 결과가 붙지 않게 하려는 것이다.
+// 길어서 JPG 여러 장으로 나눠 저장한 결과(그 이름에 _1, _2 …를 붙인 JPG)도 뺀다. 번호 앞에 0이 붙은 이름(제주_001.jpg)은
+// 이 화면이 만들지 않으므로 사진으로 본다.
 // ext는 이번에 저장할 형식이다. JPG로 만들 수 없는 묶음은 화면 쪽이 저장할 때 확장자를 png로 바꾼다
 export function planGroups(scan, suffix, pastSuffixes = [], naming = "folder", ext = "png") {
   const all = [{ path: [], files: scan.rootFiles }, ...scan.groups];
@@ -105,7 +108,13 @@ export function planGroups(scan, suffix, pastSuffixes = [], naming = "folder", e
       for (const format of FORMATS) for (const name of outputNames(all, s, scan.name, n, format)) ours.add(name.toLowerCase());
     }
   }
-  const photos = scan.rootFiles.filter((f) => !ours.has(f.name.toLowerCase()));
+  const isOurs = (name) => {
+    const lower = name.toLowerCase();
+    if (ours.has(lower)) return true;
+    const part = /^(.*)_[1-9]\d*(\.jpg)$/.exec(lower);
+    return Boolean(part) && ours.has(part[1] + part[2]);
+  };
+  const photos = scan.rootFiles.filter((f) => !isOurs(f.name));
   const groups = photos.length
     ? [{ path: [], files: photos, excluded: scan.rootFiles.length - photos.length }, ...scan.groups]
     : scan.groups;

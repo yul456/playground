@@ -5,9 +5,11 @@ export const MADE = 0.95;
 // 사진을 다 그린 때. JPG는 다 그린 뒤에 한꺼번에 만들어서 그 몫을 남겨 둔다
 const DRAWN = 0.85;
 
-// { fraction, text }. 크기 확인은 금방 끝나 10%로 친다
+// { fraction, text }. 크기 확인은 금방 끝나 10%로 친다. 그 뒤는 그린 줄 수로 센다.
+// JPG를 여러 장으로 나눠 만들 때는 장마다 그리고 만들기를 되풀이한다 (encode의 part/parts)
 export function describe(p) {
   if (p.phase === "measure") return { fraction: 0.1 * (p.done / p.total), text: `사진 크기 확인 ${p.done}/${p.total}` };
-  if (p.phase === "encode") return { fraction: DRAWN, text: "JPG로 만드는 중" };
-  return { fraction: 0.1 + (DRAWN - 0.1) * (p.rows / p.totalRows), text: `붙이는 중 ${p.done}/${p.total}장` };
+  const fraction = 0.1 + (DRAWN - 0.1) * (p.rows / p.totalRows);
+  if (p.phase === "encode") return { fraction, text: p.parts > 1 ? `JPG로 만드는 중 (${p.part}/${p.parts}장)` : "JPG로 만드는 중" };
+  return { fraction, text: `붙이는 중 ${p.done}/${p.total}장` };
 }

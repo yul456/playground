@@ -15,7 +15,8 @@ export const SMALL = 100;
 export const NO_EXT = "?";
 // 받는 방식: 사진 따로, 세로로 이어 붙인 한 장, 둘 다
 export const MODES = ["files", "stitch", "both"];
-// 이어 붙인 그림의 형식: jpg(작다. 너무 길거나 커서 JPG로 만들 수 없으면 png로 받는다) · png(화질 그대로, 크다)
+// 이어 붙인 그림의 형식: jpg(작다. JPG 한 장에 담기에 너무 길면 여러 장으로 나눠 받고, 폭이 너무 넓으면 png로 받는다) ·
+// png(화질 그대로, 크다)
 export const STITCH_FORMATS = ["jpg", "png"];
 // JPG 품질과 기본값. 사이트의 src/shared/jpgQuality.js와 같은 값이다 (바꾸면 함께 바꾼다. 기본 95를 고른 까닭도 거기 있다)
 export const JPG_QUALITIES = [100, 95, 90, 80];

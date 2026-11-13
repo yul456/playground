@@ -1,9 +1,10 @@
 // 고른 사진을 받아 세로로 이어 붙인 그림(Blob)을 만든다. 보이지 않는 문서(offscreen.js)에서 돈다.
 // 규칙은 사진 세로로 붙이기(src/stitch)와 같다: 폭은 가장 넓은 사진에 맞추고 크기는 줄이지 않으며,
 // 좁은 사진은 가운데에 두고 양옆을 흰색으로 채운다.
-// JPG를 바라면 JPG로 만들고, 너무 길거나 커서 JPG로 만들 수 없으면 PNG로 만든다.
-// PNG는 png.js(src/stitch/png.js 복사본)로 줄 단위로 이어 쓴다. 크기 한계는 imageInfo.js(src/shared/imageInfo.js 복사본)에 있다
-import { jpegSize, sizeProblem } from "./imageInfo.js";
+// JPG를 바라면 JPG로 만들고, JPG 한 장에 담기에 너무 길면 사진과 사진 사이에서 고르게 나눠 JPG 여러 장으로 만든다.
+// 폭이 너무 넓어 JPG로 만들 수 없으면 PNG로 만든다.
+// PNG는 png.js(src/stitch/png.js 복사본)로 줄 단위로 이어 쓴다. 크기 한계와 나눌 자리는 imageInfo.js(src/shared/imageInfo.js 복사본)에 있다
+import { jpegSize, jpgMaxHeight, splitAtPhotos, widthProblem } from "./imageInfo.js";
 import { openPng } from "./png.js";
 
 // 한 번에 그려 PNG로 넘길 화소 수(약 800만 개, 32MB)
@@ -103,27 +104,35 @@ async function load(url) {
   }
 }
 
-// JPG로 만든다. 브라우저의 JPG 인코더는 캔버스 한 장을 통째로 받으므로 사진을 큰 캔버스 한 장에 모두 그린다.
-// 캔버스는 화소마다 4바이트를 쓴다. 만들 수 있는 크기인지는 부르는 쪽이 먼저 본다
-async function makeJpg(items, width, height, quality, onProgress) {
-  const canvas = new OffscreenCanvas(width, height);
+// JPG 한 장을 만든다. 이어 붙인 그림의 [start, end) 줄을 캔버스 한 장에 그려 브라우저의 JPG 인코더에 넘긴다
+// (인코더는 캔버스 한 장을 통째로 받는다). 나눠 만들 때는 장마다 부른다.
+// 캔버스는 화소마다 4바이트를 쓴다. 만들 수 있는 크기인지는 부르는 쪽이 먼저 본다. part: { index: 몇 번째 장(1부터), count: 모두 몇 장 }
+async function makeJpg(items, width, [start, end], quality, onProgress, part) {
+  const rows = end - start;
+  const canvas = new OffscreenCanvas(width, rows);
   try {
     const ctx = canvas.getContext("2d", { alpha: false });
     ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, width, rows);
     let y = 0;
     for (const [k, item] of items.entries()) {
-      const bitmap = await open(item);
-      ctx.drawImage(bitmap, Math.floor((width - item.width) / 2), y);
-      bitmap.close();
+      const top = y;
       y += item.height;
+      // 이 장에 드는 줄만 그린다. 사진 사이에서 나누므로 보통은 사진 하나가 한 장에 다 들고, 한 장보다 긴 사진만 여러 장에 걸친다
+      const from = Math.max(start, top);
+      const to = Math.min(end, y);
+      if (from >= to) continue;
+      const bitmap = await open(item);
+      ctx.drawImage(bitmap, 0, from - top, item.width, to - from, Math.floor((width - item.width) / 2), from - start, item.width, to - from);
+      bitmap.close();
+      if (y <= end) item.blob = null; // 다 그린 사진은 놓아 준다 (다음 장에는 들지 않는다)
       onProgress({ phase: "draw", done: k + 1, total: items.length });
     }
-    onProgress({ phase: "encode", done: items.length, total: items.length });
+    onProgress({ phase: "encode", done: items.length, total: items.length, part: part.index, parts: part.count });
     const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: quality / 100 });
     // 만든 JPG의 크기가 맞는지 본다. 인코더가 담지 못하는 크기는 오류 없이 잘려 나온 적이 있다
-    const made = blob.type === "image/jpeg" ? await jpegSize(async (start, end) => new Uint8Array(await blob.slice(start, end).arrayBuffer())) : null;
-    if (!made || made.width !== width || made.height !== height) throw new Error("JPG가 온전히 만들어지지 않았습니다");
+    const made = blob.type === "image/jpeg" ? await jpegSize(async (a, b) => new Uint8Array(await blob.slice(a, b).arrayBuffer())) : null;
+    if (!made || made.width !== width || made.height !== rows) throw new Error("JPG가 온전히 만들어지지 않았습니다");
     return blob;
   } finally {
     // 캔버스가 잡은 메모리를 바로 놓는다
@@ -165,9 +174,10 @@ async function makePng(items, width, height, onProgress) {
   }
 }
 
-// urls 순서대로 이어 붙인다. onProgress({ phase: "fetch" | "draw" | "encode", done, total }).
+// urls 순서대로 이어 붙인다. onProgress({ phase: "fetch" | "draw" | "encode", done, total, part, parts }).
 // format: 바라는 형식("jpg" · "png"), quality: JPG 품질(1~100).
-// 결과의 format은 실제로 만든 형식이고, note는 JPG를 바랐는데 PNG로 만든 까닭이다
+// 결과의 parts는 다 만든 그림 [{ blob, height }]이다. JPG 한 장에 담기에 너무 길어 나눴으면 둘 이상이다.
+// format은 실제로 만든 형식이고, note는 JPG를 바랐는데 PNG로 만든 까닭이다
 export async function stitchImages(urls, onProgress, { format = "png", quality = 95 } = {}) {
   // 1. 받기와 크기 재기. 폭과 높이를 알아야 형식을 정하고 PNG 머리를 쓸 수 있어서 다 받아 본 뒤에 그린다
   const loaded = new Array(urls.length);
@@ -187,21 +197,39 @@ export async function stitchImages(urls, onProgress, { format = "png", quality =
   if (!items.length) throw new Error("이어 붙일 수 있는 사진이 없습니다");
   const width = Math.max(...items.map((item) => item.width));
   const height = items.reduce((sum, item) => sum + item.height, 0);
-  const result = (blob, made, note) => ({ blob, width, height, bytes: blob.size, count: items.length, failed, format: made, note });
+  const result = (parts, made, note) => ({
+    parts,
+    width,
+    height,
+    bytes: parts.reduce((sum, part) => sum + part.blob.size, 0),
+    count: items.length,
+    failed,
+    format: made,
+    note,
+  });
 
-  // 2. JPG를 바라면 JPG로 만든다. 너무 길거나 커서 만들 수 없으면, 또는 만들다 실패하면 PNG로 만들고 까닭을 알린다
+  // 2. JPG를 바라면 JPG로 만든다. JPG 한 장에 담기에 너무 길면 사진과 사진 사이에서 고르게 나눠 여러 장으로 만든다
+  //    (imageInfo.js의 splitAtPhotos, 사진 세로로 붙이기와 같은 규칙). 폭이 너무 넓어 만들 수 없으면,
+  //    또는 만들다 실패하면 PNG로 만들고 까닭을 알린다
   let note = null;
   if (format === "jpg") {
-    note = sizeProblem(width, height);
+    note = widthProblem(width);
     if (!note) {
       try {
-        return result(await makeJpg(items, width, height, quality, onProgress), "jpg", null);
+        const maxHeight = jpgMaxHeight(width);
+        const ranges = height > maxHeight ? splitAtPhotos(items.map((item) => item.height), maxHeight) : [[0, height]];
+        const parts = [];
+        for (const [k, range] of ranges.entries()) {
+          const blob = await makeJpg(items, width, range, quality, onProgress, { index: k + 1, count: ranges.length });
+          parts.push({ blob, height: range[1] - range[0] });
+        }
+        return result(parts, "jpg", null);
       } catch (err) {
         note = `브라우저가 JPG를 만들지 못했습니다 (${err?.message || err})`;
       }
     }
   }
 
-  // 3. PNG로 만든다
-  return result(await makePng(items, width, height, onProgress), "png", note);
+  // 3. PNG로 만든다. PNG는 길이에 한계가 없어 늘 한 장이다
+  return result([{ blob: await makePng(items, width, height, onProgress), height }], "png", note);
 }

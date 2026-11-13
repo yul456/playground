@@ -7,6 +7,7 @@ export default function ResultText({ result, overwrite = false }) {
     return (
       <span className="st-ok">
         {result.savedTo === "download" ? "다운로드함" : "저장함"} · {number(result.width)}×{number(result.height)}px ·{" "}
+        {result.parts > 1 && `${result.parts}장 · `}
         {fileSize(result.bytes)} · {duration(result.ms)}
       </span>
     );
