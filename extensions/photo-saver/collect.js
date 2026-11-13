@@ -198,3 +198,23 @@ export function showToast(text) {
   (document.body || document.documentElement).append(box);
   setTimeout(() => box.remove(), 2500);
 }
+
+// 링크 고르기 중에 페이지가 새 창(window.open)으로 글을 열면, 열지 않고 그 주소를 알린다(photo-saver-open 이벤트, picker.js가 듣는다).
+// 페이지 쪽 공간(MAIN)에 넣어야 페이지의 window.open을 감쌀 수 있다(links.js가 world: "MAIN"으로 넣는다).
+// 고르기 중(html의 data-photo-saver-picking)이 아니면 원래대로 연다. 함수 밖의 이름을 쓰면 안 된다
+export function wrapWindowOpen() {
+  if (window.__photoSaverOpen) return;
+  window.__photoSaverOpen = true;
+  const original = window.open;
+  window.open = function open(url, ...rest) {
+    if (!document.documentElement.hasAttribute("data-photo-saver-picking") || url == null || url === "") return original.call(this, url, ...rest);
+    let href = "";
+    try {
+      href = new URL(String(url), document.baseURI).href;
+    } catch {
+      // 주소가 아닌 값
+    }
+    document.dispatchEvent(new CustomEvent("photo-saver-open", { detail: href }));
+    return null;
+  };
+}

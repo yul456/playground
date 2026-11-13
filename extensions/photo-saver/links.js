@@ -3,6 +3,7 @@
 //   팝업은 페이지를 누르면 닫혀서, 팝업에서 누르면 사이드바를 열고 그쪽에서 켠다(pickOnOpen)
 // - 이 페이지 링크: 페이지의 링크를 주소 모양으로 묶어(linkGroups.js) 체크박스로 보이고, 고른 것을 목록에 넣는다.
 //   가장 큰 묶음(글 목록으로 보이는 것)을 처음에 골라 둔다
+import { wrapWindowOpen } from "./collect.js";
 import { findLinks } from "./core.js";
 import { groupLinks, matchesFilter, shapeLabel } from "./linkGroups.js";
 import { QUEUE_MAX, loadQueue, queueAdd, queueToggle, watchQueue } from "./queue.js";
@@ -65,12 +66,14 @@ export function mountLinks({ inPanel, openPanel }) {
     const run = pickRun;
     try {
       await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["picker.js"] });
+      // 새 창으로 여는 글을 잡으려고 페이지 쪽 공간에 window.open 감싸기를 넣는다 (넣지 못해도 고르기는 된다)
+      await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, world: "MAIN", func: wrapWindowOpen }).catch(() => {});
     } catch {
       if (run === pickRun) pickNote("이 페이지에서는 링크를 고를 수 없습니다 (크롬 설정·웹 스토어 같은 페이지).");
       return;
     }
     if (run !== pickRun) return;
-    pickNote("페이지에서 글(링크)을 누르면 열린 탭 받기 목록에 넣고, 다시 누르면 뺍니다. 넣은 링크는 초록 테두리로 보입니다. 다른 쪽으로 가려면 고르기를 끄고 누르세요.");
+    pickNote("페이지에서 글을 누르면 열지 않고 열린 탭 받기 목록에 넣고, 다시 누르면 뺍니다. 버튼으로 여는 글도 넘어가려는 주소를 잡아 넣습니다. 넣은 링크는 초록 테두리로 보입니다. 다른 쪽으로 가려면 고르기를 끄고 누르세요.");
     const next = chrome.tabs.connect(tabId, { name: PORT_NAME });
     port = next;
     next.onDisconnect.addListener(() => {
