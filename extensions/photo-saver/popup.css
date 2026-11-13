@@ -36,8 +36,10 @@ body {
 
 main { padding: 14px 14px 0; }
 h1 { margin: 0; font-size: 15px; }
-/* 제목과 "열린 탭 받기" */
+/* 제목과 "사이드바로 열기", "열린 탭 받기" */
 .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.head-links { display: flex; gap: 12px; white-space: nowrap; }
+.head-links [hidden] { display: none; }
 .page { margin: 2px 0 10px; overflow: hidden; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
 
 .message { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); }
@@ -161,6 +163,10 @@ button.link { padding: 0; background: none; color: var(--accent); }
 button.secondary { border: 1px solid var(--border); background: transparent; color: var(--accent); }
 
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+
+/* 사이드바(크롬 사이드 패널)에 열렸을 때: 폭은 사이드바에 맞추고, 사진 칸 수는 폭에 따라 바뀐다 */
+html.panel { width: auto; }
+html.panel .grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 .cell label { display: block; position: relative; cursor: pointer; }
 .thumb {
   display: flex;

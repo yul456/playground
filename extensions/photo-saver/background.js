@@ -5,6 +5,13 @@
 //   그 Blob 주소를 넘겨받아 여기서 받는다 (서비스 워커는 Blob 주소를 만들지 못한다).
 //   JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 와서 "제목_1.jpg", "제목_2.jpg" …로 받는다
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase } from "./names.js";
+import { applyOpenIn, loadOpenIn } from "./opener.js";
+
+// 아이콘을 누르면 팝업과 사이드바 가운데 무엇을 열지 다시 맞춘다 (브라우저를 켤 때, 확장 프로그램을 설치하거나 새로 고칠 때).
+// 크롬이 이 설정을 기억하는지 문서에 없어서 그때마다 맞춘다
+const restoreOpenIn = () => loadOpenIn().then(applyOpenIn).catch(() => {});
+chrome.runtime.onStartup.addListener(restoreOpenIn);
+chrome.runtime.onInstalled.addListener(restoreOpenIn);
 
 // 한 번에 시작을 기다리는 다운로드 수. 시작만 기다리고 끝나기는 기다리지 않아서 실제로는 여러 장을 함께 받는다
 const STARTING = 4;

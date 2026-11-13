@@ -10,9 +10,17 @@
   <main>
     <div class="head">
       <h1>페이지 사진 받기</h1>
-      <button type="button" class="link" id="openBatch" title="이 창에 열려 있는 탭들을 차례로 받습니다">열린 탭 받기</button>
+      <span class="head-links">
+        <button type="button" class="link" id="openPanel" title="같은 화면을 크롬 사이드바에 엽니다. 다른 곳을 눌러도 닫히지 않습니다" disabled>사이드바로 열기</button>
+        <button type="button" class="link" id="openBatch" title="이 창에 열려 있는 탭들을 차례로 받습니다">열린 탭 받기</button>
+      </span>
     </div>
     <p class="page" id="page">&nbsp;</p>
+    <fieldset class="modes opener">
+      <legend>아이콘을 누르면</legend>
+      <label><input type="radio" name="openIn" value="popup"> 팝업</label>
+      <label><input type="radio" name="openIn" value="panel"> 사이드바</label>
+    </fieldset>
     <div class="sets" id="sets"></div>
     <div class="message" id="message" hidden></div>
 

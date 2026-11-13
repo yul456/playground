@@ -1,7 +1,10 @@
-// 확장 프로그램 버튼을 누르면 뜨는 창. 지금 탭의 사진을 찾아 보여 주고, 고른 사진을 받게 맡긴다(background.js)
+// 확장 프로그램 버튼을 누르면 뜨는 창. 지금 탭의 사진을 찾아 보여 주고, 고른 사진을 받게 맡긴다(background.js).
+// 같은 화면을 크롬 사이드바(사이드 패널)에도 연다 (manifest의 side_panel). 사이드바는 다른 곳을 눌러도 닫히지 않고,
+// 탭을 바꾸거나 다른 페이지로 넘어가도 열려 있어서 그때마다 지금 탭의 사진을 다시 찾는다(follow)
 import { JPG_QUALITIES, NO_EXT, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, newItem, saveExts, saveRules, saveSettings, typeOf } from "./core.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
+import { applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
 import { mountSets } from "./sets.js";
 
 const STITCH_URL = "https://yul456.github.io/playground/stitch/";
@@ -17,7 +20,13 @@ const START_TEXT = {
 
 const $ = (id) => document.getElementById(id);
 
+// 사이드바에 열렸는지. 팝업이면 크롬이 팝업 창 목록(getViews type popup)에 이 창을 넣어 둔다
+const inPanel = !(chrome.extension?.getViews?.({ type: "popup" }) ?? [window]).includes(window);
+
 let tabId = null;
+let windowId = null;
+// 사진 찾기를 시작한 차례. 탭을 빨리 바꾸면 늦게 끝난 앞 탭의 결과를 버린다
+let scanRun = 0;
 let pageTitle = "";
 let pageHost = "";
 // { url, name, ext(확장자, 모르면 null), typed(종류를 다 알아봤나), width, height, alt, background, broken, checked, touched, cell }
@@ -80,6 +89,7 @@ function showBlocked(err) {
 }
 
 async function scan() {
+  const run = ++scanRun;
   if (tabId == null) {
     showMessage("사진을 찾을 탭을 알지 못했습니다.");
     return;
@@ -89,9 +99,17 @@ async function scan() {
   try {
     page = await findImages(tabId);
   } catch (err) {
+    if (run !== scanRun) return;
+    // 사이드바는 앞 탭의 목록이 남아 있을 수 있어 비운다
+    items = [];
+    $("grid").replaceChildren();
+    $("form").hidden = true;
+    $("page").textContent = " ";
+    updateStart();
     showBlocked(err);
     return;
   }
+  if (run !== scanRun) return;
   pageTitle = page.title;
   pageHost = page.host;
 
@@ -493,7 +511,31 @@ function showJob(next) {
   updateStart();
 }
 
+// 사이드바: 다른 탭을 보거나 지금 탭이 다른 페이지로 넘어가면 그 페이지의 사진을 처음부터 다시 찾는다.
+// 고른 상태와 폴더 이름은 페이지마다 새로 한다 ("다시 찾기"는 같은 페이지라 고른 상태를 이어 간다)
+function follow(id) {
+  tabId = id;
+  items = [];
+  folderEdited = false;
+  scan();
+}
+
+// 아이콘을 누르면 팝업과 사이드바 가운데 무엇을 열지. 고르는 즉시 저장하고 바로 맞춘다 (opener.js)
+async function mountOpenIn() {
+  const value = await loadOpenIn();
+  for (const radio of document.querySelectorAll("input[name=openIn]")) {
+    radio.checked = radio.value === value;
+    radio.addEventListener("change", async () => {
+      await saveOpenIn(radio.value);
+      await applyOpenIn(radio.value).catch((err) => showMessage("아이콘을 누를 때의 동작을 바꾸지 못했습니다.", err.message));
+    });
+  }
+  // 서비스 워커가 브라우저를 켤 때 맞추지만, 그 전에 열렸을 수도 있어 한 번 더 맞춘다
+  applyOpenIn(value).catch(() => {});
+}
+
 async function init() {
+  if (inPanel) document.documentElement.classList.add("panel");
   $("base").textContent = BASE_FOLDER;
   // 설정 세트를 바꾸거나 지우면 옵션, 꺼 둔 확장자, 빼 둔 이름이 한꺼번에 바뀐다. 창을 다시 읽어 새 값으로 처음부터 그린다
   mountSets($("sets"), () => location.reload());
@@ -559,10 +601,29 @@ async function init() {
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "job") showJob(message.job);
   });
+  // 사이드바로 열기 (팝업에서만). 사이드바는 누른 그때만 열 수 있어서(사용자 동작) 다른 일을 기다리지 않고 바로 연다
+  $("openPanel").hidden = inPanel;
+  $("openPanel").addEventListener("click", () => {
+    chrome.sidePanel.open({ windowId }).then(
+      () => window.close(),
+      (err) => showMessage("사이드바를 열지 못했습니다. 크롬 116 이상에서 됩니다.", err.message),
+    );
+  });
+  mountOpenIn();
   renderRules();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id ?? null;
+  windowId = tab?.windowId ?? null;
+  $("openPanel").disabled = windowId == null;
+  if (inPanel) {
+    chrome.tabs.onActivated.addListener((info) => {
+      if (info.windowId === windowId) follow(info.tabId);
+    });
+    chrome.tabs.onUpdated.addListener((id, change) => {
+      if (id === tabId && change.status === "complete") follow(id);
+    });
+  }
   const reply = await chrome.runtime.sendMessage({ type: "status" }).catch(() => null);
   if (reply?.job) showJob(reply.job);
   await scan();

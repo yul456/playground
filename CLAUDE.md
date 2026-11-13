@@ -216,7 +216,7 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
 - 사이트에는 안내 페이지(`photo-saver/`, `src/photo-saver/`)만 둔다. 빌드할 때 `vite.config.js`의 `photoSaverZip`이 `scripts/zip-folder.mjs`로 폴더를 묶어 `photo-saver/photo-saver.zip`에 둔다(개발 서버는 받을 때마다 새로 묶는다).
 - ZIP 안에 폴더를 한 겹 더 두지 않는다. 윈도우 "압축 풀기"는 ZIP 이름으로 폴더를 만들어 풀어서 두 겹이 된다.
 - 확장 프로그램을 고치면 `manifest.json`의 `version`을 올린다. 안내 페이지가 이 값을 보여 준다(`__PHOTO_SAVER_VERSION__`). 이 값은 서버가 뜰 때 한 번 읽으므로, 개발 서버는 manifest.json이 바뀌면 스스로 다시 뜬다(`photoSaverZip`의 `configureServer`). 사용자는 새 ZIP으로 폴더를 바꾸고 chrome://extensions에서 새로고침한다.
-- 권한은 `activeTab`·`scripting`·`downloads`·`offscreen`과 host `<all_urls>`다.
+- 권한은 `activeTab`·`scripting`·`downloads`·`offscreen`·`sidePanel`·`storage`와 host `<all_urls>`다 (`sidePanel`·`storage`는 1.10.0 사이드바부터).
   - `<all_urls>`는 이어 붙이기 때문이다(1.1부터). 사진은 대개 다른 주소(pstatic.net 등)에 있어 사진을 직접 받아 읽으려면 그 주소의 권한이 있어야 한다. 페이지는 툴바 버튼을 누를 때만 읽는다.
   - 1.0은 activeTab만 써서 다른 사이트의 iframe은 크롬이 건너뛰었다. 지금은 `<all_urls>`라 다 들어가지므로, 팝업이 맨 위 페이지와 같은 사이트의 프레임만 쓴다(`names.js`의 `siteOf`: 도메인 뒤쪽 두 마디, co.kr 같은 나라 도메인은 세 마디. 공개 접미사 목록 없이 어림으로 정한다).
   - 1.1~1.3은 origin이 같은 프레임만 써서, 네이버 지도(map.naver.com)의 장소 사진(pcmap.place.naver.com 프레임)이 목록에 나오지 않았다. 사용자가 같은 사이트 틀까지 읽자고 해서 바꿨다(2026-11-11, 1.4.0). 다른 사이트의 광고와 네이버 블로그 옆 위젯(blog.naverblogwidget.com)은 계속 빠지고, 네이버 블로그 본문(PostView 프레임)은 전처럼 남는다. 네이버가 자기 주소로 넣는 틀의 그림은 섞일 수 있다.
@@ -270,6 +270,13 @@ React + Vite 멀티 페이지 앱. 기능마다 `<기능>/index.html` + `src/<�
   - 세트에는 `settings`(받는 방식, 이름, 꾸밈 그림 숨기기, 다 받은 탭은 닫기), `excludedExts`, `excludedNames`가 모두 들어간다. 빼 둔 이름도 세트마다 따로다(사이트마다 빼야 할 사진이 달라서 그렇게 권했고 사용자가 받아들였다).
   - 지금 고른 세트의 값은 늘 그 세 열쇠에 있다. 세트를 바꿀 때만 지금 값을 그 세트 자리(`sets`의 `data`)에 넣어 두고, 고른 세트의 값을 세 열쇠로 꺼낸다(`core.js`의 `switchSet`). 그래서 다른 코드는 세트를 몰라도 되고, 옵션을 바꾸면 따로 저장하지 않아도 고른 세트에 저장된다.
   - 고르는 줄은 `sets.js`의 `mountSets`가 만들고 팝업과 열린 탭 받기가 함께 쓴다. 이름은 줄 아래 칸에서 묻는다(팝업에서 prompt·confirm 창을 쓰지 않으려고). 새 세트는 지금 설정을 복사해 만든다. 세트를 바꾸거나 지우면 팝업은 `location.reload()`로 처음부터 다시 그리고, 열린 탭 받기는 `readOptions`로 다시 읽는다. 세트가 하나면 지울 수 없다.
+- 사이드바(사용자 요청, 2026-11-13, 1.10.0): 같은 popup.html을 크롬 사이드 패널에도 연다(manifest `side_panel.default_path`). 팝업과 사이드바를 함께 두자고 했다.
+  - 팝업 오른쪽 위 "사이드바로 열기"는 `chrome.sidePanel.open({ windowId })`를 누른 자리에서 바로 부르고 팝업을 닫는다. 사이드바는 사용자 동작으로만 열 수 있어서 그 앞에 다른 일을 기다리면(await) 막힌다고 알려져 있다. 창 id는 창을 열 때 미리 알아 둔다.
+  - 팝업인지 사이드바인지는 `chrome.extension.getViews({ type: "popup" })`에 자기 창이 있는지로 안다. 사이드바면 html에 `panel`을 붙여 폭을 사이드바에 맞추고(팝업은 400px 그대로) 사진 칸 수를 폭에 따라 바꾼다.
+  - 사이드바는 탭을 바꾸거나(`tabs.onActivated`, 같은 창만) 지금 탭이 다른 페이지로 넘어가면(`tabs.onUpdated`의 complete) 그 페이지의 사진을 처음부터 다시 찾는다(`follow`, 고른 상태와 폴더 이름도 새로). 늦게 끝난 앞 탭의 결과는 버리고(`scanRun`), 크롬이 막는 페이지면 앞 목록을 비운다.
+  - "아이콘을 누르면: 팝업(기본) · 사이드바"는 설정 세트에 넣지 않고 `chrome.storage.local`의 `openIn`에 둔다(`opener.js`). 사이드바를 고르면 `action.setPopup("")`과 `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`로 아이콘이 사이드바를 연다. 크롬이 이 설정을 브라우저를 껐다 켜도 기억하는지 문서에 없어서, 서비스 워커가 `onStartup`·`onInstalled`에, 창이 열릴 때마다 다시 맞춘다(서비스 워커는 localStorage를 못 읽어 storage에 둔다).
+  - 툴바 아이콘의 오른쪽 클릭 메뉴("사이드바로 열기")는 제안만 하고 넣지 않았다.
+  - 시험 16단계: headless 시험용 크롬에서도 사이드바가 열린다(폭 360px). 브라우저를 껐다 켤 때 다시 맞추는 것과 실제 크롬 화면은 확인하지 못했다.
 - 확장자는 받아 본 MIME으로 정한다(`onDeterminingFilename`).
   - 이 이벤트는 받는 동안만 듣는다. 늘 들으면 평소 다운로드 때마다 워커가 깬다.
   - 그림이 아닌 응답(막힘 안내 HTML, 404 페이지, text/plain 방문 기록 주소)은 취소하고 "그림이 아님"으로 센다. 취소하기 전에 다 받아졌으면 파일을 지운다(`removeFile`).
