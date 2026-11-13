@@ -520,18 +520,32 @@ function follow(id) {
   scan();
 }
 
-// 아이콘을 누르면 팝업과 사이드바 가운데 무엇을 열지. 고르는 즉시 저장하고 바로 맞춘다 (opener.js)
-async function mountOpenIn() {
-  const value = await loadOpenIn();
-  for (const radio of document.querySelectorAll("input[name=openIn]")) {
-    radio.checked = radio.value === value;
-    radio.addEventListener("change", async () => {
-      await saveOpenIn(radio.value);
-      await applyOpenIn(radio.value).catch((err) => showMessage("아이콘을 누를 때의 동작을 바꾸지 못했습니다.", err.message));
-    });
-  }
-  // 서비스 워커가 브라우저를 켤 때 맞추지만, 그 전에 열렸을 수도 있어 한 번 더 맞춘다
-  applyOpenIn(value).catch(() => {});
+// 아이콘을 누르면 팝업과 사이드바 가운데 무엇을 열지 기억하고 바로 맞춘다 (opener.js).
+// 사이드바로 한 번 열면 다음부터 사이드바로 열리고, 사이드바의 "팝업으로 돌아가기"로 되돌린다 (사용자 요청)
+async function setOpenIn(value) {
+  await saveOpenIn(value);
+  await applyOpenIn(value);
+}
+
+// 사이드바로 열기 (팝업에서). 사이드바는 누른 그때만 열 수 있어서(사용자 동작) 다른 일을 기다리지 않고 먼저 열고,
+// 열린 뒤에 기억하고 팝업을 닫는다
+function openPanel() {
+  chrome.sidePanel.open({ windowId }).then(
+    async () => {
+      await setOpenIn("panel").catch(() => {});
+      window.close();
+    },
+    (err) => showMessage("사이드바를 열지 못했습니다. 크롬 116 이상에서 됩니다.", err.message),
+  );
+}
+
+// 팝업으로 돌아가기 (사이드바에서): 기억을 팝업으로 바꾸고, 팝업을 바로 열고(크롬 127부터. 못 열면 아이콘을 누르면 된다),
+// 사이드바를 닫는다 (sidePanel.close는 크롬 141부터, 그 전에는 window.close)
+async function backToPopup() {
+  await setOpenIn("popup").catch((err) => showMessage("팝업으로 되돌리지 못했습니다.", err.message));
+  if (chrome.action.openPopup) await chrome.action.openPopup({ windowId }).catch(() => {});
+  if (chrome.sidePanel.close) await chrome.sidePanel.close({ windowId }).catch(() => window.close());
+  else window.close();
 }
 
 async function init() {
@@ -601,21 +615,22 @@ async function init() {
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "job") showJob(message.job);
   });
-  // 사이드바로 열기 (팝업에서만). 사이드바는 누른 그때만 열 수 있어서(사용자 동작) 다른 일을 기다리지 않고 바로 연다
+  // 팝업에는 "사이드바로 열기", 사이드바에는 "팝업으로 돌아가기"
   $("openPanel").hidden = inPanel;
-  $("openPanel").addEventListener("click", () => {
-    chrome.sidePanel.open({ windowId }).then(
-      () => window.close(),
-      (err) => showMessage("사이드바를 열지 못했습니다. 크롬 116 이상에서 됩니다.", err.message),
-    );
-  });
-  mountOpenIn();
+  $("openPopup").hidden = !inPanel;
+  $("openPanel").addEventListener("click", openPanel);
+  $("openPopup").addEventListener("click", backToPopup);
+  // 서비스 워커가 브라우저를 켤 때 맞추지만, 그 전에 열렸을 수도 있어 창이 열릴 때도 기억해 둔 대로 맞춘다
+  loadOpenIn()
+    .then(applyOpenIn)
+    .catch(() => {});
   renderRules();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id ?? null;
   windowId = tab?.windowId ?? null;
   $("openPanel").disabled = windowId == null;
+  $("openPopup").disabled = windowId == null;
   if (inPanel) {
     chrome.tabs.onActivated.addListener((info) => {
       if (info.windowId === windowId) follow(info.tabId);
