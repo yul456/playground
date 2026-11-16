@@ -1,0 +1,169 @@
+/* 긴 값과 깊은 들여쓰기가 들어가게 다른 페이지보다 넓게 쓴다 */
+.json-page { max-width: 960px; }
+.json-page .card h2 { margin: 0; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.json-page {
+  --json-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* 값 종류마다 다른 색. 카드 바탕(흰색) 위에서 읽히는 짙은 색 */
+  --json-key: #0b5cad;
+  --json-string: #0f7b3f;
+  --json-number: #b45309;
+  --json-boolean: #8b2fc9;
+  --json-null: #64748b;
+  --json-warn: #b45309;
+  --json-bad: #dc2626;
+  --json-mark-bg: #fecaca;
+  --json-mark-text: #7f1d1d;
+}
+@media (prefers-color-scheme: dark) {
+  .json-page {
+    --json-key: #7cc0ff;
+    --json-string: #86d99b;
+    --json-number: #f5b55f;
+    --json-boolean: #c9a4ff;
+    --json-null: #94a3b8;
+    --json-warn: #f5b55f;
+    --json-bad: #f87171;
+    --json-mark-bg: #7f1d1d;
+    --json-mark-text: #fee2e2;
+  }
+}
+
+/* 붙여 넣는 칸. 줄을 넘기지 않는다(wrap="off"): 글의 줄이 그대로 보이고, 틀린 자리로 스크롤할 때 줄 번호로 자리를 안다 */
+.json-input {
+  display: block;
+  width: 100%;
+  min-height: 7em;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 var(--json-mono);
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+}
+.json-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.json-input::placeholder { color: var(--muted); }
+.json-inputbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; margin-top: 12px; }
+.json-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.json-actions button { padding: 8px 14px; }
+.json-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0; padding: 0; border: 0; color: var(--muted); font-size: 0.9rem; }
+.json-options legend { float: left; margin-right: 2px; padding: 0; }
+.json-options label { display: inline-flex; align-items: center; gap: 5px; color: var(--text); cursor: pointer; }
+.json-options input, .json-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+/* 고르는 것들(처음 펼칠 단계, 배열 번호)은 오른쪽에 함께 둔다 */
+.json-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+.json-check { display: inline-flex; align-items: center; gap: 5px; font-size: 0.9rem; cursor: pointer; }
+
+/* 읽지 못했을 때 */
+.json-error { border-color: var(--json-bad); }
+.json-error h2 { color: var(--json-bad); }
+.json-where { margin: 2px 0 10px; color: var(--muted); font-size: 0.9rem; }
+.json-message { margin: 0 0 10px; }
+.json-excerpt {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  font: 13px/1.6 var(--json-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.json-excerpt mark { padding: 1px 2px; border-radius: 3px; background: var(--json-mark-bg); color: var(--json-mark-text); font-weight: 700; }
+/* 글이나 줄의 끝이라 표시할 글자가 없을 때 그 자리에 두는 딱지 */
+.json-excerpt mark.json-here { margin-left: 2px; padding: 1px 6px; font: 600 11px/1.4 system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+.json-muted { margin: 0 0 10px; color: var(--muted); font-size: 0.9rem; }
+.json-error button { padding: 8px 14px; }
+
+/* 읽은 결과 */
+.json-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.json-summary { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.json-note { margin: 10px 0 0; color: var(--json-warn); font-size: 0.9rem; }
+
+.json-tree {
+  --json-indent: 20px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  font: 13px/1.6 var(--json-mono);
+}
+/* 한 줄. 깊이만큼 들여 쓰고, 들여 쓴 자리에는 단계마다 세로줄을 긋는다(위 줄의 화살표 아래로 이어진다) */
+.json-row {
+  display: flex;
+  align-items: flex-start;
+  min-width: calc(var(--depth) * var(--json-indent) + 14em);
+  padding-left: calc(var(--depth) * var(--json-indent));
+  background-image: repeating-linear-gradient(to right, var(--border) 0 1px, transparent 1px var(--json-indent));
+  background-repeat: no-repeat;
+  background-position: 8px 0;
+  background-size: calc(var(--depth) * var(--json-indent)) 100%;
+}
+.json-row:hover { background-color: color-mix(in srgb, var(--accent) 7%, transparent); }
+.json-gutter { flex: 0 0 18px; height: 1.6em; }
+/* 여러 빈칸도 적힌 대로 보이고, 긴 값은 다음 줄로 넘긴다 */
+.json-body { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 펼치고 접는 화살표. base.css의 단추 모양을 지우고 세모만 그린다 */
+.json-toggle {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 100%;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.json-toggle::before {
+  content: "";
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent currentColor;
+  transition: transform 0.1s;
+}
+.json-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.json-toggle:hover { color: var(--text); }
+.json-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  .json-toggle::before { transition: none; }
+}
+
+.json-key { color: var(--json-key); }
+.json-string { color: var(--json-string); }
+.json-number { color: var(--json-number); }
+.json-boolean { color: var(--json-boolean); }
+.json-null { color: var(--json-null); }
+.json-punct { color: var(--muted); }
+/* 글에 없는 도움말(배열 번호, 항목 수, 겹친 키)은 끌어서 골라도 함께 복사되지 않게 한다.
+   줄여 보인 곳의 "…"는 골라지게 둔다. 안 그러면 접힌 묶음이 {}로 복사되어 빠진 것을 모른다 */
+.json-index, .json-count, .json-badge { -webkit-user-select: none; user-select: none; }
+.json-index { margin-right: 8px; color: var(--muted); opacity: 0.75; }
+.json-ellipsis { color: var(--muted); }
+.json-count { margin-left: 8px; color: var(--muted); font-size: 12px; }
+.json-fold { border-radius: 4px; cursor: pointer; }
+.json-fold:hover .json-count { color: var(--text); }
+.json-badge { margin-left: 6px; padding: 0 5px; border: 1px solid currentColor; border-radius: 4px; color: var(--json-warn); font: 11px/1.5 system-ui, sans-serif; }
+.json-link {
+  all: unset;
+  margin-left: 10px;
+  color: var(--accent);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.json-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* 알아 둘 것 */
+.json-notes { color: var(--muted); font-size: 0.9rem; }
+.json-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.json-notes ul { margin: 0; padding-left: 1.2em; }
+.json-notes li { margin-bottom: 4px; }

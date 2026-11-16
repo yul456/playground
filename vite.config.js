@@ -61,6 +61,7 @@ export default defineConfig({
         photoSaver: resolve(import.meta.dirname, "photo-saver/index.html"),
         audioCut: resolve(import.meta.dirname, "audio-cut/index.html"),
         audioConvert: resolve(import.meta.dirname, "audio-convert/index.html"),
+        json: resolve(import.meta.dirname, "json/index.html"),
         // 골프는 메뉴 세 개로 나뉜다. golf/index.html은 예전 주소를 알맞은 메뉴로 보내는 페이지
         golf: resolve(import.meta.dirname, "golf/index.html"),
         golfScorecard: resolve(import.meta.dirname, "golf/scorecard/index.html"),

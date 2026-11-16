@@ -87,6 +87,12 @@ const FEATURES = [
     title: "오디오 형식 바꾸기",
     description: "오디오 파일을 MP3·M4A·FLAC·WAV 가운데 고른 형식으로 바꿉니다. 폴더째 한꺼번에 바꾸고, 앨범 아트 같은 태그도 옮깁니다.",
   },
+  {
+    path: "json/",
+    icon: "📋",
+    title: "JSON 보기",
+    description: "JSON 글을 붙여 넣으면 구조대로 보여 줍니다. 항목마다 펼치거나 접어서 볼 수 있습니다.",
+  },
 ];
 
 export default function App() {
