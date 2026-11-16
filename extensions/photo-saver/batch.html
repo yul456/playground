@@ -87,6 +87,20 @@
       <button type="button" class="secondary" id="openFolder" hidden>폴더 열기</button>
       <span class="status" id="status"></span>
     </div>
+
+    <section class="box tidy">
+      <h2>크롬 다운로드 목록 정리</h2>
+      <p class="hint">
+        사진을 받을 때마다 크롬 다운로드 목록에 기록이 하나씩 남고, 크롬은 받은 기록을 스스로 지우지 않습니다. 기록이 아주 많아지면
+        크롬이 무거워질 수 있어서, 받는 대로 폴더마다 기록 하나만 남기고 지웁니다. 이 기능이 생기기 전에 받아 쌓인 기록은 아래
+        단추로 같은 방식으로 정리합니다. 목록의 기록만 지우고 받은 파일은 그대로 둡니다.
+      </p>
+      <div class="actions">
+        <button type="button" class="secondary" id="tidyFind">지난 기록 찾기</button>
+        <button type="button" id="tidyRun" hidden></button>
+        <span class="status" id="tidyNote"></span>
+      </div>
+    </section>
   </main>
 </body>
 </html>

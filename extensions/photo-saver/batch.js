@@ -8,6 +8,7 @@
 import { describeUrls, listUrls, rangeUrls, showUrl } from "./addresses.js";
 import { QUEUE_MAX, loadQueue, queueAdd, queueRemove, watchQueue } from "./queue.js";
 import { JPG_QUALITIES, extKey, findImages, isDecor, isSmall, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
+import { eraseRecords, findTidy } from "./history.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
@@ -217,6 +218,8 @@ function refresh() {
   $("stop").hidden = !running;
   $("stop").disabled = stopping;
   $("stop").textContent = stopping ? "지금 탭까지 받고 멈춥니다" : "멈추기";
+  $("tidyFind").disabled = running || tidying;
+  if (running) $("tidyRun").hidden = true;
   setsUi?.setDisabled(running);
   for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], #jpgQuality, #splitMode, #closeTabs")) {
     input.disabled = running;
@@ -515,6 +518,56 @@ async function runTab(row) {
   }
 }
 
+// 크롬 다운로드 목록 정리 (history.js) ------------------------------------------
+// 지난 기록 찾기 → 몇 개를 지울지 보이기 → 지우기. 받는 대로 하는 정리는 background.js가 한다
+
+const num = (n) => n.toLocaleString("ko-KR");
+let tidyIds = []; // 지우기로 한 기록
+let tidying = false; // 찾거나 지우는 중
+
+async function tidyFind() {
+  if (running || tidying) return;
+  tidying = true;
+  tidyIds = [];
+  $("tidyRun").hidden = true;
+  $("tidyNote").textContent = "찾는 중";
+  refresh();
+  try {
+    // 확장 프로그램 창에서 누른 받기가 돌고 있으면 그 기록을 건드리지 않게 기다리라고 한다
+    if ((await send({ type: "status" }))?.job?.running) $("tidyNote").textContent = "사진을 받는 중입니다. 다 받은 뒤에 눌러 주세요.";
+    else {
+      const plan = await findTidy();
+      tidyIds = plan.erase;
+      if (!plan.total) $("tidyNote").textContent = "이 확장 프로그램이 받은 기록이 없습니다.";
+      else if (!tidyIds.length) $("tidyNote").textContent = `정리할 기록이 없습니다 (남아 있는 기록 ${num(plan.total)}개).`;
+      else {
+        $("tidyNote").textContent = `이 확장 프로그램이 받은 기록 ${num(plan.total)}개 가운데 ${num(tidyIds.length)}개를 지우고 ${num(plan.keep)}개를 남깁니다 (폴더마다 하나, 이어 붙인 그림은 그대로). 받은 파일은 지우지 않습니다.`;
+        $("tidyRun").textContent = `기록 ${num(tidyIds.length)}개 지우기`;
+        $("tidyRun").hidden = false;
+      }
+    }
+  } catch (err) {
+    $("tidyNote").textContent = `찾지 못했습니다: ${err?.message ?? err}`;
+  }
+  tidying = false;
+  refresh();
+}
+
+async function tidyRun() {
+  if (running || tidying || !tidyIds.length) return;
+  tidying = true;
+  const ids = tidyIds;
+  tidyIds = [];
+  $("tidyRun").hidden = true;
+  refresh();
+  await eraseRecords(ids, (done) => {
+    $("tidyNote").textContent = `지우는 중 ${num(done)}/${num(ids.length)}`;
+  });
+  $("tidyNote").textContent = `기록 ${num(ids.length)}개를 크롬 다운로드 목록에서 지웠습니다.`;
+  tidying = false;
+  refresh();
+}
+
 // 주소로 더하기 ---------------------------------------------------------------
 
 const rangeInput = () => ({ prefix: $("rangePrefix").value, from: $("rangeFrom").value, to: $("rangeTo").value, suffix: $("rangeSuffix").value });
@@ -713,6 +766,8 @@ async function init() {
   $("openFolder").addEventListener("click", () => {
     if (lastDownload != null) chrome.downloads.show(lastDownload);
   });
+  $("tidyFind").addEventListener("click", tidyFind);
+  $("tidyRun").addEventListener("click", tidyRun);
   // 받는 중에 이 탭을 닫으면 남은 탭을 받지 못한다
   window.addEventListener("beforeunload", (event) => {
     if (running) event.preventDefault();
