@@ -207,7 +207,7 @@ export function hostOf(url) {
   }
 }
 
-// 탭의 페이지에서 사진을 찾는다. { title, host, images }를 돌려주고, 크롬이 막는 페이지(크롬 설정, 웹 스토어 등)면 오류를 던진다
+// 탭의 페이지에서 사진을 찾는다. { title, url, host, status(페이지를 받을 때의 HTTP 상태, 모르면 0), images }를 돌려주고, 크롬이 막는 페이지(크롬 설정, 웹 스토어 등)면 오류를 던진다
 // 탭의 프레임마다 func(collect.js)을 돌려, 맨 위 페이지와 같은 사이트의 프레임 결과만 맨 위 페이지부터 차례로 돌려준다.
 // field는 결과에서 모을 목록 이름(images·links). 같은 주소는 한 번만 넣는다. { top, list }
 async function inFrames(tabId, func, field) {
@@ -242,7 +242,7 @@ async function inFrames(tabId, func, field) {
 
 export async function findImages(tabId) {
   const { top, list } = await inFrames(tabId, collectImages, "images");
-  return { title: top?.title ?? "", host: hostOf(top?.url), images: list };
+  return { title: top?.title ?? "", url: top?.url ?? "", host: hostOf(top?.url), status: top?.status ?? 0, images: list };
 }
 
 // 탭의 페이지에서 링크를 찾는다 (열린 탭 받기 목록에 넣으려고). { title, url, links: [{ url, text }] }

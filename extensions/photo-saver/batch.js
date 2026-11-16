@@ -7,17 +7,26 @@
 // 이 화면을 닫았다 열어도 남는다. 받기를 마친 주소는 저장소에서 빼고 이 화면에는 결과와 함께 남긴다
 import { describeUrls, listUrls, rangeUrls, showUrl } from "./addresses.js";
 import { QUEUE_MAX, loadQueue, queueAdd, queueRemove, watchQueue } from "./queue.js";
-import { JPG_QUALITIES, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
+import { JPG_QUALITIES, extKey, findImages, isDecor, isSmall, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
 
-// 탭의 페이지가 다 뜨기를 기다리는 시간
+// 탭의 페이지가 다 뜨기를 기다리는 시간. 이만큼 기다린다는 것이 아니라 길어도 여기까지만 기다린다는 한도다.
+// 다 뜨면 바로 넘어가고, 광고 하나가 끝나지 않아 "다 떴다"가 안 나오는 페이지는 이 시간 뒤에 그때 있는 것으로 찾는다
 const LOAD_TIMEOUT = 30000;
 // 다른 받기(확장 프로그램 창에서 누른 것)가 끝나기를 기다리는 시간
 const BUSY_TIMEOUT = 5 * 60 * 1000;
-// 주소로 더한 페이지를 방금 열었을 때, 다 뜬 뒤에 페이지의 스크립트가 사진을 그릴 틈을 주는 시간
-const SETTLE_MS = 1500;
+// 페이지가 다 뜬 뒤에도 스크립트가 사진을 더 그릴 수 있다. 그래서 사진 찾기를 SCAN_GAP마다 되풀이해,
+// 찾은 것이 잇달아 같을 때까지 기다린다(findSettled). 방금 열었거나 다시 불러온 페이지는 FRESH_SCANS번(2.1초 동안),
+// 전부터 떠 있던 페이지는 STEADY_SCANS번(0.7초 동안) 같아야 하고, 계속 바뀌는 페이지도 SETTLE_MAX까지만 기다린다.
+// 전에는 주소로 더한 페이지만 다 뜬 뒤 1.5초를 기다리고 한 번 찾았다 (2026-11-16 사용자와 정함)
+const SCAN_GAP = 700;
+const FRESH_SCANS = 4;
+const STEADY_SCANS = 2;
+const SETTLE_MAX = 10000;
+// 다 뜬 지 이만큼이 안 된 탭도 방금 뜬 페이지로 친다 (탭을 열자마자 받기를 누른 경우)
+const RECENT_MS = 5000;
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,12 +40,14 @@ let extOff = loadExts();
 let windowId = Number(new URLSearchParams(location.search).get("window")) || null;
 
 // 목록의 줄. 탭: { tabId, title, host, checked }, 주소로 더한 것: { added: true, url, tabId(연 뒤에), title, host, checked, done(받기를 마침) }.
-// 둘 다 cell: { li, box, name, state, remove }, 결과 글 stateText·stateKind(다시 그려도 남게)
+// 둘 다 cell: { li, box, name, state, remove }, 결과 글 stateText·stateKind·stateDetail(다시 그려도 남게)
 let rows = [];
 let running = false;
 let stopping = false;
 let lastDownload = null; // "폴더 열기"가 보여 줄 다운로드
 let setsUi = null; // 설정 세트 고르는 줄 (sets.js)
+// 탭이 다 뜬 때 (이 화면이 열려 있는 동안 본 것만 안다). 탭 번호 → 시각
+const loadedAt = new Map();
 
 function showMessage(text) {
   $("message").textContent = text;
@@ -117,16 +128,19 @@ function makeRow(row) {
     li.append(remove);
   }
   row.cell = { li, box, name: title, state, remove };
-  if (row.stateText != null) setState(row, row.stateText, row.stateKind);
+  if (row.stateText != null) setState(row, row.stateText, row.stateKind, row.stateDetail);
   else if (row.loading) state.textContent = "페이지 뜨는 중";
   return li;
 }
 
-function setState(row, text, kind = "") {
+// 줄의 결과 글. detail은 마우스를 올리면 보이는 설명(찾은 사진이 어떻게 걸러졌는지)
+function setState(row, text, kind = "", detail = "") {
   row.stateText = text;
   row.stateKind = kind;
+  row.stateDetail = detail;
   row.cell.state.textContent = text;
   row.cell.state.className = kind ? `state ${kind}` : "state";
+  row.cell.state.title = detail;
 }
 
 // 줄을 목록에서 뺀다. 아직 받지 않은 더한 주소는 저장소에서도 뺀다
@@ -266,17 +280,89 @@ function readOptions() {
 // 받을 사진인가: 확장 프로그램 창에서 처음에 체크되어 나오는 것과 같다
 const wanted = (item) => !isDecor(item) && !(item.name && rules.has(item.name)) && !extOff.has(extKey(item));
 
-// 탭의 페이지가 다 뜨기를 기다린다. 크롬이 쉬게 해 둔 탭(오래 안 본 탭, 다시 연 창의 탭)은 먼저 깨운다
+// 받지 않는 사진의 까닭. 한 장에 여럿이 맞으면 앞의 것으로 센다 (wanted가 아닌 사진은 이 가운데 하나에 맞는다)
+const SKIPS = [
+  ["배경 그림", (item) => Boolean(item.background)],
+  ["SVG", (item) => item.ext === "svg"],
+  ["불러오지 못함", (item) => Boolean(item.broken)],
+  ["작은 그림", (item) => isSmall(item)],
+  ["빼 둔 이름", (item) => Boolean(item.name) && rules.has(item.name)],
+  ["꺼 둔 확장자", (item) => extOff.has(extKey(item))],
+];
+// 받지 않는 사진을 까닭별로 센 글들: ["작은 그림 9", "불러오지 못함 3"]
+function skipCounts(items) {
+  const counts = new Map();
+  for (const item of items) {
+    if (wanted(item)) continue;
+    const label = SKIPS.find(([, matches]) => matches(item))?.[0];
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return SKIPS.filter(([label]) => counts.has(label)).map(([label]) => `${label} ${counts.get(label)}`);
+}
+
+// 받을 사진이 없는 까닭을 알릴 말과 결과 (2026-11-16 사용자와 정함: 전에는 모두 "받을 사진 없음"이었다).
+// 없는 페이지와 사진이 없는 페이지는 "none"(다시 해도 같다), 서버가 페이지를 주지 않은 것은 "failed"(체크된 채 남아 다시 받아 볼 수 있다).
+// page.status는 페이지를 받을 때의 HTTP 상태(모르면 0), found는 찾은 사진 수, skipped는 skipCounts, slow는 다 뜨지 않았는지
+function whyNone(page, found, skipped, slow) {
+  const { status } = page;
+  if (status === 404 || status === 410) return { text: `없는 페이지입니다 (${status})`, result: "none" };
+  if (status >= 400) return { text: `페이지를 열지 못했습니다 (${status})`, result: "failed" };
+  const late = slow ? ` · 페이지가 ${LOAD_TIMEOUT / 1000}초 안에 다 뜨지 않았습니다` : "";
+  if (!found) return { text: `사진을 찾지 못했습니다${late}`, result: "none" };
+  return { text: `받을 사진 없음 (찾은 ${found}장: ${skipped.join(", ")})${late}`, result: "none" };
+}
+
+// 탭의 페이지가 다 뜨기를 기다린다. 크롬이 쉬게 해 둔 탭(오래 안 본 탭, 다시 연 창의 탭)은 먼저 깨운다.
+// 결과: { fresh: 방금 뜬 페이지인가(기다려야 했다), slow: LOAD_TIMEOUT 안에 다 뜨지 않았나 }
 async function ensureLoaded(tabId) {
   let tab = await chrome.tabs.get(tabId);
-  if (tab.discarded) await chrome.tabs.reload(tabId);
+  let fresh = false;
+  if (tab.discarded) {
+    await chrome.tabs.reload(tabId);
+    fresh = true;
+  }
   const deadline = Date.now() + LOAD_TIMEOUT;
   for (;;) {
     tab = await chrome.tabs.get(tabId);
     // 막 연 탭은 주소로 옮겨 가는 동안 pendingUrl이 있다
-    if (tab.status === "complete" && !tab.discarded && !tab.pendingUrl) return;
-    if (Date.now() > deadline) return; // 다 뜨지 않았어도 지금 있는 것으로 해 본다
+    if (tab.status === "complete" && !tab.discarded && !tab.pendingUrl) return { fresh, slow: false };
+    fresh = true;
+    if (Date.now() > deadline) return { fresh, slow: true }; // 다 뜨지 않았어도 지금 있는 것으로 해 본다
     await sleep(200);
+  }
+}
+
+// 찾은 사진이 달라졌는지 견줄 글 (페이지 주소와 사진 주소들). 배경 그림과 작은 그림(아이콘, 추적용 1px 그림)은 뺀다.
+// 그런 그림을 주기적으로 붙이는 페이지에서 끝없이 기다리지 않으려는 것이다
+const signature = (page) => [page.url, ...page.images.filter((image) => !image.background && !isSmall(image)).map((image) => image.url)].join("\n");
+
+// 사진을 한 번 찾는다. 그사이 다른 주소로 넘어가는 중이라 못 찾았으면(자동 이동) 다 뜨기를 기다렸다가 한 번 더 찾는다
+async function scan(tabId) {
+  try {
+    return await findImages(tabId);
+  } catch {
+    await ensureLoaded(tabId);
+    return findImages(tabId);
+  }
+}
+
+// 탭의 페이지에서 사진을 찾는다. 다 뜬 뒤에도 스크립트가 사진을 더 그릴 수 있어서, 찾은 것이 잇달아 같을 때까지 다시 찾는다.
+// fresh: 방금 열었거나 다시 불러온 페이지인가. 오류 페이지(404 등)는 더 그릴 것이 없으니 전부터 떠 있던 페이지처럼 짧게 본다
+async function findSettled(tabId, fresh) {
+  const deadline = Date.now() + SETTLE_MAX;
+  let page = await scan(tabId);
+  let last = signature(page);
+  let same = 1;
+  for (;;) {
+    const need = fresh && !(page.status >= 400) ? FRESH_SCANS : STEADY_SCANS;
+    if (same >= need || Date.now() >= deadline) return page;
+    await sleep(SCAN_GAP);
+    // 그사이 다른 주소로 넘어갔으면 다 뜨기를 기다리고 방금 뜬 페이지로 친다
+    if ((await ensureLoaded(tabId)).fresh) fresh = true;
+    page = await scan(tabId);
+    const now = signature(page);
+    same = now === last ? same + 1 : 1;
+    last = now;
   }
 }
 
@@ -365,23 +451,24 @@ function resultOf(job) {
   return { text: parts.join(" · "), kind: warn ? "warn" : "ok", got };
 }
 
-// 주소로 더한 줄의 페이지를 탭으로 연다(이 창, 뒤쪽에). 전에 열어 둔 탭이 아직 있으면 그 탭을 쓴다
+// 주소로 더한 줄의 페이지를 탭으로 연다(이 창, 뒤쪽에). 전에 열어 둔 탭이 아직 있으면 그 탭을 쓴다. 새로 열었으면 true
 async function openAdded(row) {
-  if (row.tabId != null && (await chrome.tabs.get(row.tabId).catch(() => null))) return;
+  if (row.tabId != null && (await chrome.tabs.get(row.tabId).catch(() => null))) return false;
   setState(row, "페이지 여는 중", "now");
   const tab = await chrome.tabs.create({ ...(windowId ? { windowId } : {}), url: row.url, active: false });
   row.tabId = tab.id;
-  await ensureLoaded(row.tabId);
-  await sleep(SETTLE_MS);
+  return true;
 }
 
 // 탭 하나를 받는다. 받은 것이 있으면 "got", 받을 사진이 없으면 "none", 못 받았으면 "failed"
 async function runTab(row) {
   try {
-    if (row.added) await openAdded(row);
+    const opened = row.added ? await openAdded(row) : false;
+    if (!opened) setState(row, "사진 찾는 중", "now");
+    const loaded = await ensureLoaded(row.tabId);
     setState(row, "사진 찾는 중", "now");
-    await ensureLoaded(row.tabId);
-    const page = await findImages(row.tabId);
+    const recent = Date.now() - (loadedAt.get(row.tabId) ?? 0) < RECENT_MS;
+    const page = await findSettled(row.tabId, opened || loaded.fresh || recent);
     // 주소로 더한 줄은 연 페이지의 제목을 보인다
     if (row.added && page.title) {
       row.title = page.title;
@@ -391,9 +478,11 @@ async function runTab(row) {
     setState(row, `사진 ${items.length}장 살펴보는 중`, "now");
     await Promise.all(items.map((item) => measure(item)));
     const urls = items.filter(wanted).map((item) => item.url);
+    const skipped = skipCounts(items);
     if (!urls.length) {
-      setState(row, "받을 사진 없음");
-      return "none";
+      const why = whyNone(page, items.length, skipped, loaded.slow);
+      setState(row, why.text, why.result === "failed" ? "warn" : "");
+      return why.result;
     }
     const job = await startJob({
       type: "start",
@@ -410,7 +499,7 @@ async function runTab(row) {
     setState(row, progressText(job), "now");
     const done = await waitJob(job.id, (now) => setState(row, progressText(now), "now"));
     const result = resultOf(done);
-    setState(row, result.text, result.kind);
+    setState(row, result.text, result.kind, `찾은 사진 ${items.length}장 · 받는 것 ${urls.length}장${skipped.length ? ` · 뺀 것: ${skipped.join(", ")}` : ""}`);
     lastDownload = done.stitch?.id ?? done.files?.shownId ?? lastDownload;
     if (!result.got) return "failed";
     if (settings.closeTabs) await chrome.tabs.remove(row.tabId).catch(() => {});
@@ -523,7 +612,9 @@ async function runAll() {
     if (row.added && result !== "failed") {
       row.checked = false;
       row.done = true;
-      queueRemove([row.url]).catch(() => {});
+      // 저장소에서 빠질 때까지 기다린다. 기다리지 않으면 마지막 줄은 아래에서 목록을 맞출 때 아직 저장소에 남아 있어,
+      // "다시 넣은 주소"로 보고 받기 전으로 되돌렸다가 곧 저장소에서 빠진 것을 보고 줄을 지웠다 (받은 결과가 목록에서 사라졌다)
+      await queueRemove([row.url]).catch(() => {});
     }
   }
   for (const row of list.slice(handled)) setState(row, "받지 않음");
@@ -553,8 +644,12 @@ function scheduleReread() {
 function watchTabs() {
   const mine = (id) => id === windowId;
   chrome.tabs.onCreated.addListener((tab) => mine(tab.windowId) && scheduleReread());
-  chrome.tabs.onRemoved.addListener((_, info) => mine(info.windowId) && scheduleReread());
-  chrome.tabs.onUpdated.addListener((_, change, tab) => {
+  chrome.tabs.onRemoved.addListener((tabId, info) => {
+    loadedAt.delete(tabId);
+    if (mine(info.windowId)) scheduleReread();
+  });
+  chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+    if (change.status === "complete") loadedAt.set(tabId, Date.now());
     if (mine(tab.windowId) && (change.url || change.title || change.status)) scheduleReread();
   });
   for (const event of [chrome.tabs.onAttached, chrome.tabs.onDetached, chrome.tabs.onMoved]) event.addListener(scheduleReread);

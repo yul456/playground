@@ -118,7 +118,9 @@ export function collectImages() {
     walk(document.documentElement);
   }
   // origin: 팝업이 맨 위 페이지와 같은 사이트의 프레임만 쓰려고 본다 (광고·다른 사이트 위젯은 뺀다)
-  return { title: document.title, url: location.href, origin: location.origin, images };
+  // status: 이 페이지를 받을 때의 HTTP 상태(404 등, 크롬 109부터). 열린 탭 받기가 받을 사진이 없는 까닭을 알리는 데 쓴다
+  const status = performance.getEntriesByType("navigation")[0]?.responseStatus ?? 0;
+  return { title: document.title, url: location.href, origin: location.origin, status, images };
 }
 
 // 페이지 안에서 링크(<a href>, <area href>)를 페이지에 나온 순서대로 모은다. 열린 shadow root 안도 본다.
