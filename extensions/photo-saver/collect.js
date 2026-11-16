@@ -123,6 +123,90 @@ export function collectImages() {
   return { title: document.title, url: location.href, origin: location.origin, status, images };
 }
 
+// 페이지 안에서 영상을 페이지에 나온 순서대로 찾는다 (확장 프로그램 창의 "영상" 목록, videos.js).
+// 파일로 올라 있는 영상(주소가 http·https인 mp4·webm 등)은 받을 수 있고, 스트리밍 영상은 받을 수 없다.
+// - <video>: 지금 틀고 있는 주소(currentSrc)나 src, <source>들 가운데 파일인 것을 고른다(mp4 먼저).
+//   주소가 blob:(조각으로 받아 트는 방식)이거나 재생 목록(m3u8·mpd)뿐이면 스트리밍으로 친다
+// - <a href>: 영상 파일로 가는 링크 (주소 끝이 .mp4 등)
+// collectImages처럼 함수 코드만 떼어 프레임마다 넣으므로 함수 밖의 이름을 쓰면 안 된다
+export function collectVideos() {
+  const FILE = /\.(mp4|m4v|webm|mov|mkv|ogv|avi|wmv|flv|3gp)$/i;
+  const PLAYLIST = /\.(m3u8|mpd)$/i;
+  const videos = [];
+  const seen = new Set();
+  let streams = 0;
+  const toUrl = (value) => {
+    try {
+      return value ? new URL(value, document.baseURI).href : null;
+    } catch {
+      return null;
+    }
+  };
+  const pathOf = (url) => {
+    try {
+      return new URL(url).pathname;
+    } catch {
+      return "";
+    }
+  };
+  const isWeb = (url) => /^https?:/i.test(url);
+  const isFile = (url) => isWeb(url) && !PLAYLIST.test(pathOf(url));
+  const add = (video) => {
+    if (seen.has(video.url)) return;
+    seen.add(video.url);
+    videos.push(video);
+  };
+
+  const visitVideo = (el) => {
+    const sources = [...el.querySelectorAll("source")]
+      .map((source) => ({ url: toUrl(source.getAttribute("src")), type: (source.getAttribute("type") || "").split(";")[0].trim().toLowerCase() }))
+      .filter((source) => source.url);
+    const current = toUrl(el.currentSrc) ?? toUrl(el.getAttribute("src"));
+    const info = {
+      width: el.videoWidth || 0,
+      height: el.videoHeight || 0,
+      duration: Number.isFinite(el.duration) ? el.duration : 0,
+      poster: toUrl(el.getAttribute("poster")) ?? "",
+      label: (el.getAttribute("title") || el.getAttribute("aria-label") || "").trim().slice(0, 200),
+    };
+    // 지금 틀고 있는 것이 파일이면 그것, 아니면 <source> 가운데 파일인 것 (mp4를 먼저)
+    const files = sources.filter((source) => isFile(source.url));
+    const picked =
+      current && isFile(current)
+        ? { url: current, type: sources.find((source) => source.url === current)?.type ?? "" }
+        : (files.find((source) => source.type === "video/mp4" || /\.mp4$/i.test(pathOf(source.url))) ?? files[0]);
+    if (picked) {
+      add({ url: picked.url, kind: "file", from: "video", type: picked.type, ...info });
+      return;
+    }
+    // 받을 파일 주소가 없다. 주소가 아예 없는 것(아직 스크립트가 넣지 않은 것, 카메라 화면)은 영상으로 치지 않는다
+    const any = current ?? sources[0]?.url;
+    if (!any) return;
+    const list = [current, ...sources.map((source) => source.url)].find((url) => url && isWeb(url) && PLAYLIST.test(pathOf(url)));
+    // 스트리밍은 주소로 서로를 가릴 수 없어(blob: 주소) 프레임 안의 차례로 가린다
+    add({ url: list ?? `stream:${location.origin}${location.pathname}#${++streams}`, kind: "stream", from: "video", type: "", ...info });
+  };
+
+  const visitLink = (el) => {
+    const url = toUrl(el.getAttribute("href"));
+    if (!url || !isWeb(url) || !FILE.test(pathOf(url))) return;
+    const label = (el.textContent || el.getAttribute("title") || "").replace(/\s+/g, " ").trim().slice(0, 200);
+    add({ url, kind: "file", from: "link", type: "", width: 0, height: 0, duration: 0, poster: "", label });
+  };
+
+  // 문서 순서대로 돈다. 웹 컴포넌트 안(열린 shadow root)은 그 요소 바로 다음 순서로 본다
+  const walk = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    for (let el = walker.nextNode(); el; el = walker.nextNode()) {
+      if (el.localName === "video") visitVideo(el);
+      else if (el.localName === "a" && el.hasAttribute("href")) visitLink(el);
+      if (el.shadowRoot) walk(el.shadowRoot);
+    }
+  };
+  if (document.documentElement) walk(document.documentElement);
+  return { title: document.title, url: location.href, origin: location.origin, videos };
+}
+
 // 페이지 안에서 링크(<a href>, <area href>)를 페이지에 나온 순서대로 모은다. 열린 shadow root 안도 본다.
 // 웹 주소(http·https)만, # 뒤는 떼고 같은 주소는 한 번만, 지금 페이지 자신은 뺀다.
 // 글은 링크 안의 글(textContent), 없으면 title·aria-label·그림 설명(alt).

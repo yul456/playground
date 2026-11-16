@@ -37,6 +37,26 @@
         <span class="links-note" id="linksNote"></span>
       </div>
     </section>
+    <!-- 영상 골라 받기 (videos.js) -->
+    <div class="links-bar">
+      <span class="links-label">영상</span>
+      <button type="button" class="link" id="showVideos" title="이 페이지의 영상을 보이고, 고른 것을 받습니다" disabled>영상 찾는 중</button>
+    </div>
+    <section class="links" id="videos" hidden>
+      <div class="links-head">
+        <strong>이 페이지 영상</strong>
+        <span class="head-links">
+          <button type="button" class="link" id="toggleVideos" hidden>모두 고르기</button>
+          <button type="button" class="link" id="closeVideos">닫기</button>
+        </span>
+      </div>
+      <p class="videos-hint" id="videosHint"></p>
+      <ul class="video-list" id="videoList"></ul>
+      <div class="links-actions">
+        <button type="button" id="startVideos" disabled>영상 받기</button>
+        <span class="links-note" id="videosNote"></span>
+      </div>
+    </section>
     <div class="sets" id="sets"></div>
     <div class="message" id="message" hidden></div>
 

@@ -1,6 +1,6 @@
 // 확장 프로그램 창(popup.js)과 열린 탭 받기(batch.js)가 함께 쓰는 것: 저장해 둔 옵션, 꾸밈 그림 기준, 사진 찾기와 크기 재기.
 // 옵션은 확장 프로그램 페이지의 localStorage에 둔다 (창과 열린 탭 받기 화면이 같은 저장소를 본다. 서비스 워커는 못 읽는다)
-import { collectImages, collectLinks } from "./collect.js";
+import { collectImages, collectLinks, collectVideos } from "./collect.js";
 import { SPLIT_MODES } from "./imageInfo.js";
 import { extFromMime, extFromUrl, imageName, siteOf, validName } from "./names.js";
 
@@ -243,6 +243,13 @@ async function inFrames(tabId, func, field) {
 export async function findImages(tabId) {
   const { top, list } = await inFrames(tabId, collectImages, "images");
   return { title: top?.title ?? "", url: top?.url ?? "", host: hostOf(top?.url), status: top?.status ?? 0, images: list };
+}
+
+// 탭의 페이지에서 영상을 찾는다 (확장 프로그램 창의 "영상" 목록, videos.js).
+// { title, url, host, videos: [{ url, kind: "file"(받을 수 있는 파일) | "stream"(스트리밍), from: "video" | "link", type, width, height, duration, poster, label }] }
+export async function findVideos(tabId) {
+  const { top, list } = await inFrames(tabId, collectVideos, "videos");
+  return { title: top?.title ?? "", url: top?.url ?? "", host: hostOf(top?.url), videos: list };
 }
 
 // 탭의 페이지에서 링크를 찾는다 (열린 탭 받기 목록에 넣으려고). { title, url, links: [{ url, text }] }

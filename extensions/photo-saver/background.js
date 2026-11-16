@@ -6,7 +6,7 @@
 //   JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 와서 "제목_1.jpg", "제목_2.jpg" …로 받는다
 import { parseUrl } from "./addresses.js";
 import { linkTextOf, showToast } from "./collect.js";
-import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase } from "./names.js";
+import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase, videoBase, videoExtFromMime, videoExtFromName, videoExtFromUrl, videoMime } from "./names.js";
 import { applyOpenIn, loadOpenIn } from "./opener.js";
 import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
 
@@ -22,6 +22,7 @@ const OFFSCREEN = "offscreen.html";
 // 받지 못한 까닭(크롬 다운로드 오류)을 사람 말로
 const REASONS = {
   NOT_IMAGE: "그림이 아님",
+  NOT_VIDEO: "영상이 아님",
   SERVER_FORBIDDEN: "사이트가 막음",
   SERVER_UNAUTHORIZED: "로그인 필요",
   SERVER_BAD_CONTENT: "주소에 그림이 없음",
@@ -75,10 +76,12 @@ function publicJob(job) {
     : "";
   return {
     id: job.id, // 받기마다 다른 번호. 열린 탭 받기가 자기가 맡긴 받기의 소식인지 알아본다
+    kind: job.kind, // photo(사진) · video(영상)
     folder: BASE_FOLDER,
     dir: job.dir,
     running: job.running,
-    files: files && { total: files.total, done: files.done, failed: files.failed, canceled: files.canceled, shownId: files.shownId, reason },
+    // percent: 영상을 받는 동안 지금 받고 있는 것들이 몇 %까지 왔는지 (모르면 null)
+    files: files && { total: files.total, done: files.done, failed: files.failed, canceled: files.canceled, shownId: files.shownId, reason, percent: files.percent ?? null },
     stitch: stitch && { ...stitch },
   };
 }
@@ -132,14 +135,16 @@ function nameDownload(item, suggest) {
   }
   plan.named = true;
   const mime = String(item.mime ?? "").toLowerCase();
-  // 그림 대신 웹 페이지(막힘 안내, 방문 기록용 주소의 응답 등)를 돌려주면 받지 않는다
-  if (!imageMime(mime)) {
-    plan.reason = "NOT_IMAGE";
+  // 그림(영상) 대신 웹 페이지(막힘 안내, 방문 기록용 주소의 응답 등)를 돌려주면 받지 않는다
+  if (plan.video ? !videoMime(mime) : !imageMime(mime)) {
+    plan.reason = plan.video ? "NOT_VIDEO" : "NOT_IMAGE";
     suggest();
     chrome.downloads.cancel(item.id).catch(() => {});
     return;
   }
-  const ext = extFromMime(mime) ?? extFromName(item.filename) ?? plan.guess;
+  const ext = plan.video
+    ? (videoExtFromMime(mime) ?? videoExtFromName(item.filename) ?? plan.guess)
+    : (extFromMime(mime) ?? extFromName(item.filename) ?? plan.guess);
   suggest({ filename: target(plan, ext), conflictAction: "uniquify" });
 }
 
@@ -220,10 +225,12 @@ async function completed(plan) {
   if (plan.ended || plan.completing) return;
   plan.completing = true;
   const [item] = await chrome.downloads.search({ id: plan.id });
-  if (plan.reason === "NOT_IMAGE" || !imageMime(String(item?.mime ?? "").toLowerCase())) {
-    plan.reason = "NOT_IMAGE";
+  const mime = String(item?.mime ?? "").toLowerCase();
+  const wrong = plan.video ? "NOT_VIDEO" : "NOT_IMAGE";
+  if (plan.reason === wrong || (plan.video ? !videoMime(mime) : !imageMime(mime))) {
+    plan.reason = wrong;
     await chrome.downloads.removeFile(plan.id).catch(() => {});
-    end(plan, "NOT_IMAGE");
+    end(plan, wrong);
     return;
   }
   // 같은 이름이 있으면 크롬이 "(1)"을 붙이므로 실제로 저장된 이름을 알린다
@@ -309,6 +316,37 @@ function onStitchMessage(message) {
   }
 }
 
+// 방금 받은 폴더. 같은 페이지의 사진과 영상을 한 폴더에 넣으려고 기억한다 ({ pageUrl, folder, dir, kinds }).
+// 서비스 워커는 잠들면 변수를 잃어서 세션 저장소(브라우저를 끌 때까지)에 둔다
+const LAST_FOLDER = "lastFolder";
+const readLastFolder = async () => (await chrome.storage.session.get(LAST_FOLDER).catch(() => ({})))[LAST_FOLDER] ?? null;
+
+// 영상은 받는 데 오래 걸린다. 받는 동안 1초마다 받은 양을 물어 창에 몇 %인지 알린다.
+// 이 물음이 서비스 워커가 받는 도중에 잠들지 않게도 한다 (잠들면 끝난 것을 알아채지 못한다)
+function watchBytes(job) {
+  const timer = setInterval(async () => {
+    if (!job.running || current !== job) {
+      clearInterval(timer);
+      return;
+    }
+    const items = await chrome.downloads.search({ state: "in_progress" }).catch(() => []);
+    let received = 0;
+    let total = 0;
+    for (const item of items) {
+      if (byId.get(item.id)?.job !== job || !(item.totalBytes > 0)) continue;
+      received += item.bytesReceived;
+      total += item.totalBytes;
+    }
+    const percent = total ? Math.floor((received / total) * 100) : null;
+    if (percent !== job.files.percent && job.running) {
+      job.files.percent = percent;
+      update(job);
+    }
+  }, 1000);
+}
+
+// kind: photo(사진, 기본) · video(영상. 확장 프로그램 창의 "영상" 목록에서 고른 것을 파일 그대로 받는다. 이어 붙이지 않는다)
+// pageUrl: 받는 페이지의 주소. 같은 페이지에서 방금 다른 종류(사진 ↔ 영상)를 받았으면 그 폴더에 함께 넣는다
 // mode: files(사진 따로) · stitch(이어 붙인 한 장) · both(둘 다)
 // naming: 사진 따로 받을 때의 파일 이름. original(주소에 적힌 원래 이름, 기본) · number(고른 순서 번호 001…)
 // stitchName: 이어 붙인 그림의 이름(확장자 빼고). 비어 있으면 폴더 이름(페이지 제목)과 같게 한다.
@@ -319,6 +357,8 @@ function onStitchMessage(message) {
 async function startJob({
   folder,
   urls,
+  kind = "photo",
+  pageUrl = "",
   mode = "files",
   naming = "original",
   stitchName = "",
@@ -329,13 +369,21 @@ async function startJob({
 }) {
   if (current?.running) throw new Error("앞의 사진을 아직 받는 중입니다. 다 받은 뒤에 다시 누르세요.");
   if (!urls?.length) throw new Error("고른 사진이 없습니다.");
-  const withFiles = mode !== "stitch";
-  const withStitch = mode !== "files";
-  // 사진을 따로 받으면 폴더를 새로 만들므로 겹치지 않는 이름을 찾는다. 이어 붙인 그림만 받으면 같은 이름일 때 크롬이 "(1)"을 붙인다
-  const dir = withFiles ? await freeFolder(folder) : folder;
+  const video = kind === "video";
+  const withFiles = video || mode !== "stitch";
+  const withStitch = !video && mode !== "files";
+  // 사진을 따로 받으면 폴더를 새로 만들므로 겹치지 않는 이름을 찾는다. 이어 붙인 그림만 받으면 같은 이름일 때 크롬이 "(1)"을 붙인다.
+  // 같은 페이지에서 방금 받은 폴더에 아직 이 종류(사진·영상)를 받지 않았으면 그 폴더에 함께 넣는다
+  const last = withFiles && pageUrl ? await readLastFolder() : null;
+  const together = Boolean(last) && last.pageUrl === pageUrl && last.folder === folder && !last.kinds.includes(kind);
+  const dir = together ? last.dir : withFiles ? await freeFolder(folder) : folder;
+  if (withFiles && pageUrl) {
+    chrome.storage.session.set({ [LAST_FOLDER]: { pageUrl, folder, dir, kinds: [...(together ? last.kinds : []), kind] } }).catch(() => {});
+  }
   const stitchBase = stitchName || dir;
   const job = {
     id: ++jobCount,
+    kind: video ? "video" : "photo",
     dir,
     stitchBase,
     stitchFormat: stitchFormat === "jpg" ? "jpg" : "png",
@@ -343,7 +391,7 @@ async function startJob({
     split: tooLong !== "png",
     splitMode: splitMode === "max" ? "max" : "even",
     running: true,
-    files: withFiles ? { total: urls.length, done: 0, failed: 0, canceled: 0, reasons: {}, shownId: null } : null,
+    files: withFiles ? { total: urls.length, done: 0, failed: 0, canceled: 0, reasons: {}, shownId: null, percent: null } : null,
     stitch: withStitch
       ? {
           state: "running",
@@ -378,22 +426,25 @@ async function startJob({
     const digits = Math.max(3, String(urls.length).length);
     const used = new Set();
     const plans = urls.map((url, i) => {
-      const guess = extFromUrl(url) ?? "jpg";
+      const guess = video ? (videoExtFromUrl(url) ?? "mp4") : (extFromUrl(url) ?? "jpg");
       const number = String(i + 1).padStart(digits, "0");
-      // 원본 이름으로 받을 때: 주소에 파일 이름이 없는 사진은 번호를 쓰고, 같은 이름이 또 나오면 " (2)"를 붙인다
-      let name = (naming === "original" && originalBase(url)) || number;
-      if (naming === "original") {
+      // 원본 이름으로 받을 때: 주소에 파일 이름이 없는 사진은 번호를 쓰고, 같은 이름이 또 나오면 " (2)"를 붙인다.
+      // 영상은 늘 주소에 적힌 이름으로 받고, 이름이 없으면 "영상 001"
+      const byName = video || naming === "original";
+      let name = video ? (videoBase(url) ?? `영상 ${number}`) : (naming === "original" && originalBase(url)) || number;
+      if (byName) {
         const first = name;
         for (let n = 2; used.has(`${name}.${guess}`.toLowerCase()); n++) name = `${first} (${n})`;
         used.add(`${name}.${guess}`.toLowerCase());
       }
-      return { job, kind: "file", url, base: `${BASE_FOLDER}/${dir}/${name}`, guess, id: null, named: false, ended: false };
+      return { job, kind: "file", video, url, base: `${BASE_FOLDER}/${dir}/${name}`, guess, id: null, named: false, ended: false };
     });
     let next = 0;
     const worker = async () => {
       while (next < plans.length) await begin(plans[next++]);
     };
     for (let i = 0; i < Math.min(STARTING, plans.length); i++) worker();
+    if (video) watchBytes(job);
   }
   if (withStitch) startStitch(job, urls);
   return publicJob(job);

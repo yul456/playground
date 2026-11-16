@@ -5,6 +5,7 @@ import { JPG_QUALITIES, NO_EXT, extKey, findImages, isDecor, loadExts, loadRules
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountLinks } from "./links.js";
+import { mountVideos } from "./videos.js";
 import { applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
 import { mountSets } from "./sets.js";
 
@@ -28,10 +29,14 @@ let tabId = null;
 let windowId = null;
 // 링크 줄 (열린 탭 받기 목록에 링크 넣기)
 let links = null;
+// 영상 줄 (이 페이지의 영상을 골라 받기)
+let videos = null;
 // 사진 찾기를 시작한 차례. 탭을 빨리 바꾸면 늦게 끝난 앞 탭의 결과를 버린다
 let scanRun = 0;
 let pageTitle = "";
 let pageHost = "";
+// 지금 페이지의 주소. 같은 페이지의 사진과 영상을 한 폴더에 받게 하려고 받기에 함께 보낸다
+let pageUrl = "";
 // { url, name, ext(확장자, 모르면 null), typed(종류를 다 알아봤나), width, height, alt, background, broken, checked, touched, cell }
 let items = [];
 let folderEdited = false;
@@ -98,6 +103,7 @@ async function scan() {
     return;
   }
   showMessage("사진을 찾는 중…");
+  videos?.scan(tabId);
   let page;
   try {
     page = await findImages(tabId);
@@ -115,6 +121,7 @@ async function scan() {
   if (run !== scanRun) return;
   pageTitle = page.title;
   pageHost = page.host;
+  pageUrl = page.url;
 
   // 다시 찾을 때는 고른 상태와 잰 크기를 이어 간다
   const previous = new Map(items.map((item) => [item.url, item]));
@@ -434,6 +441,7 @@ async function start() {
       type: "start",
       folder,
       urls,
+      pageUrl,
       mode: settings.mode,
       naming: settings.fileNames,
       stitchName: customStitchName(),
@@ -478,7 +486,16 @@ function showJob(next) {
     status.append(span);
   };
   const { files, stitch } = job;
-  if (files) {
+  const video = job.kind === "video";
+  videos?.setBusy(job.running);
+  if (files && video) {
+    // 영상은 오래 걸려서 지금 받는 것이 몇 %인지도 보인다
+    if (files.done + files.failed < files.total) line(`영상 받는 중 ${files.done + files.failed}/${files.total}${files.percent != null ? ` · ${files.percent}%` : ""}`);
+    else {
+      const failed = files.failed ? ` · 받지 못한 영상 ${files.failed}개${files.reason ? ` (${files.reason})` : ""}` : "";
+      line(files.done ? `영상 ${files.done}개를 받았습니다 · 다운로드 › ${job.folder} › ${job.dir}` : "영상을 받지 못했습니다", failed);
+    }
+  } else if (files) {
     if (files.done + files.failed < files.total) line(`사진 받는 중 ${files.done + files.failed}/${files.total}`);
     else {
       const failed = files.failed ? ` · 받지 못한 사진 ${files.failed}장${files.reason ? ` (${files.reason})` : ""}` : "";
@@ -505,7 +522,7 @@ function showJob(next) {
   const openId = stitch?.id ?? files?.shownId;
   $("openFolder").hidden = job.running || !openId;
   // 사진만 따로 받았으면 사진 세로로 붙이기(웹 페이지)로 이어 갈 수 있게 한다
-  $("openStitch").hidden = job.running || !files?.shownId || Boolean(stitch);
+  $("openStitch").hidden = job.running || !files?.shownId || Boolean(stitch) || video;
   if (!job.running && (files?.canceled || stitch?.canceled)) {
     showMessage(
       "사진마다 저장 위치를 묻는 창이 떴다면 크롬 설정 › 다운로드에서 \"다운로드 전에 각 파일의 저장 위치 확인\"을 끄고 다시 받으세요.",
@@ -629,6 +646,7 @@ async function init() {
     .then(applyOpenIn)
     .catch(() => {});
   links = mountLinks({ inPanel, openPanel });
+  videos = mountVideos({ getFolder: jobFolder, onStarted: showJob });
   renderRules();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

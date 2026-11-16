@@ -77,6 +77,22 @@ html.panel .link-groups { max-height: 50vh; }
 .links-note.warn { color: var(--warn); }
 .links-note:empty { display: none; }
 
+/* 이 페이지 영상 (videos.js): 체크박스, 첫 장면, 이름과 크기·길이·용량 */
+.videos-hint { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+.video-list { max-height: 320px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+html.panel .video-list { max-height: 50vh; }
+.video-item { padding: 6px 0; border-top: 1px solid var(--border); }
+.video-item label { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: pointer; }
+.video-item.stream label { cursor: default; }
+.video-thumb { flex: none; width: 96px; height: 54px; border-radius: 6px; background: #000; object-fit: contain; }
+.video-thumb.none { display: flex; align-items: center; justify-content: center; background: var(--card); color: var(--muted); }
+.video-item.stream .video-thumb { margin-left: 21px; opacity: 0.6; }
+.video-info { display: flex; flex-direction: column; min-width: 0; }
+.video-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.video-meta { color: var(--muted); font-size: 12px; }
+.video-item.stream .video-name { color: var(--muted); }
+.video-item.stream .video-meta { color: var(--warn); }
+
 /* 설정 세트: 고르는 칸과 새 세트·이름 바꾸기·지우기, 그 아래 이름을 묻는 칸 */
 .sets { margin: 0 0 8px; }
 .set-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }

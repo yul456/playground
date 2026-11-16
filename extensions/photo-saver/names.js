@@ -158,3 +158,54 @@ export function extFromUrl(url) {
     return null;
   }
 }
+
+// 영상 -------------------------------------------------------------------------
+// 받은 영상의 종류(MIME)에 맞는 확장자
+const VIDEO_MIME_EXT = {
+  "video/mp4": "mp4",
+  "application/mp4": "mp4",
+  "video/x-m4v": "m4v",
+  "video/webm": "webm",
+  "video/quicktime": "mov",
+  "video/x-matroska": "mkv",
+  "video/ogg": "ogv",
+  "video/x-msvideo": "avi",
+  "video/x-ms-wmv": "wmv",
+  "video/x-flv": "flv",
+  "video/3gpp": "3gp",
+  "video/mp2t": "ts",
+};
+const VIDEO_EXT = /\.(mp4|m4v|webm|mov|mkv|ogv|avi|wmv|flv|3gp|ts)$/i;
+
+export function videoExtFromMime(mime) {
+  return VIDEO_MIME_EXT[String(mime ?? "").split(";")[0].trim().toLowerCase()] ?? null;
+}
+
+export function videoExtFromName(name) {
+  const match = String(name ?? "").match(VIDEO_EXT);
+  return match ? match[1].toLowerCase() : null;
+}
+
+export function videoExtFromUrl(url) {
+  try {
+    return videoExtFromName(new URL(url).pathname);
+  } catch {
+    return null;
+  }
+}
+
+// 영상으로 받을 응답인가. 종류를 안 밝히거나(빈 값) 그냥 바이트(octet-stream)라고만 하는 곳도 있어 그것도 받는다
+export const videoMime = (mime) => !mime || mime.startsWith("video/") || mime === "application/mp4" || mime.endsWith("/octet-stream");
+
+// 주소에 적힌 영상 파일 이름에서 확장자를 뗀 것 (받을 때의 파일 이름). 주소 끝이 영상 파일 이름이 아니어도
+// 마지막 마디(…/clip/12345)를 이름으로 쓴다. 쓸 이름이 없으면 null (번호로 받는다)
+export function videoBase(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const last = decodeName(parsed.pathname.split("/").filter(Boolean).pop() ?? "");
+  return cleanFolderName(last.replace(VIDEO_EXT, ""), "") || null;
+}
