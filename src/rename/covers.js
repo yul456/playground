@@ -7,6 +7,9 @@
 //   { type: "pick", action: "primary"(누름) | "secondary"(Shift+누름), bigCoverUrl, smallCoverUrl, source,
 //     releaseInfo: { title, artist, date, url }, coverInfo: { format, width, height, size } }
 // 를 JSON 글로 보낸다(postMessage). 이쪽에서는 { type: "text" | "error" | "close", text }를 객체로 보낼 수 있다.
+// releaseInfo는 그 그림이 실린 음반의 정보다(곡 단위 정보는 없다). 멜론에서 실제로 온 것(2026-11-17):
+//   { title: "Palette", artist: "아이유아이유", date: "2017-04-21", url: "https://www.melon.com/album/detail.htm?albumId=…" }
+// 아티스트가 두 번 이어져 온 것에 주의한다 (releaseTags가 고친다). 다른 출처에서 어떻게 오는지는 확인하지 못했다.
 
 export const COVERS_URL = "https://covers.musichoarders.xyz";
 export const COVERS_NAME = "MH Covers";
@@ -66,7 +69,37 @@ export function googleUrl({ artist, album }) {
   return `https://www.google.com/search?${new URLSearchParams({ udm: "2", q: query })}`;
 }
 
-// 검색 창이 보낸 소식에서 고른 그림을 읽는다. 그 사이트가 보낸 것이 아니거나 고르기 소식이 아니면 null
+// 다른 사이트가 보낸 글을 태그에 넣을 수 있게 다듬는다: 글이 아니면 빈 글, 줄 바꿈 같은 것은 빈칸 하나로, 너무 길면 자른다
+const tidy = (value) => (typeof value === "string" || typeof value === "number" ? String(value).replace(/\s+/g, " ").trim().slice(0, 300) : "");
+
+// 음반 정보(releaseInfo)를 태그 칸에 넣을 값으로 바꾼다. 채울 수 있는 칸만 든 { album, artist, albumArtist, year }를 돌려준다.
+//   release: { title, artist, date } (readPick이 다듬은 것), source: 그 그림을 찾은 곳,
+//   asked: 찾을 때 넣은 아티스트 (그 사이트가 준 이름을 고쳐도 되는지 견줘 본다)
+// 곡 제목·트랙·장르·작곡가는 음반 정보에 없어 넣지 못한다
+const VARIOUS = /^(various(\s+artists?)?|v\.?\s?a\.?|여러\s*아티스트|여러\s*가수)$/i;
+export function releaseTags(release, source = "", asked = "") {
+  const out = {};
+  if (release?.title) out.album = release.title;
+  let artist = release?.artist ?? "";
+  // 멜론은 아티스트를 같은 이름이 두 번 이어진 글로 준다("아이유아이유"). 반으로 줄인다.
+  // 원래 이름이 그런 모양인 가수(TOTO 등)를 잘못 줄이지 않게, 찾을 때 넣은 이름과 같으면 그대로 둔다
+  const half = artist.length / 2;
+  if (source === "melon" && half >= 1 && Number.isInteger(half) && artist.slice(0, half) === artist.slice(half) && artist.toLowerCase() !== asked.trim().toLowerCase()) {
+    artist = artist.slice(0, half).trim();
+  }
+  if (artist) {
+    out.albumArtist = artist;
+    // 여러 가수의 모음집이면 곡의 아티스트는 건드리지 않는다
+    if (!VARIOUS.test(artist)) out.artist = artist;
+  }
+  // 발매일("2017-04-21", "2017" 등)에서 연도만 쓴다
+  const year = /(?:19|20)\d{2}/.exec(release?.date ?? "")?.[0];
+  if (year) out.year = year;
+  return out;
+}
+
+// 검색 창이 보낸 소식에서 고른 그림과 그 음반 정보를 읽는다. 그 사이트가 보낸 것이 아니거나 고르기 소식이 아니면 null.
+// 결과: { url: 큰 그림의 주소, source: 찾은 곳, keepOpen: 창을 닫지 말라는 뜻(Shift+누름), release: { title, artist, date } (없는 것은 빈 글) }
 export function readPick(event, child) {
   if (event.origin !== COVERS_URL || !child || event.source !== child) return null;
   let data = event.data;
@@ -78,7 +111,13 @@ export function readPick(event, child) {
     }
   }
   if (!data || data.type !== "pick" || typeof data.bigCoverUrl !== "string") return null;
-  return { url: data.bigCoverUrl, source: typeof data.source === "string" ? data.source : "", keepOpen: data.action === "secondary" };
+  const info = data.releaseInfo && typeof data.releaseInfo === "object" ? data.releaseInfo : {};
+  return {
+    url: data.bigCoverUrl,
+    source: typeof data.source === "string" ? data.source : "",
+    keepOpen: data.action === "secondary",
+    release: { title: tidy(info.title), artist: tidy(info.artist), date: tidy(info.date) },
+  };
 }
 
 // 검색 창에 소식을 보낸다 (그 창 위쪽의 안내 글, 오류 글, 닫기). 창이 이미 닫혔으면 아무 일도 없다

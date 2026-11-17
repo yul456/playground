@@ -24,6 +24,7 @@ const MODES = [
 //   example(target, pattern): 첫 파일에 적용하면 어떻게 되는지 보여 줄 글
 //   artMax·onArtMax: 넣을 그림을 줄일 크기(0이면 그대로), suggestArtist·suggestAlbum: 앨범 아트를 찾을 때 미리 채울 검색어,
 //   region·onRegion: 앨범 아트를 찾을 곳(covers.js REGIONS의 key),
+//   fill·onFill: 찾은 그림을 고르면 넣을 것(picture 그림만 · all 그림과 그 음반의 앨범·아티스트·연도),
 //   onFind({ artist, album }): 앨범 아트 찾기(MH Covers), onGoogle({ artist, album }): 구글 이미지 검색에서 찾기,
 //   searching: 찾는 중이면 { label, paste: 붙여 넣기를 기다리는 중인지(구글) }, onStopSearch: 찾기 그만두기,
 //   canPaste: 버튼으로 클립보드의 그림을 읽을 수 있는 브라우저인지, onPaste(): 복사한 그림을 체크한 파일들에 넣기,
@@ -45,6 +46,8 @@ export default function Batch({
   suggestAlbum,
   region,
   onRegion,
+  fill,
+  onFill,
   onFind,
   onGoogle,
   canPaste,
@@ -333,6 +336,13 @@ export default function Batch({
                 ))}
               </select>
             </label>
+            <label>
+              고르면 넣을 것
+              <select value={fill} disabled={disabled} onChange={(event) => onFill(event.target.value)}>
+                <option value="picture">그림만</option>
+                <option value="all">그림과 앨범·아티스트·연도</option>
+              </select>
+            </label>
             <button type="submit" disabled={disabled || !tagCount || (!artist.trim() && !album.trim())}>
               앨범 아트 찾기
             </button>
@@ -346,7 +356,8 @@ export default function Batch({
               {COVERS_NAME} ({COVERS_URL})
             </a>
             를 새 창으로 엽니다. 거기서 그림을 누르면 체크한 파일 가운데 태그를 고칠 수 있는 {number(tagCount)}개에 넣을 그림으로
-            들어옵니다. 아티스트와 앨범 이름이 그 사이트로 전달됩니다. 찾을 곳은 표의 "찾기"에도 적용됩니다.
+            들어옵니다. 아티스트와 앨범 이름이 그 사이트로 전달됩니다. "고르면 넣을 것"을 "그림과 앨범·아티스트·연도"로 두면 그
+            그림이 실린 음반의 정보도 태그에 넣습니다(있던 값은 바뀝니다). 찾을 곳과 고르면 넣을 것은 표의 "찾기"에도 적용됩니다.
           </p>
           <p className="rn-hint">
             "구글에서 찾기"는 구글 이미지 검색을 새 탭으로 엽니다(검색어가 구글로 전달됩니다). 구글은 고른 그림을 알려 주지 않아서,

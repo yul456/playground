@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { number } from "../shared/format.js";
 import { HUB_URL } from "../shared/site.js";
 import Batch, { NAME_KEY, NUMBER_KEY } from "./Batch.jsx";
-import { googleUrl, readPick, REGIONS, searchUrl, sourceName, tell } from "./covers.js";
+import { googleUrl, readPick, REGIONS, releaseTags, searchUrl, sourceName, tell } from "./covers.js";
 import { canRename, loadTags, renameFiles, saveTags } from "./disk.js";
 import { kindOf, scanFolder } from "./folder.js";
 import { TAG_FORMAT_NAMES, tagFormat } from "./formats.js";
@@ -23,9 +23,11 @@ const BIG_PICTURE = 1_000_000;
 // 설정: { subfolders: 고른 폴더 안의 폴더(하위 폴더)까지 읽을지, showTags: 오디오 태그 칸을 보일지,
 //   start·digits: 틀의 {번호}가 시작하는 수와 자릿수,
 //   artMax: 넣을 그림의 긴 변이 이보다 크면 줄인다(px, 0이면 그대로. picture.js PICTURE_SIZES),
-//   coverRegion: 앨범 아트를 찾을 곳(covers.js REGIONS의 key: kr 한국 · jp 일본) }
+//   coverRegion: 앨범 아트를 찾을 곳(covers.js REGIONS의 key: kr 한국 · jp 일본),
+//   coverFill: 찾은 그림을 고르면 넣을 것(picture 그림만 · all 그림과 그 음반의 앨범·아티스트·연도) }
+const COVER_FILLS = ["picture", "all"];
 function loadSettings() {
-  const settings = { subfolders: true, showTags: true, start: 1, digits: 2, artMax: 0, coverRegion: REGIONS[0].key };
+  const settings = { subfolders: true, showTags: true, start: 1, digits: 2, artMax: 0, coverRegion: REGIONS[0].key, coverFill: COVER_FILLS[0] };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (typeof saved?.subfolders === "boolean") settings.subfolders = saved.subfolders;
@@ -34,6 +36,7 @@ function loadSettings() {
     if (Number.isInteger(saved?.digits) && saved.digits >= 1 && saved.digits <= 6) settings.digits = saved.digits;
     if (PICTURE_SIZES.includes(saved?.artMax)) settings.artMax = saved.artMax;
     if (REGIONS.some((region) => region.key === saved?.coverRegion)) settings.coverRegion = saved.coverRegion;
+    if (COVER_FILLS.includes(saved?.coverFill)) settings.coverFill = saved.coverFill;
   } catch {
     // 저장소를 못 쓰는 환경(사생활 보호 모드 등)이면 기본값으로 시작한다
   }
@@ -261,19 +264,31 @@ export default function App() {
     }
   }
 
+  // 검색 창 위쪽에 보일 안내 글. 고르면 무엇을 넣는지(설정의 coverFill)를 함께 알린다
+  const searchText = (label) =>
+    `그림을 누르면 ${settingsRef.current.coverFill === "all" ? "그 그림과 음반 정보(앨범·아티스트·연도)를 " : ""}${label}에 넣고 이 창을 닫습니다. Shift를 누른 채 누르면 창을 닫지 않습니다.`;
+
   // 검색 창을 연다. 버튼을 누른 그 자리에서 불러야 브라우저가 새 창을 막지 않는다
   function openSearch(ids, artist, album, label) {
     setNotice("");
     if (searchRef.current && !searchRef.current.child) stopSearch();
-    const text = `그림을 누르면 ${label}에 넣고 이 창을 닫습니다. Shift를 누른 채 누르면 창을 닫지 않습니다.`;
     const dark = Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
-    const child = window.open(searchUrl({ artist, album, text, dark, region: settingsRef.current.coverRegion }), "playground-rename-covers", "popup,width=1240,height=860");
+    const child = window.open(searchUrl({ artist, album, text: searchText(label), dark, region: settingsRef.current.coverRegion }), "playground-rename-covers", "popup,width=1240,height=860");
     if (!child) {
       setNotice("검색 창을 열지 못했습니다. 브라우저가 새 창을 막았으면 주소창 오른쪽에서 허용해 주세요.");
       return;
     }
-    searchRef.current = { child, ids, label };
+    // artist: 찾을 때 넣은 아티스트. 그 사이트가 준 이름을 고칠 때 견줘 본다 (covers.js releaseTags)
+    searchRef.current = { child, ids, label, artist };
     setSearching({ label });
+  }
+
+  // 고르면 넣을 것을 바꾼다. 검색 창이 열려 있으면 그 창의 안내 글도 맞춘다
+  function changeCoverFill(coverFill) {
+    settingsRef.current = { ...settingsRef.current, coverFill };
+    setSettings((current) => ({ ...current, coverFill }));
+    const search = searchRef.current;
+    if (search?.child) tell(search.child, { type: "text", text: searchText(search.label) });
   }
 
   // 구글 이미지 검색을 새 탭으로 열고, 사용자가 거기서 복사한 그림을 붙여 넣기를 기다린다.
@@ -292,7 +307,7 @@ export default function App() {
     const search = searchRef.current;
     const pick = readPick(event, search?.child);
     if (!pick) return;
-    const waiting = `그림을 누르면 ${search.label}에 넣습니다.`;
+    const waiting = searchText(search.label);
     if (busyRef.current) {
       tell(search.child, { type: "error", text: "지금은 저장하는 중이라 그림을 넣을 수 없습니다. 저장이 끝난 뒤 다시 눌러 주세요." });
       return;
@@ -314,9 +329,19 @@ export default function App() {
       return;
     }
     pictureUrls.current.add(picture.url);
-    const count = changeRows((row) => (search.ids.has(row.id) ? withPicture(row, picture) : row));
+    // 설정에 따라 그 음반의 정보(앨범·아티스트·연도)도 태그에 넣는다. 있던 값은 바뀐다
+    const fill = settingsRef.current.coverFill === "all" ? releaseTags(pick.release, pick.source, search.artist) : {};
+    const count = changeRows((row) => {
+      if (!search.ids.has(row.id)) return row;
+      let next = withPicture(row, picture);
+      for (const [key, value] of Object.entries(fill)) next = withTag(next, key, value);
+      return next;
+    });
+    const filled = [fill.album && `앨범 "${fill.album}"`, fill.artist ? `아티스트 "${fill.artist}"` : fill.albumArtist && `앨범 아티스트 "${fill.albumArtist}"`, fill.year && `연도 "${fill.year}"`].filter(Boolean);
+    let also = "";
+    if (settingsRef.current.coverFill === "all") also = filled.length ? ` 태그도 넣었습니다(${filled.join(" · ")}).` : " 그 그림에는 음반 정보가 없어 태그는 그대로입니다.";
     setNotice("");
-    setBatchNote(`${sourceName(pick.source)}에서 찾은 그림을 ${number(count)}개 파일에 넣었습니다: ${pictureNote(picture)}. 저장을 눌러야 파일에 적힙니다.`);
+    setBatchNote(`${sourceName(pick.source)}에서 찾은 그림을 ${number(count)}개 파일에 넣었습니다: ${pictureNote(picture)}.${also} 저장을 눌러야 파일에 적힙니다.`);
     if (pick.keepOpen) tell(search.child, { type: "text", text: `${search.label}에 넣었습니다. 다른 그림을 누르면 바꿉니다.` });
     else if (searchRef.current === search) stopSearch();
   };
@@ -899,6 +924,8 @@ export default function App() {
             onArtMax={(artMax) => setSettings((current) => ({ ...current, artMax }))}
             region={settings.coverRegion}
             onRegion={(coverRegion) => setSettings((current) => ({ ...current, coverRegion }))}
+            fill={settings.coverFill}
+            onFill={changeCoverFill}
             suggestArtist={suggestArtist}
             suggestAlbum={suggestAlbum}
             onFind={findPictures}
@@ -1120,7 +1147,9 @@ export default function App() {
             앨범 아트 "찾기"는 <a href="https://covers.musichoarders.xyz" target="_blank" rel="noreferrer">MH Covers (https://covers.musichoarders.xyz)</a>
             를 새 창으로 엽니다. 거기서 찾은 그림 가운데 하나를 누르면 이 화면에 넣을 그림으로 들어옵니다. 그 곡의
             아티스트와 앨범 이름이 그 사이트로 전달됩니다. 찾을 곳은 한국(멜론·FLO·애플 뮤직 등)과 일본(애플 뮤직·LINE
-            MUSIC·아마존 뮤직 등) 가운데 고릅니다. 벅스·OTOTOY·BOOTH의 그림은 브라우저가 바로 받아 오지 못해서, 저장한 뒤
+            MUSIC·아마존 뮤직 등) 가운데 고릅니다. "고르면 넣을 것"을 "그림과 앨범·아티스트·연도"로 바꾸면 고른 그림이 실린
+            음반의 앨범 이름·아티스트·발매 연도도 태그에 넣습니다(있던 값은 바뀝니다. 곡 제목·트랙·장르는 오지 않습니다).
+            사이트마다 적는 방식이 달라서 저장하기 전에 바뀐 칸을 확인하세요. 벅스·OTOTOY·BOOTH의 그림은 브라우저가 바로 받아 오지 못해서, 저장한 뒤
             끌어다 놓아야 합니다.
           </li>
           <li>
