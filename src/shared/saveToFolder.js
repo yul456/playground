@@ -1,5 +1,5 @@
 // 다 만든 파일(Blob)을 사용자가 고른 폴더(FileSystemDirectoryHandle)나 저장 창에서 고른 파일(FileSystemFileHandle)에 저장한다.
-// 사진 세로로 붙이기와 사진 형식 바꾸기가 쓴다.
+// 사진 세로로 붙이기, 사진 형식 바꾸기, 오디오 메뉴들, 파일 이름 바꾸기(태그 저장)가 쓴다.
 // 화면 코드가 없어 Node에서 시험할 수 있다 (폴더·파일은 File System Access API처럼 생긴 것이면 된다).
 //
 // 크롬은 고른 폴더의 파일에 바로 쓰지 않는다. "이름.crswap" 임시 파일에 쓰다가 닫을 때 진짜 파일과 바꾼다.
@@ -133,11 +133,12 @@ export async function saveToFolder(dir, name, blob, options = {}) {
 }
 
 // 저장 창(showSaveFilePicker)에서 고른 파일 하나에 blob을 저장한다. options와 결과는 saveToFolder와 같다.
-// 끝내 저장하지 못했는데 그 파일이 비어 있으면(저장 창이 만들어 둔 것) 지운다
+// 끝내 저장하지 못했는데 그 파일이 비어 있으면(저장 창이 만들어 둔 것) 지운다.
+// options.existing: 원래 있던 파일을 고쳐 쓰는 것이다(파일 이름 바꾸기의 태그 저장). 실패해도 그 파일을 지우지 않는다
 export async function saveToFile(handle, blob, options = {}) {
   const settings = withDefaults(options);
   const result = await saveWithRetries(async () => handle, blob, settings);
   if (result.ok) return result;
-  await removeEmptyFile(handle);
+  if (!options.existing) await removeEmptyFile(handle);
   return settings.stopped() ? { ok: false, cancelled: true } : result;
 }

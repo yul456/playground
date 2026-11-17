@@ -12,21 +12,10 @@
 //    ffmpeg(yt-dlp 등)는 제목을 Matroska의 Segment Info에 있는 Title에 넣는데, Mediabunny는 Tags만 읽어 제목을 놓친다.
 //    파일 앞부분에서 그 Title을 직접 읽는다.
 
-const HANGUL = /[가-힣]/;
+// 깨진 한글 고치기는 파일 이름 바꾸기도 써서 src/shared/textRepair.js에 있다
+import { repairText } from "../shared/textRepair.js";
 
-export function repairText(text) {
-  if (typeof text !== "string" || !/[\u0080-ÿ]/.test(text) || /[^\u0000-ÿ]/.test(text)) return text;
-  const bytes = Uint8Array.from(text, (ch) => ch.charCodeAt(0));
-  for (const encoding of ["utf-8", "euc-kr"]) {
-    try {
-      const decoded = new TextDecoder(encoding, { fatal: true }).decode(bytes);
-      if (encoding === "utf-8" || HANGUL.test(decoded)) return decoded;
-    } catch {
-      // 이 방식으로는 읽히지 않는다
-    }
-  }
-  return text;
-}
+export { repairText };
 
 // 글로 된 태그를 모두 바로잡은 새 태그 (그림, 숫자, 날짜는 그대로)
 export function repairTags(tags) {
