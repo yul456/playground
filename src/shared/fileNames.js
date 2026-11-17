@@ -6,8 +6,11 @@ const SYSTEM_FOLDERS = new Set(["$recycle.bin", "system volume information"]);
 // 숨김 폴더(.으로 시작)와 시스템 폴더는 읽지 않는다
 export const isSkippedFolder = (name) => name.startsWith(".") || SYSTEM_FOLDERS.has(name.toLowerCase());
 
-// 윈도우 탐색기 이름순처럼 숫자는 크기대로(1, 2, 10) 놓고 대소문자는 가리지 않는다
-const collator = new Intl.Collator("ko", { numeric: true, sensitivity: "base" });
+// 윈도우 탐색기의 이름순에 맞춘다: 숫자는 크기대로(1, 2, 10), 대소문자는 가리지 않고, 기호 → 숫자 → 영문 → 한글 순이다.
+// 처음엔 "ko" 방식으로 견줬는데, 그러면 한글이 영문보다 앞에 와서(맥 Finder의 순서) 영문과 한글 이름이 섞인 폴더에서
+// 탐색기와 순서가 달랐다. 사용자가 탐색기 순서로 맞추자고 해서 "en" 방식으로 바꿨다 (2026-11-17).
+// "en" 방식은 한글을 영문 뒤에 가나다순으로 놓는다
+const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 export const compareNames = (a, b) => collator.compare(a, b);
 
 // 폴더 경로(이름 배열)를 위 폴더부터 이름순으로 견준다
