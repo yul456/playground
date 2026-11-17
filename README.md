@@ -80,7 +80,8 @@ src/
                         WAV에 ID3 조각 넣기 wavChunk.js)
   rename/               파일 이름 바꾸기 (이름 규칙과 바꾸는 순서 names.js, 폴더 읽기 folder.js, 실제로 이름을 바꾸고 태그를 저장하는 disk.js,
                         MP3의 ID3 태그를 틀 단위로 읽고 쓰는 id3.js, 화면의 칸으로 읽고 고치는 tags.js, 장르 표 genres.js,
-                        앨범 아트로 넣을 그림 준비 picture.js, 앨범 아트 찾기(검색 사이트 연동) covers.js,
+                        FLAC 태그 flac.js, M4A 태그 mp4.js, WAV 태그 wav.js, 형식마다 읽기·쓰기를 고르는 formats.js, 바이트 도구 bytes.js,
+                        앨범 아트로 넣을 그림 준비 picture.js, 앨범 아트 찾기(검색 사이트 연동, 구글 이미지 검색 주소) covers.js,
                         한꺼번에 고치기 Batch.jsx, 표의 줄 Rows.jsx)
   json/                 JSON 보기 (글을 읽고 틀린 자리를 알리는 parse.js, 펼친 대로 화면 줄을 만드는 tree.js,
                         줄을 그리는 Tree.jsx)
@@ -107,7 +108,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 사진 형식 바꾸기 | `src/convert/`, `convert/` | 없음 (JPG는 브라우저 내장 인코더로 만든다) |
 | 오디오 자르기 | `src/audio-cut/`, `audio-cut/` | `mediabunny` (MP3·WAV가 아닌 형식을 다시 압축하지 않고 자르기, MPL-2.0, 그런 파일을 열 때만 받음), `@mediabunny/flac-encoder` (FLAC을 다시 압축해야 할 때만 받음, MPL-2.0). MP3·WAV는 패키지 없이 자체 코드 |
 | 오디오 형식 바꾸기 | `src/audio-convert/`, `audio-convert/` | `mediabunny` (풀고 다시 만들기, 바꾸기를 누를 때 받음), `@mediabunny/mp3-encoder` (LAME, MP3로 바꿀 때만 받음), `@mediabunny/flac-encoder` (FLAC으로 바꿀 때만 받음), `@mediabunny/aac-encoder` (FFmpeg의 AAC 인코더, 크롬이 그 설정으로 AAC를 만들지 못할 때만 받음). 모두 MPL-2.0 |
-| 파일 이름 바꾸기 | `src/rename/`, `rename/` | 없음 (이름은 브라우저의 `FileSystemFileHandle.move`로 바꾸고, MP3 태그는 자체 코드 `id3.js`로 읽고 쓴다. 앨범 아트 찾기는 MH Covers(https://covers.musichoarders.xyz)를 새 창으로 열어 사용자가 고른 그림을 받는다) |
+| 파일 이름 바꾸기 | `src/rename/`, `rename/` | 없음 (이름은 브라우저의 `FileSystemFileHandle.move`로 바꾸고, MP3·M4A·FLAC·WAV 태그는 자체 코드(`id3.js`, `mp4.js`, `flac.js`, `wav.js`)로 읽고 쓴다. 앨범 아트 찾기는 MH Covers(https://covers.musichoarders.xyz)를 새 창으로 열어 사용자가 고른 그림을 받고, 구글 이미지 검색은 새 탭으로 열기만 한다(복사한 그림을 붙여 넣어 받는다)) |
 | JSON 보기 | `src/json/`, `json/` | 없음 (브라우저 내장 JSON.parse 대신 자체 코드 `parse.js`로 읽는다. 큰 수·키 순서·겹친 키를 적힌 그대로 보이려는 것) |
 | 페이지 사진 받기 | `extensions/photo-saver/`, `src/photo-saver/`, `photo-saver/` | 없음 (확장 프로그램은 빌드 없이 쓰는 자바스크립트, 이어 붙이기는 `src/stitch/png.js`와 `src/shared/imageInfo.js` 복사본을 쓰고, ZIP은 Node 내장 zlib로 묶음) |
 

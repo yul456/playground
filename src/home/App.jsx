@@ -91,7 +91,7 @@ const FEATURES = [
     path: "rename/",
     icon: "🏷️",
     title: "파일 이름 바꾸기",
-    description: "폴더의 파일 이름을 표에서 고치거나 한꺼번에 바꿉니다. MP3는 제목·앨범 같은 태그와 앨범 아트도 함께 고칩니다.",
+    description: "폴더의 파일 이름을 표에서 고치거나 한꺼번에 바꿉니다. 오디오(MP3·M4A·FLAC·WAV)는 제목·앨범 같은 태그와 앨범 아트도 함께 고칩니다.",
   },
   {
     path: "json/",

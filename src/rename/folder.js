@@ -3,16 +3,14 @@
 // 공통의 scanDirectory(shared/folderScan.js)와 달리 목록에 올리지 않는 이름들(others)도 담는다. 바꿀 이름이 그것들과 겹치는지 봐야 한다.
 import { compareNames, isSkippedFolder } from "../shared/fileNames.js";
 
-// 태그를 고칠 수 있는 형식은 지금 MP3뿐이다. 다른 오디오는 이름만 바꾼다
-const AUDIO = new Set(["m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "wav", "wma", "aiff", "aif", "ape", "mka", "mp2", "amr", "ac3", "dsf", "wv"]);
+// 오디오로 치는 확장자. 이 가운데 태그를 고칠 수 있는 형식은 formats.js의 tagFormat이 정한다 (나머지는 이름만 바꾼다)
+const AUDIO = new Set(["mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "wav", "wma", "aiff", "aif", "ape", "mka", "mp2", "amr", "ac3", "dsf", "wv"]);
 
-// "mp3" · "audio"(다른 오디오) · "file"(그 밖)
+// "audio"(오디오) · "file"(그 밖)
 export function kindOf(name) {
   const dot = name.lastIndexOf(".");
   if (dot <= 0) return "file";
-  const ext = name.slice(dot + 1).toLowerCase();
-  if (ext === "mp3") return "mp3";
-  return AUDIO.has(ext) ? "audio" : "file";
+  return AUDIO.has(name.slice(dot + 1).toLowerCase()) ? "audio" : "file";
 }
 
 // 목록에 올리지 않는 파일: 숨김 파일(.으로 시작), 크롬이 저장하는 중에 두는 임시 파일, 윈도우가 폴더마다 두는 파일

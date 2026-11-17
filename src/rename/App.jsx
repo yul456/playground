@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { number } from "../shared/format.js";
 import { HUB_URL } from "../shared/site.js";
 import Batch, { NAME_KEY, NUMBER_KEY } from "./Batch.jsx";
-import { readPick, REGIONS, searchUrl, sourceName, tell } from "./covers.js";
+import { googleUrl, readPick, REGIONS, searchUrl, sourceName, tell } from "./covers.js";
 import { canRename, loadTags, renameFiles, saveTags } from "./disk.js";
 import { kindOf, scanFolder } from "./folder.js";
+import { TAG_FORMAT_NAMES, tagFormat } from "./formats.js";
 import { fillPattern, nameProblem, padNumber, patternKeys, planRenames, replaceText, safePart, splitName, tidyBase, trackNumber } from "./names.js";
-import { fetchPicture, PICTURE_SIZES, preparePicture } from "./picture.js";
+import { fetchPicture, isCopiedBitmap, PICTURE_SIZES, preparePicture } from "./picture.js";
 import { draggingFiles, FileRow, pictureInfo } from "./Rows.jsx";
 import { TAG_FIELDS } from "./tags.js";
 
@@ -43,8 +44,10 @@ function loadSettings() {
 const canPickFolder = () => typeof window.showDirectoryPicker === "function";
 
 // ---- 줄(row) 하나를 고친 새 줄을 만드는 함수들. 고친 것은 edit에 모아 두고 저장할 때 파일에 적는다 ----
-// 줄: { id, folder: 폴더 번호, handle, name: 지금 이름, base, ext, kind: "mp3"·"audio"·"file", checked,
-//       tags: MP3의 태그(disk.js loadTags, 읽는 중이면 { state: "loading" }), edit: { base, tags: { 칸: 글 }, picture }, result }
+// 줄: { id, folder: 폴더 번호, handle, name: 지금 이름, base, ext, kind: "audio"·"file",
+//       format: 태그를 고칠 수 있는 형식(formats.js tagFormat: mp3 · flac · m4a · wav, 아니면 null), checked,
+//       tags: 그 형식의 태그(disk.js loadTags, 읽는 중이면 { state: "loading" }, format이 없으면 null),
+//       edit: { base, tags: { 칸: 글 }, picture }, result }
 const baseOf = (row) => row.edit.base ?? row.base;
 const tagOf = (row, key) => row.edit.tags?.[key] ?? row.tags.values[key];
 const isReady = (row) => row.tags?.state === "ready";
@@ -141,9 +144,9 @@ export default function App() {
   rowsRef.current = rows;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-  // 앨범 아트를 찾는 창(covers.js): { child: 그 창, ids: 고른 그림을 넣을 줄들, label: 그 줄들을 가리키는 말 }
+  // 앨범 아트를 찾는 중(covers.js): { child: 검색 창(구글은 그 창을 잡고 있을 수 없어 null), ids: 그림을 넣을 줄들, label: 그 줄들을 가리키는 말 }
   const searchRef = useRef(null);
-  // 찾는 창이 열려 있는 동안 화면에 알릴 말 { label }
+  // 찾는 동안 화면에 알릴 말 { label, paste: 그림을 붙여 넣기를 기다리는 중인지(구글) }
   const [searching, setSearching] = useState(null);
   const stopRef = useRef(false);
   const savingRef = useRef(null);
@@ -168,12 +171,12 @@ export default function App() {
   const visible = useMemo(() => (view === "audio" ? rows.filter((row) => row.kind !== "file") : rows), [rows, view]);
   const issues = useMemo(() => (source ? findIssues(rows, source.folders) : new Map()), [rows, source]);
   const counts = useMemo(() => {
-    const out = { names: 0, tags: 0, pictures: 0, repaired: 0, mp3: 0, audio: 0, reading: 0 };
+    const out = { names: 0, tags: 0, pictures: 0, repaired: 0, tagged: 0, audio: 0, reading: 0 };
     for (const row of rows) {
       if (nameEdited(row)) out.names++;
       if (tagsEdited(row)) out.tags++;
       if (row.edit.picture !== undefined) out.pictures++;
-      if (row.kind === "mp3") out.mp3++;
+      if (row.format) out.tagged++;
       if (row.kind !== "file") out.audio++;
       if (row.tags?.state === "loading") out.reading++;
       if (isReady(row) && row.tags.repaired.some((key) => row.edit.tags?.[key] === undefined)) out.repaired++;
@@ -181,11 +184,11 @@ export default function App() {
     return out;
   }, [rows]);
   const pending = counts.names + counts.tags;
-  const hasTags = counts.mp3 > 0;
-  const showTags = settings.showTags && visible.some((row) => row.kind === "mp3");
+  const hasTags = counts.tagged > 0;
+  const showTags = settings.showTags && visible.some((row) => row.format);
   const checked = useMemo(() => visible.filter((row) => row.checked), [visible]);
   const tagChecked = useMemo(() => checked.filter(isReady).length, [checked]);
-  // 한꺼번에 앨범 아트를 찾을 때 미리 채워 둘 검색어: 체크한 첫 MP3의 태그
+  // 한꺼번에 앨범 아트를 찾을 때 미리 채워 둘 검색어: 체크한 파일 가운데 태그를 읽은 첫 파일의 태그
   const firstTagged = checked.find(isReady);
   const suggestArtist = firstTagged ? tagOf(firstTagged, "artist") || tagOf(firstTagged, "albumArtist") : "";
   const suggestAlbum = firstTagged ? tagOf(firstTagged, "album") || tagOf(firstTagged, "title") : "";
@@ -228,9 +231,9 @@ export default function App() {
   }
 
   // 그림 파일을 읽어 앨범 아트로 넣을 준비를 한다. 실패하면 알리고 null
-  async function readPicture(file) {
+  async function readPicture(file, options) {
     try {
-      const picture = await preparePicture(file, settingsRef.current.artMax);
+      const picture = await preparePicture(file, settingsRef.current.artMax, options);
       pictureUrls.current.add(picture.url);
       return picture;
     } catch (error) {
@@ -249,6 +252,7 @@ export default function App() {
     if (!search) return;
     searchRef.current = null;
     setSearching(null);
+    if (!search.child) return;
     tell(search.child, { type: "close" });
     try {
       search.child.close();
@@ -260,6 +264,7 @@ export default function App() {
   // 검색 창을 연다. 버튼을 누른 그 자리에서 불러야 브라우저가 새 창을 막지 않는다
   function openSearch(ids, artist, album, label) {
     setNotice("");
+    if (searchRef.current && !searchRef.current.child) stopSearch();
     const text = `그림을 누르면 ${label}에 넣고 이 창을 닫습니다. Shift를 누른 채 누르면 창을 닫지 않습니다.`;
     const dark = Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
     const child = window.open(searchUrl({ artist, album, text, dark, region: settingsRef.current.coverRegion }), "playground-rename-covers", "popup,width=1240,height=860");
@@ -269,6 +274,16 @@ export default function App() {
     }
     searchRef.current = { child, ids, label };
     setSearching({ label });
+  }
+
+  // 구글 이미지 검색을 새 탭으로 열고, 사용자가 거기서 복사한 그림을 붙여 넣기를 기다린다.
+  // 구글 페이지는 자기를 연 페이지와의 연결을 끊어서 그 탭을 닫아 줄 수 없다. 사용자가 닫고 돌아와 붙여 넣는다
+  function openGoogle(ids, artist, album, label) {
+    setNotice("");
+    stopSearch();
+    window.open(googleUrl({ artist, album }), "_blank", "noopener,noreferrer");
+    searchRef.current = { child: null, ids, label };
+    setSearching({ label, paste: true });
   }
 
   // 검색 창에서 그림을 골랐다는 소식이 오면 그 그림을 받아 줄들에 넣는다
@@ -314,7 +329,7 @@ export default function App() {
       const search = searchRef.current;
       searchRef.current = null;
       try {
-        search?.child.close();
+        search?.child?.close();
       } catch {
         // 이미 닫힌 창이다
       }
@@ -324,13 +339,64 @@ export default function App() {
   useEffect(() => {
     if (!searching) return undefined;
     const timer = setInterval(() => {
-      if (searchRef.current?.child.closed) {
+      if (searchRef.current?.child?.closed) {
         searchRef.current = null;
         setSearching(null);
       }
     }, 700);
     return () => clearInterval(timer);
   }, [searching]);
+
+  // ---- 붙여넣기: 복사한 그림을 앨범 아트로 넣는다 ----
+  // 다른 사이트에서 그림을 오른쪽 클릭해 "이미지 복사"한 것이나 탐색기에서 복사한 그림 파일을 받는다.
+  // 넣을 곳은 차례로: 앨범 아트를 찾는 중이면 그 줄들 → 마우스가 올라가 있는 그림 칸의 줄 → 마우스가 올라가 있는
+  // "앨범 아트" 칸이면 체크한 줄들 → 글을 치던 줄. 어디에도 해당하지 않으면 넣지 않고 알린다
+  const pasteRef = useRef(null);
+  pasteRef.current = async (event) => {
+    const file = [...(event.clipboardData?.files ?? [])].find((item) => item.type.startsWith("image/"));
+    if (!file || !rowsRef.current.length) return;
+    // 글을 치는 칸에 글을 붙여 넣는 것이면 그대로 둔다. 엑셀·워드에서 복사한 글에는 그 모양을 찍은 그림도 함께 들어 있다
+    if (event.target?.closest?.("input, textarea, select") && event.clipboardData.getData("text/plain")) return;
+    event.preventDefault();
+    if (busyRef.current) {
+      setNotice("저장하는 중에는 그림을 넣을 수 없습니다. 저장이 끝난 뒤 다시 붙여 넣어 주세요.");
+      return;
+    }
+    const search = searchRef.current;
+    let ids = search?.ids ?? null;
+    if (!ids) {
+      const under = [...document.querySelectorAll(":hover")].at(-1) ?? null;
+      const rowOf = (element) => {
+        const id = Number(element?.closest?.("tr[data-row]")?.dataset.row ?? NaN);
+        return Number.isNaN(id) ? null : new Set([id]);
+      };
+      if (under?.closest(".rn-art-cell")) ids = rowOf(under);
+      else if (under?.closest(".rn-drop")) ids = targetIds();
+      else ids = rowOf(document.activeElement);
+    }
+    const ready = ids ? rowsRef.current.filter((row) => ids.has(row.id) && isReady(row)) : [];
+    if (!ready.length) {
+      setNotice(
+        ids
+          ? "그 파일에는 앨범 아트를 넣을 수 없습니다."
+          : '복사한 그림을 넣을 곡을 알 수 없습니다. 그 곡의 그림 칸에 마우스를 올리고 다시 붙여 넣으세요 (여러 곡이면 위의 "앨범 아트" 칸에 올리고).',
+      );
+      return;
+    }
+    setNotice("");
+    // 화면의 그림을 복사한 것은 이름이 없다. 그런 그림은 JPG가 더 작으면 JPG로 넣는다
+    const copied = isCopiedBitmap(file);
+    const picture = await readPicture(copied ? new File([file], "복사한 그림", { type: file.type }) : file, { compact: copied });
+    if (!picture) return;
+    const count = changeRows((row) => (ids.has(row.id) ? withPicture(row, picture) : row));
+    setBatchNote(`붙여 넣은 그림을 ${number(count)}개 파일에 넣었습니다: ${pictureNote(picture)}. 저장을 눌러야 파일에 적힙니다.`);
+    if (search && searchRef.current === search) stopSearch();
+  };
+  useEffect(() => {
+    const onPaste = (event) => pasteRef.current(event);
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
 
   // 줄이 쓰는 함수들. 늘 같은 객체여야 바뀐 줄만 다시 그린다
   const actionsRef = useRef(null);
@@ -346,15 +412,17 @@ export default function App() {
     setTag: (id, key, value) => updateRow(id, (row) => withTag(row, key, value)),
     setPicture: (id, picture) => updateRow(id, (row) => withPicture(row, picture)),
     dropPicture: (id, file) => actionsRef.current.onDropPicture(id, file),
-    findPicture: (id) => actionsRef.current.onFindPicture(id),
+    findPicture: (id) => actionsRef.current.onFindPicture(id, false),
+    googlePicture: (id) => actionsRef.current.onFindPicture(id, true),
   };
-  // 그 줄의 태그로 앨범 아트를 찾는다. 앨범이 비어 있으면 제목으로, 태그가 하나도 없으면 파일 이름으로 찾는다
-  actionsRef.current.onFindPicture = (id) => {
+  // 그 줄의 태그로 앨범 아트를 찾는다. 앨범이 비어 있으면 제목으로, 태그가 하나도 없으면 파일 이름으로 찾는다.
+  // google이면 구글 이미지 검색에서, 아니면 MH Covers에서 찾는다
+  actionsRef.current.onFindPicture = (id, google) => {
     const row = rowsRef.current.find((item) => item.id === id);
     if (!row || !isReady(row)) return;
     const artist = (tagOf(row, "artist") || tagOf(row, "albumArtist")).trim();
     const album = (tagOf(row, "album") || tagOf(row, "title")).trim() || (artist ? "" : baseOf(row));
-    openSearch(new Set([id]), artist, album, `"${row.name}"`);
+    (google ? openGoogle : openSearch)(new Set([id]), artist, album, `"${row.name}"`);
   };
   actionsRef.current.onDropPicture = async (id, file) => {
     setNotice("");
@@ -365,10 +433,10 @@ export default function App() {
   };
   const actions = actionsRef.current;
 
-  // MP3의 태그를 몇 개씩 읽어 줄에 채운다. 읽은 것은 조금씩 모아 한 번에 화면에 넣는다
+  // 태그를 고칠 수 있는 파일의 태그를 몇 개씩 읽어 줄에 채운다. 읽은 것은 조금씩 모아 한 번에 화면에 넣는다
   function readAllTags(list) {
     const run = ++readRun.current;
-    const queue = list.filter((row) => row.kind === "mp3");
+    const queue = list.filter((row) => row.format);
     const ready = new Map();
     let timer = null;
     const flush = () => {
@@ -384,7 +452,7 @@ export default function App() {
         const row = queue[next++];
         let tags;
         try {
-          tags = await loadTags(row.handle);
+          tags = await loadTags(row.handle, row.format);
         } catch (error) {
           tags = { state: "error", message: error?.message ?? String(error) };
         }
@@ -412,6 +480,7 @@ export default function App() {
       scan.folders.forEach((folder, index) => {
         for (const file of folder.files) {
           const kind = kindOf(file.name);
+          const format = tagFormat(file.name);
           list.push({
             id: list.length,
             folder: index,
@@ -419,8 +488,9 @@ export default function App() {
             name: file.name,
             ...splitName(file.name),
             kind,
+            format,
             checked: true,
-            tags: kind === "mp3" ? { state: "loading" } : null,
+            tags: format ? { state: "loading" } : null,
             edit: {},
             result: null,
           });
@@ -548,11 +618,11 @@ export default function App() {
     setBatchNote(`${number(count)}개 파일에 넣을 그림: ${pictureNote(picture)}. 저장을 눌러야 파일에 적힙니다.`);
   }
 
-  // 체크한 MP3 모두에 넣을 앨범 아트를 찾는다
-  function findPictures({ artist, album }) {
+  // 체크한 파일 가운데 태그를 고칠 수 있는 것 모두에 넣을 앨범 아트를 찾는다 (google이면 구글 이미지 검색에서)
+  function findPictures({ artist, album }, google = false) {
     const ids = targetIds();
     const ready = new Set(rowsRef.current.filter((row) => ids.has(row.id) && isReady(row)).map((row) => row.id));
-    if (ready.size) openSearch(ready, artist.trim(), album.trim(), `체크한 MP3 ${number(ready.size)}개`);
+    if (ready.size) (google ? openGoogle : openSearch)(ready, artist.trim(), album.trim(), `체크한 파일 ${number(ready.size)}개`);
   }
 
   // 깨진 한글을 바로잡아 보여 주던 칸을 바로잡은 대로 저장할 것으로 표시한다
@@ -620,7 +690,7 @@ export default function App() {
       const edits = {};
       for (const [key, value] of Object.entries(row.edit.tags ?? {})) edits[key] = value.trim();
       if (row.edit.picture !== undefined) edits.picture = row.edit.picture && { mime: row.edit.picture.mime, data: row.edit.picture.data };
-      const result = await saveTags(row.handle, row.tags, edits, {
+      const result = await saveTags(row.handle, row.format, row.tags, edits, {
         stopped,
         hold: (writable) => {
           savingRef.current = writable;
@@ -680,11 +750,11 @@ export default function App() {
           return { ...named, edit, result: { ...row.result, name: { ok: true } } };
         }),
       );
-      // 이름을 바꾼 MP3는 태그를 다시 읽는다. 전에 읽어 둔 파일은 옛 이름을 가리켜 그림을 보이지 못하고,
+      // 이름을 바꾼 오디오는 태그를 다시 읽는다. 전에 읽어 둔 파일은 옛 이름을 가리켜 그림을 보이지 못하고,
       // 바뀐 시각이 달라졌으면 다음 저장 때 "읽은 뒤에 파일이 바뀌었다"고 잘못 막는다
       for (const row of snapshot) {
-        if (!results.get(row.id)?.ok || row.kind !== "mp3") continue;
-        const tags = await loadTags(row.handle).catch(() => null);
+        if (!results.get(row.id)?.ok || !row.format) continue;
+        const tags = await loadTags(row.handle, row.format).catch(() => null);
         if (tags) updateRow(row.id, (current) => (current.tags?.state === "loading" ? current : { ...current, tags }));
       }
     }
@@ -721,8 +791,8 @@ export default function App() {
       <header>
         <h1>파일 이름 바꾸기</h1>
         <p className="subtitle">
-          폴더를 고르면 그 안의 파일 이름을 표에서 고치거나 한꺼번에 바꿔 저장합니다. MP3는 제목·앨범 같은 태그와 앨범 아트도
-          함께 고칩니다. 파일은 이 PC 밖으로 나가지 않고 브라우저 안에서만 처리합니다.
+          폴더를 고르면 그 안의 파일 이름을 표에서 고치거나 한꺼번에 바꿔 저장합니다. 오디오({TAG_FORMAT_NAMES})는 제목·앨범
+          같은 태그와 앨범 아트도 함께 고칩니다. 파일은 이 PC 밖으로 나가지 않고 브라우저 안에서만 처리합니다.
         </p>
       </header>
 
@@ -790,6 +860,7 @@ export default function App() {
             suggestArtist={suggestArtist}
             suggestAlbum={suggestAlbum}
             onFind={findPictures}
+            onGoogle={(query) => findPictures(query, true)}
             searching={searching}
             onStopSearch={stopSearch}
             example={patternExample}
@@ -988,8 +1059,13 @@ export default function App() {
             만듭니다. 번호는 폴더마다 표의 위에서부터 매깁니다.
           </li>
           <li>
-            태그는 MP3만 고칩니다(ID3). 소리는 다시 압축하지 않고 그대로 옮기며, 고치지 않은 태그도 그대로 둡니다. 다른
-            오디오(M4A, FLAC 등)는 이름만 바꿀 수 있습니다.
+            태그는 {TAG_FORMAT_NAMES}를 고칩니다. 소리는 다시 압축하지 않고 그대로 옮기며, 고치지 않은 태그도 그대로 둡니다.
+            다른 오디오(OGG, WMA 등)는 이름만 바꿀 수 있습니다.
+          </li>
+          <li>
+            M4A의 트랙에는 숫자만 적을 수 있습니다(3 또는 3/12). WAV는 태그를 파일 안의 두 곳(ID3, INFO)에 함께 적는데,
+            한글로 된 값과 작곡가·앨범 아티스트·앨범 아트는 ID3 쪽에만 들어갑니다. 그래서 WAV의 태그는 프로그램에 따라 일부만
+            보일 수 있습니다.
           </li>
           <li>
             앨범 아트는 표의 그림 칸에 그림 파일을 끌어다 놓거나 그림을 눌러 바꿉니다. 여러 파일에 같은 그림을 넣으려면
@@ -1001,6 +1077,12 @@ export default function App() {
             아티스트와 앨범 이름이 그 사이트로 전달됩니다. 찾을 곳은 한국(멜론·FLO·애플 뮤직 등)과 일본(애플 뮤직·LINE
             MUSIC·아마존 뮤직 등) 가운데 고릅니다. 벅스·OTOTOY·BOOTH의 그림은 브라우저가 바로 받아 오지 못해서, 저장한 뒤
             끌어다 놓아야 합니다.
+          </li>
+          <li>
+            거기서 못 찾은 그림은 "구글"로 찾을 수 있습니다. 그 곡의 아티스트·앨범으로 구글 이미지 검색을 새 탭에 엽니다(검색어가
+            구글로 전달됩니다). 구글은 고른 그림을 이 화면에 알려 주지 않아서, 그림을 오른쪽 클릭해 "이미지 복사"를 누르고 그
+            탭을 닫은 뒤 이 화면에서 붙여 넣어야(Ctrl+V) 합니다. 다른 곳에서 복사한 그림도 넣을 곡의 그림 칸에 마우스를 올리고
+            붙여 넣으면 들어갑니다. 복사한 그림은 JPG가 더 작으면 JPG로 바꿔 넣습니다.
           </li>
           <li>
             찾은 그림은 3000px·4MB쯤 되는 것도 있습니다. 그대로 넣으면 파일마다 그만큼 커지므로, "앨범 아트"의 넣을 그림

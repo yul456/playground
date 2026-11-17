@@ -405,6 +405,19 @@ function legacyBytes(text, max) {
   return out;
 }
 
+// 글 전체를 옛 방식(영문은 그대로, 한글은 EUC-KR) 바이트로 바꾼다. 그 방식으로 적을 수 없는 글자가 있으면 null.
+// WAV의 INFO 칸이 EUC-KR로 적혀 있던 파일에 쓴다 (wav.js)
+export function legacyText(text) {
+  const out = [];
+  for (const ch of text) {
+    const code = ch.codePointAt(0);
+    const bytes = code < 128 ? [code] : legacy().get(ch);
+    if (!bytes) return null;
+    out.push(...bytes);
+  }
+  return Uint8Array.from(out);
+}
+
 const V1_TEXT = { title: [3, 30], artist: [33, 30], album: [63, 30], year: [93, 4] };
 
 // ID3v1 128바이트의 몇 칸만 고친 새 바이트를 만든다.

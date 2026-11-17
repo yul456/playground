@@ -1,5 +1,7 @@
-// MP3 태그를 화면의 칸(제목, 아티스트 …)으로 읽고, 고친 칸만 태그에 다시 적는다.
+// MP3의 ID3 태그를 화면의 칸(제목, 아티스트 …)으로 읽고, 고친 칸만 태그에 다시 적는다.
 // 브라우저 API 가운데 Blob만 써서 Node에서 시험할 수 있다. 틀을 읽고 쓰는 일은 id3.js가 한다.
+// 화면의 칸 목록(TAG_FIELDS)은 다른 형식(flac.js, mp4.js, wav.js)도 함께 쓰고, WAV는 ID3 태그를 조각으로 담고 있어
+// 여기의 readTags·applyTagEdits를 그대로 쓴다. 형식마다 읽기·쓰기를 고르는 일은 formats.js가 한다.
 import { repairText } from "../shared/textRepair.js";
 import { GENRES } from "./genres.js";
 import {
@@ -37,7 +39,10 @@ const yearFrames = (version) => (version === 4 ? ["TDRC", "TYER"] : ["TYER", "TD
 const framesOf = (field, version) => (field.key === "year" ? yearFrames(version) : [field.frame]);
 
 // 값이 여러 개면 이 글자로 이어 보인다
-const JOIN = "; ";
+export const JOIN = "; ";
+
+// 모든 칸이 빈 값 { title: "", artist: "", … }
+export const emptyValues = () => Object.fromEntries(TAG_FIELDS.map((field) => [field.key, ""]));
 
 // 장르 칸의 번호 표기를 이름으로 푼다: "(13)" · "(13)Pop" · "13" → Pop, "(RX)" → Remix, "((글)" → (글)
 function genreNames(values) {
@@ -98,7 +103,7 @@ const normalize = (parsed) =>
 //   picture: 앞표지(없으면 첫 그림) { mime, at: 태그 안에서 그림이 시작하는 자리(-1이면 모름), length }, pictures: 그림 수,
 // }
 export function readTags(parsed, v1) {
-  const values = Object.fromEntries(TAG_FIELDS.map((field) => [field.key, ""]));
+  const values = emptyValues();
   const repaired = [];
   // encoding이 0이면 바이트를 그대로 옮긴 글이라 한글이 깨져 있을 수 있다
   const fix = (key, texts, encoding) => {

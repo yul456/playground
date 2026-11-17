@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { fileSize } from "../shared/format.js";
 import { COVERS_NAME } from "./covers.js";
+import { TAG_FORMAT_NAMES } from "./formats.js";
 import { cleanName, MAX_NAME } from "./names.js";
 import { TAG_FIELDS } from "./tags.js";
 
@@ -120,7 +121,7 @@ function ArtCell({ row, busy, actions }) {
           type="button"
           className="rn-art-thumb"
           disabled={busy}
-          title="눌러서 그림을 고르거나 그림 파일을 여기로 끌어다 놓으세요"
+          title="눌러서 그림을 고르거나 그림 파일을 여기로 끌어다 놓으세요. 복사한 그림은 여기에 마우스를 올리고 붙여 넣으면(Ctrl+V) 들어갑니다"
           aria-label={`${row.name}의 앨범 아트 바꾸기`}
           onClick={() => inputRef.current.click()}
           onMouseEnter={showPreview}
@@ -152,6 +153,15 @@ function ArtCell({ row, busy, actions }) {
               onClick={() => actions.findPicture(row.id)}
             >
               찾기
+            </button>
+            <button
+              type="button"
+              className="rn-link"
+              disabled={busy}
+              title="구글 이미지 검색을 새 탭으로 엽니다. 거기서 그림을 복사한 뒤 이 화면에 붙여 넣으면(Ctrl+V) 이 곡에 들어갑니다"
+              onClick={() => actions.googlePicture(row.id)}
+            >
+              구글
             </button>
             {shown && (
               <button type="button" className="rn-link" disabled={busy} onClick={() => actions.setPicture(row.id, null)}>
@@ -201,9 +211,9 @@ export const FileRow = memo(function FileRow({ row, issue, showTags, busy, actio
   let tagCells = null;
   if (showTags) {
     if (row.kind === "file") tagCells = <td colSpan={span} />;
-    else if (row.kind === "audio") tagCells = <td colSpan={span} className="rn-none">MP3가 아니라 태그는 고칠 수 없습니다</td>;
+    else if (!row.format) tagCells = <td colSpan={span} className="rn-none">이 형식의 태그는 고칠 수 없습니다 ({TAG_FORMAT_NAMES}만 됩니다)</td>;
     else if (tags.state === "loading") tagCells = <td colSpan={span} className="rn-none">태그 읽는 중…</td>;
-    else if (tags.state === "unreadable") tagCells = <td colSpan={span} className="rn-none">읽을 수 없는 태그이거나 MP3가 아닌 파일이라 태그는 고칠 수 없습니다</td>;
+    else if (tags.state === "unreadable") tagCells = <td colSpan={span} className="rn-none">태그를 고칠 수 없습니다: {tags.why}</td>;
     else if (tags.state === "error") tagCells = <td colSpan={span} className="rn-none">태그를 읽지 못했습니다: {tags.message}</td>;
     else {
       tagCells = (
@@ -232,7 +242,7 @@ export const FileRow = memo(function FileRow({ row, issue, showTags, busy, actio
     }
   }
   return (
-    <tr className={row.checked ? undefined : "off"}>
+    <tr className={row.checked ? undefined : "off"} data-row={row.id}>
       <td className="rn-check">
         <input type="checkbox" checked={row.checked} disabled={busy} aria-label={`${row.name} 고르기`} onChange={() => actions.toggle(row.id)} />
       </td>

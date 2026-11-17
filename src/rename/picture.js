@@ -12,11 +12,16 @@ function sniff(bytes) {
   return "";
 }
 
+// 복사해서 붙여 넣은 그림인지 (그림 파일을 복사한 것이 아니라 화면의 그림을 "이미지 복사"한 것).
+// 크롬은 그런 그림을 원래 형식과 상관없이 image.png라는 이름의 PNG로 넘겨준다
+export const isCopiedBitmap = (file) => file.type === "image/png" && file.name === "image.png";
+
 // 그림 파일을 앨범 아트로 넣을 수 있게 준비한다. max가 있으면 긴 변이 그보다 클 때 그 크기로 줄인다(JPG로 다시 만든다).
+// compact면 PNG를 JPG로도 만들어 보고 더 작은 쪽을 넣는다. 복사해 붙여 넣은 그림은 사진이어도 PNG로 와서 JPG보다 몇 배 크다.
 // 결과: { mime, data: Uint8Array, width, height, size, url: 미리 볼 주소, name,
-//         converted: 형식 때문에 JPG로 바꿨는지, from: 줄였으면 원래 크기 { width, height } }
+//         converted: JPG로 바꿨는지(받지 않는 형식이었거나 compact로 줄인 것), from: 줄였으면 원래 크기 { width, height } }
 // 그림으로 열 수 없으면 오류를 낸다
-export async function preparePicture(file, max = 0) {
+export async function preparePicture(file, max = 0, { compact = false } = {}) {
   let bitmap;
   try {
     bitmap = await createImageBitmap(file);
@@ -26,14 +31,14 @@ export async function preparePicture(file, max = 0) {
   let { width, height } = bitmap;
   let data = new Uint8Array(await file.arrayBuffer());
   let mime = sniff(data);
-  const converted = !mime;
+  let converted = !mime;
   const long = Math.max(width, height);
   const from = max && long > max ? { width, height } : null;
-  if (converted || from) {
-    if (from) {
-      width = Math.max(1, Math.round((width * max) / long));
-      height = Math.max(1, Math.round((height * max) / long));
-    }
+  if (from) {
+    width = Math.max(1, Math.round((width * max) / long));
+    height = Math.max(1, Math.round((height * max) / long));
+  }
+  const toJpeg = async () => {
     const canvas = new OffscreenCanvas(width, height);
     const context = canvas.getContext("2d");
     // JPG에는 투명한 곳이 없어 흰 바탕에 그린다
@@ -41,8 +46,18 @@ export async function preparePicture(file, max = 0) {
     context.fillRect(0, 0, width, height);
     context.imageSmoothingQuality = "high";
     context.drawImage(bitmap, 0, 0, width, height);
-    data = new Uint8Array(await (await canvas.convertToBlob({ type: "image/jpeg", quality: JPEG_QUALITY })).arrayBuffer());
+    return new Uint8Array(await (await canvas.convertToBlob({ type: "image/jpeg", quality: JPEG_QUALITY })).arrayBuffer());
+  };
+  if (converted || from) {
+    data = await toJpeg();
     mime = "image/jpeg";
+  } else if (compact && mime === "image/png") {
+    const jpeg = await toJpeg();
+    if (jpeg.length < data.length) {
+      data = jpeg;
+      mime = "image/jpeg";
+      converted = true;
+    }
   }
   bitmap.close();
   return { mime, data, width, height, size: data.length, url: URL.createObjectURL(new Blob([data], { type: mime })), name: file.name, converted, from };

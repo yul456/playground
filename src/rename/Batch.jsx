@@ -18,13 +18,14 @@ const MODES = [
 ];
 
 // 체크한 파일들을 한꺼번에 고치는 칸. 여기서 고친 것도 저장을 누르기 전에는 파일에 적히지 않는다.
-//   hasTags: 태그를 고칠 수 있는 파일(MP3)이 목록에 있는지
+//   hasTags: 태그를 고칠 수 있는 파일(MP3·M4A·FLAC·WAV)이 목록에 있는지
 //   count: 체크한 파일 수, tagCount: 그 가운데 태그를 고칠 수 있는 파일 수
 //   numbering: { start, digits }, onNumbering: 번호 설정을 바꿀 때
 //   example(target, pattern): 첫 파일에 적용하면 어떻게 되는지 보여 줄 글
 //   artMax·onArtMax: 넣을 그림을 줄일 크기(0이면 그대로), suggestArtist·suggestAlbum: 앨범 아트를 찾을 때 미리 채울 검색어,
 //   region·onRegion: 앨범 아트를 찾을 곳(covers.js REGIONS의 key),
-//   onFind({ artist, album }): 앨범 아트 찾기, searching: 찾는 창이 열려 있으면 { label }, onStopSearch: 찾기 그만두기
+//   onFind({ artist, album }): 앨범 아트 찾기(MH Covers), onGoogle({ artist, album }): 구글 이미지 검색에서 찾기,
+//   searching: 찾는 중이면 { label, paste: 붙여 넣기를 기다리는 중인지(구글) }, onStopSearch: 찾기 그만두기
 export default function Batch({
   disabled,
   hasTags,
@@ -43,6 +44,7 @@ export default function Batch({
   region,
   onRegion,
   onFind,
+  onGoogle,
   searching,
   onStopSearch,
   example,
@@ -58,7 +60,7 @@ export default function Batch({
   const [over, setOver] = useState(false);
   // 파일 이름에 넣을 글을 치다가 걸러 낸 글자를 알리는 말
   const [blocked, setBlocked] = useState("");
-  // 앨범 아트를 찾을 검색어. 사용자가 고치기 전에는 체크한 첫 MP3의 태그를 따른다
+  // 앨범 아트를 찾을 검색어. 사용자가 고치기 전에는 체크한 파일 가운데 태그를 읽은 첫 파일의 태그를 따른다
   const [query, setQuery] = useState(null);
   useEffect(() => setQuery(null), [suggestArtist, suggestAlbum]);
   const artist = query?.artist ?? suggestArtist;
@@ -240,7 +242,7 @@ export default function Batch({
           <button type="button" disabled={disabled || !clear.size || !tagCount} onClick={() => onClear(clear)}>
             고른 칸 비우기
           </button>
-          <p className="rn-hint">체크한 MP3 {number(tagCount)}개에서 고른 칸의 내용을 지웁니다.</p>
+          <p className="rn-hint">체크한 파일 가운데 태그를 고칠 수 있는 {number(tagCount)}개에서 고른 칸의 내용을 지웁니다.</p>
         </div>
       )}
 
@@ -261,7 +263,10 @@ export default function Batch({
               if (file && !disabled && tagCount) onPicture(file);
             }}
           >
-            <span>체크한 MP3 {number(tagCount)}개에 넣을 그림을 여기로 끌어다 놓으세요.</span>
+            <span>
+              체크한 파일 가운데 태그를 고칠 수 있는 {number(tagCount)}개에 넣을 그림을 여기로 끌어다 놓으세요. 복사한 그림은 여기에
+              마우스를 올리고 붙여 넣으면(Ctrl+V) 됩니다.
+            </span>
             <button type="button" className="secondary" disabled={disabled || !tagCount} onClick={() => fileRef.current.click()}>
               그림 고르기
             </button>
@@ -318,14 +323,21 @@ export default function Batch({
             <button type="submit" disabled={disabled || !tagCount || (!artist.trim() && !album.trim())}>
               앨범 아트 찾기
             </button>
+            <button type="button" className="secondary" disabled={disabled || !tagCount || (!artist.trim() && !album.trim())} onClick={() => onGoogle({ artist, album })}>
+              구글에서 찾기
+            </button>
           </form>
           <p className="rn-hint">
             찾기는{" "}
             <a href={COVERS_URL} target="_blank" rel="noreferrer">
               {COVERS_NAME} ({COVERS_URL})
             </a>
-            를 새 창으로 엽니다. 거기서 그림을 누르면 체크한 MP3 {number(tagCount)}개에 넣을 그림으로 들어옵니다. 아티스트와 앨범
-            이름이 그 사이트로 전달됩니다. 찾을 곳은 표의 "찾기"에도 적용됩니다.
+            를 새 창으로 엽니다. 거기서 그림을 누르면 체크한 파일 가운데 태그를 고칠 수 있는 {number(tagCount)}개에 넣을 그림으로
+            들어옵니다. 아티스트와 앨범 이름이 그 사이트로 전달됩니다. 찾을 곳은 표의 "찾기"에도 적용됩니다.
+          </p>
+          <p className="rn-hint">
+            "구글에서 찾기"는 구글 이미지 검색을 새 탭으로 엽니다(검색어가 구글로 전달됩니다). 구글은 고른 그림을 알려 주지 않아서,
+            그림을 오른쪽 클릭해 "이미지 복사"를 누르고 그 탭을 닫은 뒤 이 화면에서 붙여 넣어야(Ctrl+V) 합니다.
           </p>
           <p className="rn-hint">파일 하나만 바꾸려면 아래 표의 그림 칸에 끌어다 놓거나 그림을 누르세요. JPG·PNG가 아닌 그림은 JPG로 바꿔 넣습니다.</p>
         </div>
@@ -334,7 +346,9 @@ export default function Batch({
       {blocked && (current === "replace" || current === "pattern") && <p className="rn-blocked">{blocked}</p>}
       {searching && (
         <p className="rn-searching" role="status">
-          검색 창에서 그림을 누르면 {searching.label}에 넣을 그림으로 들어옵니다.
+          {searching.paste
+            ? `구글에서 그림을 오른쪽 클릭해 "이미지 복사"를 누른 뒤, 그 탭을 닫고 이 화면에서 붙여 넣으면(Ctrl+V) ${searching.label}에 넣습니다.`
+            : `검색 창에서 그림을 누르면 ${searching.label}에 넣을 그림으로 들어옵니다.`}
           <button type="button" className="rn-link" onClick={onStopSearch}>
             찾기 그만두기
           </button>

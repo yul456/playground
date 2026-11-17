@@ -57,6 +57,15 @@ export function searchUrl({ artist, album, text, dark, region }) {
   return `${COVERS_URL}/?${params}`;
 }
 
+// 구글 이미지 검색의 주소 (udm=2가 이미지 탭이다). MH Covers에서 못 찾은 그림을 사용자가 직접 찾을 때 연다.
+// 구글은 연동 방식이 없어서 그림을 골라도 이 화면에 알려 주지 않는다. 사용자가 그림을 복사해 이 화면에 붙여 넣는다(App.jsx의 붙여넣기).
+// 구글 검색 페이지는 자기를 연 페이지와의 연결도 끊는다(COOP. 연 쪽에서는 그 창이 닫힌 것으로 보인다. 크롬에서 확인, 2026-11-17).
+// 그래서 이 화면이 그 창을 닫아 줄 수 없고, 연 창을 기억해 두지도 않는다
+export function googleUrl({ artist, album }) {
+  const query = [artist, album].map((text) => (text ?? "").trim()).filter(Boolean).join(" ");
+  return `https://www.google.com/search?${new URLSearchParams({ udm: "2", q: query })}`;
+}
+
 // 검색 창이 보낸 소식에서 고른 그림을 읽는다. 그 사이트가 보낸 것이 아니거나 고르기 소식이 아니면 null
 export function readPick(event, child) {
   if (event.origin !== COVERS_URL || !child || event.source !== child) return null;
