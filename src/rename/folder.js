@@ -6,6 +6,13 @@ import { compareNames, isSkippedFolder } from "../shared/fileNames.js";
 // 오디오로 치는 확장자. 이 가운데 태그를 고칠 수 있는 형식은 formats.js의 tagFormat이 정한다 (나머지는 이름만 바꾼다)
 const AUDIO = new Set(["mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "wav", "wma", "aiff", "aif", "ape", "mka", "mp2", "amr", "ac3", "dsf", "wv"]);
 
+// 이름 옆에 미리보기를 보이는 그림 형식. 크롬이 열 수 있는 것만 넣었다 (HEIC·TIFF·RAW는 열지 못한다)
+const IMAGES = new Set(["jpg", "jpeg", "jfif", "png", "gif", "webp", "bmp", "avif", "svg", "ico"]);
+export function isImageName(name) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && IMAGES.has(name.slice(dot + 1).toLowerCase());
+}
+
 // "audio"(오디오) · "file"(그 밖)
 export function kindOf(name) {
   const dot = name.lastIndexOf(".");

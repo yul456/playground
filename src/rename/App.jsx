@@ -4,12 +4,13 @@ import { HUB_URL } from "../shared/site.js";
 import Batch, { NAME_KEY, NUMBER_KEY } from "./Batch.jsx";
 import { googleUrl, readPick, REGIONS, releaseTags, searchUrl, sourceName, tell } from "./covers.js";
 import { canRename, loadTags, renameFiles, saveTags } from "./disk.js";
-import { kindOf, scanFolder } from "./folder.js";
+import { isImageName, kindOf, scanFolder } from "./folder.js";
 import { TAG_FORMAT_NAMES, tagFormat } from "./formats.js";
 import { fillPattern, nameProblem, padNumber, patternKeys, planRenames, replaceText, safePart, splitName, tidyBase, trackNumber } from "./names.js";
 import { fetchPicture, isCopiedBitmap, PICTURE_SIZES, preparePicture } from "./picture.js";
 import { draggingFiles, FileRow, pictureInfo } from "./Rows.jsx";
 import { sortRows } from "./sort.js";
+import { clearThumbs, pauseThumbs, resumeThumbs } from "./Thumb.jsx";
 import { TAG_FIELDS } from "./tags.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
@@ -22,17 +23,19 @@ const READERS = 4;
 const BIG_PICTURE = 1_000_000;
 
 // 설정: { subfolders: 고른 폴더 안의 폴더(하위 폴더)까지 읽을지, showTags: 오디오 태그 칸을 보일지,
+//   showThumbs: 그림 파일의 미리보기를 이름 앞에 보일지,
 //   start·digits: 틀의 {번호}가 시작하는 수와 자릿수,
 //   artMax: 넣을 그림의 긴 변이 이보다 크면 줄인다(px, 0이면 그대로. picture.js PICTURE_SIZES),
 //   coverRegion: 앨범 아트를 찾을 곳(covers.js REGIONS의 key: kr 한국 · jp 일본),
 //   coverFill: 찾은 그림을 고르면 넣을 것(picture 그림만 · all 그림과 그 음반의 앨범·아티스트·연도) }
 const COVER_FILLS = ["picture", "all"];
 function loadSettings() {
-  const settings = { subfolders: true, showTags: true, start: 1, digits: 2, artMax: 0, coverRegion: REGIONS[0].key, coverFill: COVER_FILLS[0] };
+  const settings = { subfolders: true, showTags: true, showThumbs: true, start: 1, digits: 2, artMax: 0, coverRegion: REGIONS[0].key, coverFill: COVER_FILLS[0] };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (typeof saved?.subfolders === "boolean") settings.subfolders = saved.subfolders;
     if (typeof saved?.showTags === "boolean") settings.showTags = saved.showTags;
+    if (typeof saved?.showThumbs === "boolean") settings.showThumbs = saved.showThumbs;
     if (Number.isInteger(saved?.start) && saved.start >= 0) settings.start = saved.start;
     if (Number.isInteger(saved?.digits) && saved.digits >= 1 && saved.digits <= 6) settings.digits = saved.digits;
     if (PICTURE_SIZES.includes(saved?.artMax)) settings.artMax = saved.artMax;
@@ -48,7 +51,7 @@ function loadSettings() {
 const canPickFolder = () => typeof window.showDirectoryPicker === "function";
 
 // ---- 줄(row) 하나를 고친 새 줄을 만드는 함수들. 고친 것은 edit에 모아 두고 저장할 때 파일에 적는다 ----
-// 줄: { id, folder: 폴더 번호, handle, name: 지금 이름, base, ext, kind: "audio"·"file",
+// 줄: { id, folder: 폴더 번호, handle, name: 지금 이름, base, ext, kind: "audio"·"file", image: 미리보기를 보일 그림 파일인지,
 //       format: 태그를 고칠 수 있는 형식(formats.js tagFormat: mp3 · flac · m4a · wav, 아니면 null), checked,
 //       tags: 그 형식의 태그(disk.js loadTags, 읽는 중이면 { state: "loading" }, format이 없으면 null),
 //       edit: { base, tags: { 칸: 글 }, picture }, result }
@@ -180,13 +183,14 @@ export default function App() {
   const visible = useMemo(() => (view === "audio" ? rows.filter((row) => row.kind !== "file") : rows), [rows, view]);
   const issues = useMemo(() => (source ? findIssues(rows, source.folders) : new Map()), [rows, source]);
   const counts = useMemo(() => {
-    const out = { names: 0, tags: 0, pictures: 0, repaired: 0, tagged: 0, audio: 0, reading: 0 };
+    const out = { names: 0, tags: 0, pictures: 0, repaired: 0, tagged: 0, audio: 0, images: 0, reading: 0 };
     for (const row of rows) {
       if (nameEdited(row)) out.names++;
       if (tagsEdited(row)) out.tags++;
       if (row.edit.picture !== undefined) out.pictures++;
       if (row.format) out.tagged++;
       if (row.kind !== "file") out.audio++;
+      if (row.image) out.images++;
       if (row.tags?.state === "loading") out.reading++;
       if (isReady(row) && row.tags.repaired.some((key) => row.edit.tags?.[key] === undefined)) out.repaired++;
     }
@@ -215,6 +219,8 @@ export default function App() {
   );
   const hasTags = counts.tagged > 0;
   const showTags = settings.showTags && visible.some((row) => row.format);
+  // 그림 파일이 보이는 목록에 있을 때만 이름 앞에 미리보기 자리를 둔다
+  const showThumbs = settings.showThumbs && visible.some((row) => row.image);
   const checked = useMemo(() => visible.filter((row) => row.checked), [visible]);
   const tagChecked = useMemo(() => checked.filter(isReady).length, [checked]);
   // 한꺼번에 앨범 아트를 찾을 때 미리 채워 둘 검색어: 체크한 파일 가운데 태그를 읽은 첫 파일의 태그
@@ -567,6 +573,7 @@ export default function App() {
     stopSearch();
     for (const url of pictureUrls.current) URL.revokeObjectURL(url);
     pictureUrls.current.clear();
+    clearThumbs();
     try {
       const scan = await scanFolder(dir, { deep });
       const list = [];
@@ -574,6 +581,8 @@ export default function App() {
         for (const file of folder.files) {
           const kind = kindOf(file.name);
           const format = tagFormat(file.name);
+          // 확장자는 이름을 바꿔도 그대로라 처음 한 번만 본다
+          const image = isImageName(file.name);
           list.push({
             id: list.length,
             folder: index,
@@ -582,6 +591,7 @@ export default function App() {
             ...splitName(file.name),
             kind,
             format,
+            image,
             checked: true,
             tags: format ? { state: "loading" } : null,
             edit: {},
@@ -770,6 +780,8 @@ export default function App() {
     setBatchNote("");
     stopRef.current = false;
     const stopped = () => stopRef.current;
+    // 그림 미리보기를 읽는 일을 멈추고, 읽고 있던 것이 끝나기를 기다린다. 이 화면이 읽고 있는 파일의 이름을 바꾸려다 막히지 않게
+    await pauseThumbs();
     const snapshot = rowsRef.current;
     const blocked = findIssues(snapshot, source.folders);
     const tagRows = snapshot.filter((row) => isReady(row) && tagsEdited(row));
@@ -864,6 +876,7 @@ export default function App() {
     setSummary(text);
     setLastSave(undo.names.size || undo.tags.size ? undo : null);
     setProgress(null);
+    resumeThumbs();
     setStatus("ready");
   }
 
@@ -998,6 +1011,16 @@ export default function App() {
                   태그 칸 보기
                 </label>
               )}
+              {counts.images > 0 && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={settings.showThumbs}
+                    onChange={(event) => setSettings((current) => ({ ...current, showThumbs: event.target.checked }))}
+                  />
+                  그림 미리보기
+                </label>
+              )}
             </div>
             {counts.repaired > 0 && (
               <p className="rn-repair">
@@ -1068,7 +1091,7 @@ export default function App() {
                           </td>
                         </tr>
                       ),
-                      <FileRow key={row.id} row={row} issue={issues.get(row.id)} showTags={showTags} busy={busy} actions={actions} />,
+                      <FileRow key={row.id} row={row} issue={issues.get(row.id)} showTags={showTags} thumbs={showThumbs} busy={busy} actions={actions} />,
                     ];
                   })}
                 </tbody>
@@ -1213,6 +1236,11 @@ export default function App() {
             …)을 누르면 그 칸으로 정렬하고, 다시 누르면 거꾸로 정렬합니다. "앨범 아트"를 누르면 그림이 없는 곡과 있는 곡으로
             나눕니다. 정렬은 폴더 안에서만 하며, 틀로 채우기의 번호는 표에 보이는 순서대로 매깁니다. 칸을 고쳐도 줄은 그 자리에
             있으니, 다시 정렬하려면 머리글을 다시 누르세요.
+          </li>
+          <li>
+            그림 파일(JPG, PNG, GIF, WebP 등)은 이름 앞에 작은 미리보기가 나오고, 마우스를 올리면 크게 보입니다. 화면에 보이는
+            줄의 그림만 읽으며, 목록 위의 "그림 미리보기"로 끌 수 있습니다. 브라우저가 열지 못하는 형식(HEIC, TIFF 등)은
+            미리보기가 나오지 않습니다.
           </li>
           <li>바탕화면·문서·다운로드 폴더 자체는 크롬·엣지가 고르지 못하게 막습니다. 그 안의 폴더를 고르세요.</li>
           <li>"하위 폴더도 포함"을 끄면 고른 폴더 바로 안의 파일만 읽습니다. 켜면 안의 폴더까지 모두 읽어 폴더마다 묶어 보입니다.</li>

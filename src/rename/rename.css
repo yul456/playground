@@ -83,6 +83,11 @@ b.rn-error { font-size: inherit; }
 .rn-name-line { display: flex; align-items: center; gap: 4px; }
 .rn-name-line input { flex: 1; min-width: 0; }
 .rn-ext { color: var(--muted); white-space: nowrap; }
+/* 그림 파일의 작은 미리보기 (이름 앞). 그림이 아닌 줄은 이름이 나란하도록 폭만 차지한다 */
+.rn-thumb { flex: none; display: grid; place-items: center; width: 40px; height: 40px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 0.8rem; }
+.rn-thumb > img:first-child { width: 100%; height: 100%; object-fit: cover; }
+.rn-thumb.empty { height: 0; border-color: transparent; background: none; }
+.rn-table tr.off .rn-thumb { opacity: 0.5; }
 .rn-was { margin: 2px 0 0; color: var(--muted); font-size: 0.8rem; word-break: break-all; }
 .rn-blocked { margin: 2px 0 0; color: #d97706; font-size: 0.8rem; }
 .rn-batch .rn-blocked { margin-top: 10px; font-size: 0.9rem; }

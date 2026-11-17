@@ -4,6 +4,7 @@ import { COVERS_NAME } from "./covers.js";
 import { TAG_FORMAT_NAMES } from "./formats.js";
 import { cleanName, MAX_NAME } from "./names.js";
 import { TAG_FIELDS } from "./tags.js";
+import { Thumb } from "./Thumb.jsx";
 
 const FORMAT_NAMES = { "image/jpeg": "JPG", "image/png": "PNG", "image/gif": "GIF", "image/webp": "WebP", "image/bmp": "BMP" };
 const formatName = (mime) => FORMAT_NAMES[mime] ?? mime.replace("image/", "").toUpperCase();
@@ -215,8 +216,9 @@ function Result({ label, result }) {
   );
 }
 
-// 파일 한 줄. row가 바뀐 줄만 다시 그린다 (actions는 늘 같은 객체다)
-export const FileRow = memo(function FileRow({ row, issue, showTags, busy, actions }) {
+// 파일 한 줄. row가 바뀐 줄만 다시 그린다 (actions는 늘 같은 객체다).
+// thumbs: 이름 앞에 그림 미리보기 자리를 둘지 (그림이 아닌 줄은 이름이 나란하도록 빈 자리만 둔다)
+export const FileRow = memo(function FileRow({ row, issue, showTags, thumbs, busy, actions }) {
   const base = row.edit.base ?? row.base;
   const renamed = row.edit.base !== undefined;
   const tags = row.tags;
@@ -261,6 +263,7 @@ export const FileRow = memo(function FileRow({ row, issue, showTags, busy, actio
       </td>
       <td className="rn-name">
         <div className="rn-name-line">
+          {thumbs && (row.image ? <Thumb handle={row.handle} name={row.name} /> : <span className="rn-thumb empty" aria-hidden="true" />)}
           <input
             type="text"
             className={issue ? "bad" : renamed ? "changed" : undefined}
