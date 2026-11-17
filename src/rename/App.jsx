@@ -348,9 +348,31 @@ export default function App() {
   }, [searching]);
 
   // ---- 붙여넣기: 복사한 그림을 앨범 아트로 넣는다 ----
-  // 다른 사이트에서 그림을 오른쪽 클릭해 "이미지 복사"한 것이나 탐색기에서 복사한 그림 파일을 받는다.
-  // 넣을 곳은 차례로: 앨범 아트를 찾는 중이면 그 줄들 → 마우스가 올라가 있는 그림 칸의 줄 → 마우스가 올라가 있는
-  // "앨범 아트" 칸이면 체크한 줄들 → 글을 치던 줄. 어디에도 해당하지 않으면 넣지 않고 알린다
+  // 다른 사이트에서 그림을 오른쪽 클릭해 "이미지 복사"한 것이나 탐색기에서 복사한 그림 파일을 받는다. 길은 둘이다.
+  //   단축키(Ctrl+V): 넣을 곳을 차례로 정한다. 앨범 아트를 찾는 중이면 그 줄들 → 마우스가 올라가 있는 그림 칸의 줄 →
+  //     마우스가 올라가 있는 "앨범 아트" 칸이면 체크한 줄들 → 글을 치던 줄. 어디에도 해당하지 않으면 넣지 않고 알린다
+  //   "붙여넣기" 버튼: 그 버튼이 가리키는 줄(들)에 넣는다. 찾는 중인 곡이 따로 있어도 누른 줄에 들어간다.
+  //     찾다가 다른 곡의 그림을 발견했을 때 쓴다 (사용자 요청, 2026-11-17)
+
+  // 복사한 그림(file)을 줄들(ids)에 넣는다. 찾던 줄에 넣었으면 찾기를 끝내고, 다른 줄에만 넣었으면 찾기는 그대로 둔다
+  async function placeCopied(file, ids) {
+    const ready = rowsRef.current.filter((row) => ids.has(row.id) && isReady(row));
+    if (!ready.length) {
+      setNotice("그 파일에는 앨범 아트를 넣을 수 없습니다.");
+      return;
+    }
+    setNotice("");
+    // 화면의 그림을 복사한 것은 이름이 없다. 그런 그림은 JPG가 더 작으면 JPG로 넣는다
+    const copied = isCopiedBitmap(file);
+    const picture = await readPicture(copied ? new File([file], "복사한 그림", { type: file.type }) : file, { compact: copied });
+    if (!picture) return;
+    changeRows((row) => (ids.has(row.id) ? withPicture(row, picture) : row));
+    const where = ready.length === 1 ? `"${ready[0].name}"에` : `${number(ready.length)}개 파일에`;
+    setBatchNote(`붙여 넣은 그림을 ${where} 넣었습니다: ${pictureNote(picture)}. 저장을 눌러야 파일에 적힙니다.`);
+    const search = searchRef.current;
+    if (search && ready.some((row) => search.ids.has(row.id))) stopSearch();
+  }
+
   const pasteRef = useRef(null);
   pasteRef.current = async (event) => {
     const file = [...(event.clipboardData?.files ?? [])].find((item) => item.type.startsWith("image/"));
@@ -362,8 +384,7 @@ export default function App() {
       setNotice("저장하는 중에는 그림을 넣을 수 없습니다. 저장이 끝난 뒤 다시 붙여 넣어 주세요.");
       return;
     }
-    const search = searchRef.current;
-    let ids = search?.ids ?? null;
+    let ids = searchRef.current?.ids ?? null;
     if (!ids) {
       const under = [...document.querySelectorAll(":hover")].at(-1) ?? null;
       const rowOf = (element) => {
@@ -374,29 +395,46 @@ export default function App() {
       else if (under?.closest(".rn-drop")) ids = targetIds();
       else ids = rowOf(document.activeElement);
     }
-    const ready = ids ? rowsRef.current.filter((row) => ids.has(row.id) && isReady(row)) : [];
-    if (!ready.length) {
-      setNotice(
-        ids
-          ? "그 파일에는 앨범 아트를 넣을 수 없습니다."
-          : '복사한 그림을 넣을 곡을 알 수 없습니다. 그 곡의 그림 칸에 마우스를 올리고 다시 붙여 넣으세요 (여러 곡이면 위의 "앨범 아트" 칸에 올리고).',
-      );
+    if (!ids) {
+      setNotice('복사한 그림을 넣을 곡을 알 수 없습니다. 그 곡의 "붙여넣기"를 누르거나, 그림 칸에 마우스를 올리고 다시 붙여 넣으세요.');
       return;
     }
-    setNotice("");
-    // 화면의 그림을 복사한 것은 이름이 없다. 그런 그림은 JPG가 더 작으면 JPG로 넣는다
-    const copied = isCopiedBitmap(file);
-    const picture = await readPicture(copied ? new File([file], "복사한 그림", { type: file.type }) : file, { compact: copied });
-    if (!picture) return;
-    const count = changeRows((row) => (ids.has(row.id) ? withPicture(row, picture) : row));
-    setBatchNote(`붙여 넣은 그림을 ${number(count)}개 파일에 넣었습니다: ${pictureNote(picture)}. 저장을 눌러야 파일에 적힙니다.`);
-    if (search && searchRef.current === search) stopSearch();
+    await placeCopied(file, ids);
   };
   useEffect(() => {
     const onPaste = (event) => pasteRef.current(event);
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, []);
+
+  // "붙여넣기" 버튼: 클립보드의 그림을 읽어(브라우저가 처음 한 번 허락을 묻는다) 줄들(ids)에 넣는다.
+  // 화면의 그림을 복사한 것만 읽힌다. 탐색기에서 복사한 그림 파일은 이 길로는 보이지 않아 단축키로 붙여 넣어야 한다
+  async function pasteInto(ids) {
+    setNotice("");
+    let blob = null;
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.includes("image/png") ? "image/png" : item.types.find((name) => name.startsWith("image/"));
+        if (!type) continue;
+        blob = await item.getType(type);
+        break;
+      }
+    } catch (error) {
+      setNotice(
+        error?.name === "NotAllowedError"
+          ? "브라우저가 클립보드를 보는 것을 허용하지 않았습니다. 주소창 왼쪽의 사이트 설정에서 클립보드를 허용하거나, 그림 칸에 마우스를 올리고 Ctrl+V로 붙여 넣으세요."
+          : `클립보드를 읽지 못했습니다. ${error?.message ?? ""}`,
+      );
+      return;
+    }
+    if (!blob) {
+      setNotice('클립보드에 그림이 없습니다. 그림을 오른쪽 클릭해 "이미지 복사"를 먼저 누르세요. 그림 파일을 복사한 것이면 그림 칸에 마우스를 올리고 Ctrl+V로 붙여 넣으세요.');
+      return;
+    }
+    // 화면의 그림을 복사한 것으로 다룬다 (isCopiedBitmap)
+    await placeCopied(new File([blob], blob.type === "image/png" ? "image.png" : "복사한 그림", { type: blob.type }), ids);
+  }
+  const canPaste = typeof navigator.clipboard?.read === "function";
 
   // 줄이 쓰는 함수들. 늘 같은 객체여야 바뀐 줄만 다시 그린다
   const actionsRef = useRef(null);
@@ -414,7 +452,11 @@ export default function App() {
     dropPicture: (id, file) => actionsRef.current.onDropPicture(id, file),
     findPicture: (id) => actionsRef.current.onFindPicture(id, false),
     googlePicture: (id) => actionsRef.current.onFindPicture(id, true),
+    pastePicture: (id) => actionsRef.current.onPastePicture(id),
+    // 이 브라우저가 버튼으로 클립보드의 그림을 읽을 수 있는지
+    canPaste,
   };
+  actionsRef.current.onPastePicture = (id) => pasteInto(new Set([id]));
   // 그 줄의 태그로 앨범 아트를 찾는다. 앨범이 비어 있으면 제목으로, 태그가 하나도 없으면 파일 이름으로 찾는다.
   // google이면 구글 이미지 검색에서, 아니면 MH Covers에서 찾는다
   actionsRef.current.onFindPicture = (id, google) => {
@@ -861,6 +903,9 @@ export default function App() {
             suggestAlbum={suggestAlbum}
             onFind={findPictures}
             onGoogle={(query) => findPictures(query, true)}
+            canPaste={canPaste}
+            onPaste={() => pasteInto(targetIds())}
+            onPasteSearch={() => searchRef.current && pasteInto(searchRef.current.ids)}
             searching={searching}
             onStopSearch={stopSearch}
             example={patternExample}
@@ -1081,8 +1126,9 @@ export default function App() {
           <li>
             거기서 못 찾은 그림은 "구글"로 찾을 수 있습니다. 그 곡의 아티스트·앨범으로 구글 이미지 검색을 새 탭에 엽니다(검색어가
             구글로 전달됩니다). 구글은 고른 그림을 이 화면에 알려 주지 않아서, 그림을 오른쪽 클릭해 "이미지 복사"를 누르고 그
-            탭을 닫은 뒤 이 화면에서 붙여 넣어야(Ctrl+V) 합니다. 다른 곳에서 복사한 그림도 넣을 곡의 그림 칸에 마우스를 올리고
-            붙여 넣으면 들어갑니다. 복사한 그림은 JPG가 더 작으면 JPG로 바꿔 넣습니다.
+            탭을 닫은 뒤 이 화면에서 붙여 넣어야 합니다. Ctrl+V를 누르면 찾던 곡에 들어가고, 다른 곡에 넣으려면 그 곡의
+            "붙여넣기"를 누릅니다. "붙여넣기"를 처음 누르면 브라우저가 클립보드를 봐도 되는지 묻습니다. 복사한 그림은 JPG가 더
+            작으면 JPG로 바꿔 넣습니다.
           </li>
           <li>
             찾은 그림은 3000px·4MB쯤 되는 것도 있습니다. 그대로 넣으면 파일마다 그만큼 커지므로, "앨범 아트"의 넣을 그림

@@ -59,7 +59,7 @@ b.rn-error { font-size: inherit; }
 .rn-repair .rn-link { margin-left: 8px; }
 .rn-scroll { margin-top: 12px; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
 .rn-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.rn-table.wide { min-width: 1560px; }
+.rn-table.wide { min-width: 1592px; }
 .rn-table th { padding: 8px 6px; border-bottom: 1px solid var(--border); background: var(--bg); color: var(--muted); font-weight: 600; text-align: left; white-space: nowrap; }
 .rn-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .rn-table tbody tr:last-child td { border-bottom: 0; }
@@ -95,7 +95,7 @@ b.rn-error { font-size: inherit; }
 .rn-none { color: var(--muted); padding-top: 10px !important; }
 
 /* 앨범 아트 칸 */
-.rn-art-cell { min-width: 164px; width: 164px; }
+.rn-art-cell { min-width: 196px; width: 196px; }
 .rn-art { display: flex; align-items: center; gap: 8px; padding: 2px; border: 1px dashed transparent; border-radius: 8px; }
 .rn-art.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 td.rn-art-cell.changed .rn-art { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -103,7 +103,8 @@ td.rn-art-cell.changed .rn-art { border-color: color-mix(in srgb, var(--accent) 
 .rn-art-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .rn-art-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 0.8rem; }
 .rn-art-actions { display: flex; flex-wrap: wrap; gap: 0 8px; }
-.rn-art-actions > *, .rn-art-info > span { white-space: nowrap; }
+.rn-art-actions > * { white-space: nowrap; }
+.rn-art-what { word-break: keep-all; }
 .rn-art-big { position: fixed; z-index: 30; width: 260px; height: 260px; object-fit: contain; border: 1px solid var(--border); border-radius: 10px; background: var(--card); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); pointer-events: none; }
 
 .rn-more { display: block; margin: 12px auto 0; }

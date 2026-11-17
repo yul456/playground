@@ -25,7 +25,9 @@ const MODES = [
 //   artMax·onArtMax: 넣을 그림을 줄일 크기(0이면 그대로), suggestArtist·suggestAlbum: 앨범 아트를 찾을 때 미리 채울 검색어,
 //   region·onRegion: 앨범 아트를 찾을 곳(covers.js REGIONS의 key),
 //   onFind({ artist, album }): 앨범 아트 찾기(MH Covers), onGoogle({ artist, album }): 구글 이미지 검색에서 찾기,
-//   searching: 찾는 중이면 { label, paste: 붙여 넣기를 기다리는 중인지(구글) }, onStopSearch: 찾기 그만두기
+//   searching: 찾는 중이면 { label, paste: 붙여 넣기를 기다리는 중인지(구글) }, onStopSearch: 찾기 그만두기,
+//   canPaste: 버튼으로 클립보드의 그림을 읽을 수 있는 브라우저인지, onPaste(): 복사한 그림을 체크한 파일들에 넣기,
+//   onPasteSearch(): 복사한 그림을 찾던 파일들에 넣기
 export default function Batch({
   disabled,
   hasTags,
@@ -45,6 +47,9 @@ export default function Batch({
   onRegion,
   onFind,
   onGoogle,
+  canPaste,
+  onPaste,
+  onPasteSearch,
   searching,
   onStopSearch,
   example,
@@ -263,13 +268,21 @@ export default function Batch({
               if (file && !disabled && tagCount) onPicture(file);
             }}
           >
-            <span>
-              체크한 파일 가운데 태그를 고칠 수 있는 {number(tagCount)}개에 넣을 그림을 여기로 끌어다 놓으세요. 복사한 그림은 여기에
-              마우스를 올리고 붙여 넣으면(Ctrl+V) 됩니다.
-            </span>
+            <span>체크한 파일 가운데 태그를 고칠 수 있는 {number(tagCount)}개에 넣을 그림을 여기로 끌어다 놓으세요.</span>
             <button type="button" className="secondary" disabled={disabled || !tagCount} onClick={() => fileRef.current.click()}>
               그림 고르기
             </button>
+            {canPaste && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={disabled || !tagCount}
+                title="복사해 둔 그림을 체크한 파일들에 넣습니다. 여기에 마우스를 올리고 Ctrl+V를 눌러도 됩니다"
+                onClick={onPaste}
+              >
+                복사한 그림 붙여넣기
+              </button>
+            )}
             <input
               ref={fileRef}
               type="file"
@@ -337,7 +350,7 @@ export default function Batch({
           </p>
           <p className="rn-hint">
             "구글에서 찾기"는 구글 이미지 검색을 새 탭으로 엽니다(검색어가 구글로 전달됩니다). 구글은 고른 그림을 알려 주지 않아서,
-            그림을 오른쪽 클릭해 "이미지 복사"를 누르고 그 탭을 닫은 뒤 이 화면에서 붙여 넣어야(Ctrl+V) 합니다.
+            그림을 오른쪽 클릭해 "이미지 복사"를 누르고 그 탭을 닫은 뒤 이 화면에서 붙여 넣어야 합니다(Ctrl+V나 "붙여넣기").
           </p>
           <p className="rn-hint">파일 하나만 바꾸려면 아래 표의 그림 칸에 끌어다 놓거나 그림을 누르세요. JPG·PNG가 아닌 그림은 JPG로 바꿔 넣습니다.</p>
         </div>
@@ -347,8 +360,13 @@ export default function Batch({
       {searching && (
         <p className="rn-searching" role="status">
           {searching.paste
-            ? `구글에서 그림을 오른쪽 클릭해 "이미지 복사"를 누른 뒤, 그 탭을 닫고 이 화면에서 붙여 넣으면(Ctrl+V) ${searching.label}에 넣습니다.`
+            ? `구글에서 그림을 오른쪽 클릭해 "이미지 복사"를 누른 뒤, 그 탭을 닫고 이 화면에서 붙여 넣으면(Ctrl+V) ${searching.label}에 넣습니다. 다른 곡에 넣으려면 그 곡의 "붙여넣기"를 누르세요.`
             : `검색 창에서 그림을 누르면 ${searching.label}에 넣을 그림으로 들어옵니다.`}
+          {searching.paste && canPaste && (
+            <button type="button" className="rn-link" onClick={onPasteSearch}>
+              붙여넣기
+            </button>
+          )}
           <button type="button" className="rn-link" onClick={onStopSearch}>
             찾기 그만두기
           </button>

@@ -121,7 +121,7 @@ function ArtCell({ row, busy, actions }) {
           type="button"
           className="rn-art-thumb"
           disabled={busy}
-          title="눌러서 그림을 고르거나 그림 파일을 여기로 끌어다 놓으세요. 복사한 그림은 여기에 마우스를 올리고 붙여 넣으면(Ctrl+V) 들어갑니다"
+          title="눌러서 그림을 고르거나 그림 파일을 여기로 끌어다 놓으세요. 복사한 그림은 옆의 붙여넣기를 누르거나, 여기에 마우스를 올리고 Ctrl+V를 누르면 들어갑니다"
           aria-label={`${row.name}의 앨범 아트 바꾸기`}
           onClick={() => inputRef.current.click()}
           onMouseEnter={showPreview}
@@ -135,16 +135,14 @@ function ArtCell({ row, busy, actions }) {
         </button>
         <div className="rn-art-info" data-info={shown ? pictureInfo(shown) + others : pending === null ? "지울 그림" : "그림 없음"}>
           {shown ? (
-            <span>
-              {formatName(shown.mime)}
-              {shown.width ? ` · ${shown.width}×${shown.height}` : ""}
+            <span className="rn-art-what">
+              {pictureInfo(shown)}
               {others}
             </span>
           ) : (
-            <span className="rn-faint">{pending === null ? "지울 그림" : "그림 없음"}</span>
+            <span className="rn-art-what rn-faint">{pending === null ? "지울 그림" : "그림 없음"}</span>
           )}
           <span className="rn-art-actions">
-            {shown && <span>{fileSize(shown.size)}</span>}
             <button
               type="button"
               className="rn-link"
@@ -158,22 +156,37 @@ function ArtCell({ row, busy, actions }) {
               type="button"
               className="rn-link"
               disabled={busy}
-              title="구글 이미지 검색을 새 탭으로 엽니다. 거기서 그림을 복사한 뒤 이 화면에 붙여 넣으면(Ctrl+V) 이 곡에 들어갑니다"
+              title="구글 이미지 검색을 새 탭으로 엽니다. 거기서 그림을 복사한 뒤 이 화면에 붙여 넣으면 이 곡에 들어갑니다"
               onClick={() => actions.googlePicture(row.id)}
             >
               구글
             </button>
-            {shown && (
-              <button type="button" className="rn-link" disabled={busy} onClick={() => actions.setPicture(row.id, null)}>
-                지우기
-              </button>
-            )}
-            {pending !== undefined && (
-              <button type="button" className="rn-link" disabled={busy} onClick={() => actions.setPicture(row.id, undefined)}>
-                되돌리기
+            {actions.canPaste && (
+              <button
+                type="button"
+                className="rn-link"
+                disabled={busy}
+                title="복사해 둔 그림을 이 곡에 넣습니다. 다른 곡의 그림을 찾던 중이어도 이 곡에 들어갑니다 (처음 누르면 브라우저가 클립보드를 봐도 되는지 묻습니다)"
+                onClick={() => actions.pastePicture(row.id)}
+              >
+                붙여넣기
               </button>
             )}
           </span>
+          {(shown || pending !== undefined) && (
+            <span className="rn-art-actions">
+              {shown && (
+                <button type="button" className="rn-link" disabled={busy} onClick={() => actions.setPicture(row.id, null)}>
+                  지우기
+                </button>
+              )}
+              {pending !== undefined && (
+                <button type="button" className="rn-link" disabled={busy} onClick={() => actions.setPicture(row.id, undefined)}>
+                  되돌리기
+                </button>
+              )}
+            </span>
+          )}
         </div>
         <input
           ref={inputRef}
