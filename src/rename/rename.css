@@ -60,6 +60,12 @@ b.rn-error { font-size: inherit; }
 .rn-scroll { margin-top: 12px; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
 .rn-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .rn-table.wide { min-width: 1592px; }
+/* 머리글을 누르면 그 칸으로 정렬한다. 화살표는 글이 아니라 꾸밈으로 붙인다 (aria-sort가 뜻을 알린다) */
+.rn-sort { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.rn-sort:hover:not(:disabled) { color: var(--text); text-decoration: underline; }
+.rn-table th[aria-sort] .rn-sort { color: var(--accent); }
+.rn-table th[aria-sort="ascending"] .rn-sort::after { content: " \25B2"; font-size: 0.7em; }
+.rn-table th[aria-sort="descending"] .rn-sort::after { content: " \25BC"; font-size: 0.7em; }
 .rn-table th { padding: 8px 6px; border-bottom: 1px solid var(--border); background: var(--bg); color: var(--muted); font-weight: 600; text-align: left; white-space: nowrap; }
 .rn-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .rn-table tbody tr:last-child td { border-bottom: 0; }

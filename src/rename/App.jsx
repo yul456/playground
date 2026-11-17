@@ -9,6 +9,7 @@ import { TAG_FORMAT_NAMES, tagFormat } from "./formats.js";
 import { fillPattern, nameProblem, padNumber, patternKeys, planRenames, replaceText, safePart, splitName, tidyBase, trackNumber } from "./names.js";
 import { fetchPicture, isCopiedBitmap, PICTURE_SIZES, preparePicture } from "./picture.js";
 import { draggingFiles, FileRow, pictureInfo } from "./Rows.jsx";
+import { sortRows } from "./sort.js";
 import { TAG_FIELDS } from "./tags.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
@@ -133,6 +134,11 @@ export default function App() {
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState("idle"); // idle · scanning · ready · saving
   const [view, setView] = useState("all"); // all · audio
+  // 표의 정렬 기준: { key: "name" 파일 이름 · "picture" 앨범 아트가 있는지 · 태그 칸의 이름, descending: 거꾸로인지 }.
+  // 머리글을 누를 때 줄의 순서(rows)를 한 번 바꾼다(sort.js). 그 뒤에 칸을 고쳐도 줄은 그 자리에 있다
+  const [sort, setSort] = useState({ key: "name", descending: false });
+  // 태그를 읽는 중에 태그로 정렬했으면 다 읽은 뒤에 한 번 더 정렬한다
+  const resortRef = useRef(false);
   const [limit, setLimit] = useState(PAGE);
   const [notice, setNotice] = useState("");
   const [batchNote, setBatchNote] = useState("");
@@ -187,6 +193,26 @@ export default function App() {
     return out;
   }, [rows]);
   const pending = counts.names + counts.tags;
+
+  // 머리글을 누르면 그 칸으로 정렬한다. 같은 칸을 다시 누르면 거꾸로 정렬한다.
+  // 줄의 순서 자체를 바꾸므로 틀로 채우기의 번호도 이 순서대로 매겨진다
+  function sortBy(key) {
+    const descending = sort.key === key ? !sort.descending : false;
+    setSort({ key, descending });
+    setRows((current) => sortRows(current, key, descending));
+    resortRef.current = key !== "name" && rowsRef.current.some((row) => row.tags?.state === "loading");
+  }
+  useEffect(() => {
+    if (!resortRef.current || counts.reading) return;
+    resortRef.current = false;
+    setRows((current) => sortRows(current, sort.key, sort.descending));
+  }, [counts.reading, sort]);
+  const sortOf = (key) => (sort.key === key ? (sort.descending ? "descending" : "ascending") : undefined);
+  const sortButton = (key, label, title = "눌러서 이 칸으로 정렬합니다. 다시 누르면 거꾸로 정렬합니다") => (
+    <button type="button" className="rn-sort" disabled={busy} title={title} onClick={() => sortBy(key)}>
+      {label}
+    </button>
+  );
   const hasTags = counts.tagged > 0;
   const showTags = settings.showTags && visible.some((row) => row.format);
   const checked = useMemo(() => visible.filter((row) => row.checked), [visible]);
@@ -565,6 +591,8 @@ export default function App() {
       });
       setSource({ name: scan.name, dir, folders: scan.folders.map((folder) => ({ path: folder.path, dir: folder.dir, others: folder.others })) });
       setRows(list);
+      setSort({ key: "name", descending: false });
+      resortRef.current = false;
       setLimit(PAGE);
       setStatus("ready");
       readAllTags(list);
@@ -994,15 +1022,18 @@ export default function App() {
                         onChange={toggleAll}
                       />
                     </th>
-                    <th className="rn-name">
-                      파일 이름 <span className="rn-muted">({number(checked.length)}/{number(visible.length)} 고름)</span>
+                    <th className="rn-name" aria-sort={sortOf("name")}>
+                      {sortButton("name", "파일 이름")}{" "}
+                      <span className="rn-muted">({number(checked.length)}/{number(visible.length)} 고름)</span>
                     </th>
                     {showTags && (
                       <>
-                        <th className="rn-art-cell">앨범 아트</th>
+                        <th className="rn-art-cell" aria-sort={sortOf("picture")}>
+                          {sortButton("picture", "앨범 아트", "눌러서 앨범 아트가 없는 곡을 위로 모읍니다. 다시 누르면 있는 곡이 위로 옵니다")}
+                        </th>
                         {TAG_FIELDS.map((field) => (
-                          <th key={field.key} className={`rn-tag rn-${field.key}`}>
-                            {field.label}
+                          <th key={field.key} className={`rn-tag rn-${field.key}`} aria-sort={sortOf(field.key)}>
+                            {sortButton(field.key, field.label)}
                           </th>
                         ))}
                       </>
@@ -1177,7 +1208,12 @@ export default function App() {
             파일은 상관없지만, 워드·엑셀 같은 문서는 열 때 "제한된 보기"로 열릴 수 있습니다(편집 사용을 누르면 됩니다).
             실행 파일(exe 등)과 바로 가기는 브라우저가 이름을 바꾸지 못하게 막습니다.
           </li>
-          <li>파일은 윈도우 탐색기의 이름순(숫자는 크기대로, 영문이 한글보다 앞)으로 놓습니다. 번호는 이 순서대로 매깁니다.</li>
+          <li>
+            파일은 윈도우 탐색기의 이름순(숫자는 크기대로, 영문이 한글보다 앞)으로 놓습니다. 표의 머리글(파일 이름, 제목, 아티스트
+            …)을 누르면 그 칸으로 정렬하고, 다시 누르면 거꾸로 정렬합니다. "앨범 아트"를 누르면 그림이 없는 곡과 있는 곡으로
+            나눕니다. 정렬은 폴더 안에서만 하며, 틀로 채우기의 번호는 표에 보이는 순서대로 매깁니다. 칸을 고쳐도 줄은 그 자리에
+            있으니, 다시 정렬하려면 머리글을 다시 누르세요.
+          </li>
           <li>바탕화면·문서·다운로드 폴더 자체는 크롬·엣지가 고르지 못하게 막습니다. 그 안의 폴더를 고르세요.</li>
           <li>"하위 폴더도 포함"을 끄면 고른 폴더 바로 안의 파일만 읽습니다. 켜면 안의 폴더까지 모두 읽어 폴더마다 묶어 보입니다.</li>
           <li>크롬·엣지(PC)에서만 쓸 수 있습니다. 폴더 이름은 바꾸지 못합니다.</li>

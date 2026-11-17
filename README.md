@@ -82,7 +82,7 @@ src/
                         MP3의 ID3 태그를 틀 단위로 읽고 쓰는 id3.js, 화면의 칸으로 읽고 고치는 tags.js, 장르 표 genres.js,
                         FLAC 태그 flac.js, M4A 태그 mp4.js, WAV 태그 wav.js, 형식마다 읽기·쓰기를 고르는 formats.js, 바이트 도구 bytes.js,
                         앨범 아트로 넣을 그림 준비 picture.js, 앨범 아트 찾기(검색 사이트 연동, 구글 이미지 검색 주소) covers.js,
-                        한꺼번에 고치기 Batch.jsx, 표의 줄 Rows.jsx)
+                        한꺼번에 고치기 Batch.jsx, 표의 줄 Rows.jsx, 표 정렬 sort.js)
   json/                 JSON 보기 (글을 읽고 틀린 자리를 알리는 parse.js, 펼친 대로 화면 줄을 만드는 tree.js,
                         줄을 그리는 Tree.jsx)
 scripts/
