@@ -15,6 +15,7 @@
 - 사진 세로로 붙이기: https://yul456.github.io/playground/stitch/
 - 사진 형식 바꾸기: https://yul456.github.io/playground/convert/
 - 사진 비교: https://yul456.github.io/playground/photo-compare/
+- 사진 자르기: https://yul456.github.io/playground/crop/
 - 페이지 사진 받기(크롬 확장 프로그램 안내·ZIP): https://yul456.github.io/playground/photo-saver/
 - 오디오 자르기: https://yul456.github.io/playground/audio-cut/
 - 오디오 형식 바꾸기: https://yul456.github.io/playground/audio-convert/
@@ -51,6 +52,7 @@ golf/3d/               골프 3D 코스 입구
 stitch/index.html       사진 세로로 붙이기 입구
 convert/index.html      사진 형식 바꾸기 입구
 photo-compare/index.html 사진 비교 입구
+crop/index.html         사진 자르기 입구
 photo-saver/index.html  페이지 사진 받기(크롬 확장 프로그램) 안내 페이지 입구. 빌드하면 옆에 photo-saver.zip이 생긴다
 audio-cut/index.html    오디오 자르기 입구
 audio-convert/index.html 오디오 형식 바꾸기 입구
@@ -77,6 +79,8 @@ src/
   convert/              사진 형식 바꾸기 (폴더 읽기와 건너뛰기 규칙 folders.js, 백그라운드 작업 convertWorker.js)
   photo-compare/        사진 비교 (칸 나누기 규칙 tiles.js, 판과 설정 versions.js, 그림 열기·칸 만들기·용량 재기 compareWorker.js,
                         받은 칸 기억 session.js, 캔버스에 그리는 보기 칸 Viewer.jsx)
+  crop/                 사진 자르기 (설정·저장 이름 rules.js, 직선 경계·누른 곳 맞추기·여백 regions.js, 그림 머리와 색 정보 옮기기 imageMeta.js,
+                        자르고 저장할 그림 만들기 cropWorker.js·cropJobs.js, 고치는 칸 Editor.jsx, 목록의 작은 그림 Thumb.jsx)
   photo-saver/          페이지 사진 받기 안내 페이지 (설치 방법, ZIP 받기)
   audio-cut/            오디오 자르기 (MP3를 조각 단위로 자르는 mp3.js, WAV를 자르는 wav.js, 태그 읽기 tags.js,
                         다른 형식을 Mediabunny로 자르는 media.js, OGG 태그 칸 보정 oggTags.js, 파형 analyze.js·Waveform.jsx)
@@ -112,6 +116,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 사진 세로로 붙이기 | `src/stitch/`, `stitch/` | 없음 (PNG 압축은 브라우저 내장 CompressionStream, JPG는 브라우저 내장 인코더) |
 | 사진 형식 바꾸기 | `src/convert/`, `convert/` | 없음 (JPG는 브라우저 내장 인코더로 만든다) |
 | 사진 비교 | `src/photo-compare/`, `photo-compare/` | 없음 (품질별 JPG는 브라우저 내장 인코더로 보이는 칸만 만든다) |
+| 사진 자르기 | `src/crop/`, `crop/` | 없음 (브라우저 내장 인코더로 만들고, 원본의 색 정보 조각은 자체 코드 `imageMeta.js`로 옮긴다) |
 | 오디오 자르기 | `src/audio-cut/`, `audio-cut/` | `mediabunny` (MP3·WAV가 아닌 형식을 다시 압축하지 않고 자르기, MPL-2.0, 그런 파일을 열 때만 받음), `@mediabunny/flac-encoder` (FLAC을 다시 압축해야 할 때만 받음, MPL-2.0). MP3·WAV는 패키지 없이 자체 코드 |
 | 오디오 형식 바꾸기 | `src/audio-convert/`, `audio-convert/` | `mediabunny` (풀고 다시 만들기, 바꾸기를 누를 때 받음), `@mediabunny/mp3-encoder` (LAME, MP3로 바꿀 때만 받음), `@mediabunny/flac-encoder` (FLAC으로 바꿀 때만 받음), `@mediabunny/aac-encoder` (FFmpeg의 AAC 인코더, 크롬이 그 설정으로 AAC를 만들지 못할 때만 받음). 모두 MPL-2.0 |
 | 파일 이름 바꾸기 | `src/rename/`, `rename/` | 없음 (이름은 브라우저의 `FileSystemFileHandle.move`로 바꾸고, MP3·M4A·FLAC·WAV 태그는 자체 코드(`id3.js`, `mp4.js`, `flac.js`, `wav.js`)로 읽고 쓴다. 앨범 아트 찾기는 MH Covers(https://covers.musichoarders.xyz)를 새 창으로 열어 사용자가 고른 그림을 받고, 구글 이미지 검색은 새 탭으로 열기만 한다(복사한 그림을 붙여 넣어 받는다)) |
