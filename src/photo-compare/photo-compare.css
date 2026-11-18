@@ -1,0 +1,76 @@
+/* 나란히 보는 칸이 여럿이라 다른 페이지보다 폭을 넓게 쓴다 */
+.pc-page { max-width: 1680px; }
+.card h2 { margin: 0; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+/* 파일을 끌어 화면 위에 올리고 있을 때 */
+.pc-page.dragging { outline: 3px dashed var(--accent); outline-offset: -8px; border-radius: 16px; }
+
+.pc-muted { color: var(--muted); }
+.pc-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.pc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pc-hint { margin: 10px 0 0; color: var(--muted); font-size: 0.9rem; }
+.pc-notice, .pc-warn { margin: 10px 0 0; color: #d97706; }
+.pc-error { color: #dc2626; }
+p.pc-error { margin: 10px 0 0; }
+
+.pc-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.pc-summary h2 { word-break: break-all; }
+.pc-summary span { color: var(--muted); }
+
+.pc-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 10px 0 0; padding: 0; border: 0; }
+.pc-options legend { float: left; margin-right: 4px; padding: 0; }
+.pc-options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.pc-page input[type="checkbox"], .pc-page input[type="radio"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+
+/* 판과 용량 표 */
+/* position: relative는 숨긴 머리글(.pc-hidden)이 표 상자 안에 머물게 한다. 없으면 좁은 화면에서 페이지가 옆으로 넘친다 */
+.pc-table-box { position: relative; margin-top: 12px; overflow-x: auto; }
+.pc-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.pc-table th, .pc-table td { padding: 6px 10px; border-top: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.pc-table thead th { border-top: 0; color: var(--muted); font-weight: 500; font-size: 0.85rem; }
+.pc-table td:nth-child(n + 3):not(:last-child) { text-align: right; }
+.pc-table thead th:nth-child(n + 3):not(:last-child) { text-align: right; }
+/* 판 이름은 좁은 화면에서도 "JPG 100"이 한 줄에 들게 하고, 긴 파일 이름만 줄을 넘긴다 */
+.pc-table .pc-name { min-width: 8em; font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
+.pc-table tr.off .pc-name, .pc-table tr.off td:nth-child(n + 3) { opacity: 0.45; }
+.pc-remove { padding: 0 8px; background: transparent; color: var(--muted); font-size: 1.2rem; line-height: 1.4; }
+.pc-remove:hover { color: #dc2626; }
+
+/* 보기 */
+.pc-view-card { padding: 14px; }
+.pc-toolbar { display: flex; flex-wrap: wrap; gap: 4px 28px; margin-bottom: 10px; }
+.pc-toolbar .pc-options { margin: 0; }
+.pc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.pc-tabs button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text); font-size: 0.9rem; }
+.pc-tabs button.on { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600; }
+.pc-tabs kbd { font: inherit; opacity: 0.7; }
+
+.pc-viewer { display: flex; gap: 8px; height: min(85vh, 1600px); min-height: 320px; border-radius: 10px; }
+.pc-viewer:focus { outline: none; }
+.pc-viewer:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* 칸이 많아 좁으면 칸이 너무 작아지지 않게 하고 옆으로 넘긴다 (페이지는 옆으로 넘치지 않는다) */
+.pc-panels { flex: 1; min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(140px, 1fr); gap: 8px; overflow-x: auto; }
+.pc-panels.flip { grid-auto-columns: 1fr; }
+.pc-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.pc-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--card); font-size: 0.85rem; white-space: nowrap; overflow: hidden; }
+.pc-panel-head strong { overflow: hidden; text-overflow: ellipsis; }
+.pc-panel-head span { color: var(--muted); }
+.pc-canvas-box { position: relative; flex: 1; min-height: 0; }
+.pc-canvas-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.pc-canvas-box canvas:active { cursor: grabbing; }
+.pc-map { position: relative; flex: none; width: 56px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg); }
+.pc-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; }
+.pc-place { margin: 6px 0 0; min-height: 1.4em; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+/* 알아 둘 것 */
+.pc-notes { color: var(--muted); font-size: 0.9rem; }
+.pc-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.pc-notes ul { margin: 0; padding-left: 1.2em; }
+.pc-notes li { margin-bottom: 4px; }
+
+@media (max-width: 600px) {
+  .pc-viewer { height: 75vh; }
+  .pc-map { width: 36px; }
+  .pc-panels { grid-auto-columns: minmax(120px, 1fr); }
+}

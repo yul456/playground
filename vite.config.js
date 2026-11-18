@@ -58,6 +58,7 @@ export default defineConfig({
         baseball: resolve(import.meta.dirname, "baseball/index.html"),
         stitch: resolve(import.meta.dirname, "stitch/index.html"),
         convert: resolve(import.meta.dirname, "convert/index.html"),
+        photoCompare: resolve(import.meta.dirname, "photo-compare/index.html"),
         photoSaver: resolve(import.meta.dirname, "photo-saver/index.html"),
         audioCut: resolve(import.meta.dirname, "audio-cut/index.html"),
         audioConvert: resolve(import.meta.dirname, "audio-convert/index.html"),

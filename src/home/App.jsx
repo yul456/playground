@@ -69,6 +69,12 @@ const FEATURES = [
     description: "폴더를 고르면 그 폴더와 안의 폴더에 있는 PNG를 JPG로 바꿔 원본과 같은 자리에 저장합니다.",
   },
   {
+    path: "photo-compare/",
+    icon: "🔍",
+    title: "사진 비교",
+    description: "같은 그림의 여러 파일을 나란히 놓고 같은 자리를 함께 옮겨 가며 봅니다. 원본을 고르면 JPG 품질별로 바꿨을 때의 모습과 용량을 보여 줍니다.",
+  },
+  {
     path: "photo-saver/",
     icon: "📥",
     title: "페이지 사진 받기",
