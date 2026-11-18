@@ -1,8 +1,9 @@
 import { duration, fileSize, number } from "../shared/format.js";
 
-// 묶음 하나(또는 골라 붙인 한 장)의 결과를 한 줄로 보인다. overwrite는 아직 만들기 전에 같은 이름 파일이 있을 때
+// 묶음 하나(또는 골라 붙인 한 장)의 결과를 한 줄로 보인다. overwrite는 아직 만들기 전에, 같은 이름으로 전에 만든 그림이 있을 때
+// (다른 파일과 이름이 겹치면 덮어쓰지 않고 이름에 번호를 붙이므로 여기 오지 않는다)
 export default function ResultText({ result, overwrite = false }) {
-  if (!result) return overwrite ? <span className="st-warn">같은 이름 파일이 있어 덮어씁니다</span> : null;
+  if (!result) return overwrite ? <span className="st-warn">전에 만든 그림을 덮어씁니다</span> : null;
   if (result.type === "done") {
     return (
       <span className="st-ok">

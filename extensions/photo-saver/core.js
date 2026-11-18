@@ -22,8 +22,9 @@ export const STITCH_FORMATS = ["jpg", "png"];
 // JPG 한 장에 담기에 너무 긴 이어 붙인 그림(높이 65,500px 넘음): split(여러 장으로 나눠 받기, 기본) · png(PNG 한 장으로 받기).
 // 나누는 방법(splitMode)은 imageInfo.js의 SPLIT_MODES(균등하게 · 최대 + 나머지)다. 사진 세로로 붙이기와 같은 옵션이다
 export const TOO_LONG = ["split", "png"];
-// JPG 품질과 기본값. 사이트의 src/shared/jpgQuality.js와 같은 값이다 (바꾸면 함께 바꾼다. 기본 95를 고른 까닭도 거기 있다)
-export const JPG_QUALITIES = [100, 95, 90, 80];
+// JPG 품질과 기본값. 사이트의 src/shared/jpgQuality.js와 같은 값이다 (바꾸면 함께 바꾼다. 기본 95를 고른 까닭도 거기 있다).
+// 선택지는 100부터 85까지 5씩이다 (사용자 요청, 1.18.0. 그 전에는 100·95·90·80이었다). 저장해 둔 값이 선택지에 없으면 기본값으로 돌아간다
+export const JPG_QUALITIES = [100, 95, 90, 85];
 export const DEFAULT_JPG_QUALITY = 95;
 
 const SETTINGS_KEY = "settings";

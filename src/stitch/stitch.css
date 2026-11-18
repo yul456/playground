@@ -3,7 +3,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .st-muted { color: var(--muted); }
 .st-small { font-size: 0.9rem; }
-.st-excluded { margin: 2px 0 0; }
+.st-excluded,
+.st-avoided { margin: 2px 0 0; }
 
 /* 고르기 칸 */
 .st-example { margin: 0 0 14px; }
@@ -21,14 +22,15 @@ button:disabled { opacity: 0.5; cursor: default; }
 .st-naming { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 14px; padding: 0; border: 0; }
 .st-naming legend { float: left; margin-right: 4px; padding: 0; }
 .st-naming label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-.st-naming code, .st-example code {
+.st-naming code, .st-example code, .st-suffix-hint code, .st-notes code {
   padding: 1px 6px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--accent) 12%, var(--card));
   font-size: 0.85rem;
   word-break: break-all;
 }
-.st-hint { margin: -6px 0 14px; color: var(--muted); font-size: 0.9rem; }
+.st-hint,
+.st-suffix-hint { margin: -6px 0 14px; color: var(--muted); font-size: 0.9rem; }
 .st-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .st-save { margin: 12px 0 0; color: var(--muted); font-size: 0.9rem; }
 .st-notice { margin: 12px 0 0; color: #d97706; }

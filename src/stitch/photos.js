@@ -61,12 +61,14 @@ export function plannedFormat(format, photos, split = true) {
   return { ext: "jpg", note: null, parts };
 }
 
-// 저장할 이름. 첫 사진 이름(확장자 빼고)에 붙일 말을 붙인다 (001.jpg → 001_합본.jpg).
+// 저장할 이름. 첫 사진 이름(확장자 빼고)에 붙일 말을 적은 그대로 붙인다 (붙일 말이 "_합본"이면 001.jpg → 001_합본.jpg).
 // 여러 장으로 나누면(parts) 이 이름에 번호를 붙인 이름들로 저장한다 (001_합본_1.jpg, 001_합본_2.jpg …).
-// 저장할 이름이 고른 사진과 같아지면 그 사진을 덮어쓰지 않도록 " (2)"처럼 번호를 붙인다. 윈도우는 대소문자가 달라도 같은 이름으로 본다
+// 저장할 이름이 고른 사진과 같아지면(붙일 말이 없고 형식이 같을 때) 그 사진을 덮어쓰지 않도록 " (2)"처럼 번호를 붙인다.
+// 윈도우는 대소문자가 달라도 같은 이름으로 본다
 export function outputName(photos, suffix, ext, parts = 1) {
   const first = usable(photos)[0] ?? photos[0];
-  const stem = [first ? first.name.replace(/\.[^.]*$/, "") : "", suffix].filter(Boolean).join("_") || "합본";
+  const firstName = first ? first.name.replace(/\.[^.]*$/, "") : "";
+  const stem = (firstName ? firstName + suffix : suffix.trimStart()) || "합본";
   const taken = new Set(photos.map((photo) => photo.name.toLowerCase()));
   const clashes = (name) => (parts > 1 ? partNames(name, parts) : [name]).some((each) => taken.has(each.toLowerCase()));
   let name = `${stem}.${ext}`;

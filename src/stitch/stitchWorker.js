@@ -6,8 +6,10 @@
 // 보내는 것: progress(measure·draw·encode), done(parts: 다 만든 그림 [{ blob, height }], format: 실제로 만든 형식,
 //          note: JPG로 만들지 못한 까닭), cancelled, error
 // JPG 한 장에 담기에 너무 긴 묶음은 사진과 사진 사이에서 나눠 JPG 여러 장(parts)으로 만든다. 나머지는 한 장이다.
+// 만든 그림마다 이 화면이 만들었다는 표시를 넣는다 (shared/resultMark.js). 다음에 고른 폴더에서 지난 결과를 알아보는 데 쓴다.
 // 파일로 저장하는 일은 화면 쪽(shared/saveToFolder.js)이 한다. 여기서 고른 폴더의 파일에 조각마다 바로 쓰지 않는 까닭도 거기 적었다
 import { jpegSize, jpgMaxHeight, sizeProblem, splitAtPhotos, widthProblem } from "../shared/imageInfo.js";
+import { addMark } from "../shared/resultMark.js";
 import { openPng } from "./png.js";
 
 // 한 번에 그려 PNG로 넘길 화소 수(약 800만 개, 32MB). 폭이 넓으면 줄 수가 줄어든다
@@ -218,7 +220,7 @@ async function run({ id, files, format = "png", quality = 95, split = true, spli
           const parts = [];
           for (const [k, range] of ranges.entries()) {
             const part = { index: k + 1, count: ranges.length, totalRows: height };
-            parts.push({ blob: await makeJpg(items, width, range, quality, check, post, part), height: range[1] - range[0] });
+            parts.push({ blob: await addMark(await makeJpg(items, width, range, quality, check, post, part)), height: range[1] - range[0] });
           }
           done(parts, "jpg", null);
           return;
@@ -230,7 +232,7 @@ async function run({ id, files, format = "png", quality = 95, split = true, spli
     }
 
     // 3. PNG로 만든다. PNG는 길이에 한계가 없어 늘 한 장이다
-    done([{ blob: await makePng(items, width, height, check, post), height }], "png", note);
+    done([{ blob: await addMark(await makePng(items, width, height, check, post)), height }], "png", note);
   } catch (err) {
     if (err instanceof Cancelled) post({ type: "cancelled", skipped });
     else post({ type: "error", message: err?.message || String(err), skipped });

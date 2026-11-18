@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { download } from "../shared/download.js";
-import { partName, partRange } from "../shared/fileNames.js";
+import { partRange } from "../shared/fileNames.js";
 import { number } from "../shared/format.js";
 import { JPG_MAX_SIDE, SPLIT_EXAMPLES, SPLIT_LABELS, SPLIT_MODES } from "../shared/imageInfo.js";
 import { DEFAULT_JPG_QUALITY, JPG_QUALITIES } from "../shared/jpgQuality.js";
 import { explainSaveError, SAVE_TRIES, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
-import { cleanSuffix, FORMATS, groupFileList, groupKey, NAMINGS, outputNames, planGroups, scanDirectory } from "./folders.js";
+import {
+  cleanSuffix,
+  finalNames,
+  findMarked,
+  FORMATS,
+  groupFileList,
+  groupKey,
+  NAMINGS,
+  OLD_SUFFIX,
+  outputNames,
+  planGroups,
+  scanDirectory,
+} from "./folders.js";
 import { cancelJob, runJob } from "./jobs.js";
 import { addPhotos, sortByName } from "./photos.js";
 import PickedSection from "./PickedSection.jsx";
@@ -15,7 +27,10 @@ import ResultText from "./ResultText.jsx";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
 const STORAGE_KEY = "playground.stitch.v1";
-const DEFAULT_SUFFIX = "합본";
+// 저장한 설정의 판. 2판부터 붙일 말을 적은 그대로 이름 뒤에 붙이고 기본값이 빈 값이다.
+// 그 전에는 이름 뒤에 "_"와 붙일 말을 붙였고 기본값이 "합본"이었다 (1_합본.jpg)
+const SETTINGS_VERSION = 2;
+const OLD_DEFAULT_WORD = "합본";
 // 전에 쓴 붙일 말을 몇 개까지 기억할지. 고른 폴더에서 지난 결과를 알아보는 데 쓴다
 const MAX_USED = 10;
 
@@ -26,34 +41,46 @@ const QUALITY_HINTS = {
   100: "거의 그대로입니다. 받은 JPG 합계의 5배쯤이 됩니다.",
   95: "눈으로 구분하기 어렵습니다. 받은 JPG 합계의 2배쯤이 됩니다.",
   90: "받은 JPG 합계와 비슷하거나 조금 커집니다.",
-  80: "받은 JPG 합계보다 작아질 수 있습니다. 확대하면 차이가 보일 수 있습니다.",
+  85: "받은 JPG 합계와 비슷한 크기가 됩니다. 확대하면 차이가 보일 수 있습니다.",
 };
 
 // JPG 한 장에 담기에 너무 긴 묶음(높이 65,500px 넘음)은 여러 장으로 나누거나(기본) PNG 한 장으로 저장한다.
 // 나누는 방법은 균등하게(기본) · 최대 + 나머지 (shared/imageInfo.js의 SPLIT_MODES)
 
-// 설정: { suffix: 붙일 말, naming: 이름 방식(folders.js NAMINGS), format: 저장 형식(folders.js FORMATS),
-//   quality: JPG 품질, split: 너무 긴 묶음을 JPG 여러 장으로 나눌지(아니면 PNG 한 장), splitMode: 나누는 방법,
-//   used: 전에 만들 때 쓴 붙일 말(새것부터) }
+// 설정: { suffix: 붙일 말(적은 그대로 이름 뒤에 붙는다. 기본은 빈 값), naming: 이름 방식(folders.js NAMINGS),
+//   format: 저장 형식(folders.js FORMATS), quality: JPG 품질, split: 너무 긴 묶음을 JPG 여러 장으로 나눌지(아니면 PNG 한 장),
+//   splitMode: 나누는 방법, used: 전에 만들 때 쓴 붙일 말(새것부터),
+//   old: 설정 2판 전에 쓴 붙일 말("_"를 붙여 옮긴 것). 그때 만든 결과는 표시가 없어 이름으로 알아본다 }
 function loadSettings() {
   const settings = {
-    suffix: DEFAULT_SUFFIX,
+    suffix: "",
     naming: NAMINGS[0],
     format: FORMATS[0],
     quality: DEFAULT_JPG_QUALITY,
     split: true,
     splitMode: SPLIT_MODES[0],
     used: [],
+    old: [],
   };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (typeof saved?.suffix === "string") settings.suffix = saved.suffix;
+    const texts = (list) => (Array.isArray(list) ? list.filter((s) => typeof s === "string") : []);
+    if (saved?.v === SETTINGS_VERSION) {
+      if (typeof saved.suffix === "string") settings.suffix = saved.suffix;
+      settings.used = texts(saved.used).slice(0, MAX_USED);
+      settings.old = texts(saved.old).filter(Boolean).slice(0, MAX_USED);
+    } else if (saved) {
+      // 전 판의 설정을 옮긴다. 기본값(합본)을 그대로 쓰고 있었으면 새 기본값(빈 값)으로 하고, 직접 적어 둔 말은
+      // 같은 이름이 나오도록 "_"를 붙인다. 전에 쓴 붙일 말은 표시가 없는 지난 결과를 알아보는 데 쓴다
+      const word = typeof saved.suffix === "string" ? saved.suffix.trim() : "";
+      if (word && word !== OLD_DEFAULT_WORD) settings.suffix = `_${word}`;
+      settings.old = texts(saved.used).filter(Boolean).map((s) => `_${s}`).slice(0, MAX_USED);
+    }
     if (NAMINGS.includes(saved?.naming)) settings.naming = saved.naming;
     if (FORMATS.includes(saved?.format)) settings.format = saved.format;
     if (JPG_QUALITIES.includes(saved?.quality)) settings.quality = saved.quality;
     if (typeof saved?.split === "boolean") settings.split = saved.split;
     if (SPLIT_MODES.includes(saved?.splitMode)) settings.splitMode = saved.splitMode;
-    if (Array.isArray(saved?.used)) settings.used = saved.used.filter((s) => typeof s === "string").slice(0, MAX_USED);
   } catch {
     // 저장소를 못 쓰는 환경(사생활 보호 모드 등)이면 기본값으로 시작한다
   }
@@ -68,9 +95,10 @@ const PHOTO_EXTENSIONS = [".jpg", ".jpeg", ".jfif", ".png", ".gif", ".webp", ".b
 
 export default function App() {
   const [settings, setSettings] = useState(loadSettings);
-  const { suffix, naming, format, quality, split, splitMode, used } = settings;
+  const { suffix, naming, format, quality, split, splitMode, used, old } = settings;
   // 고른 폴더: { name, groups: 하위 폴더 묶음 [{ path, files }], rootFiles: 고른 폴더 바로 안의 사진,
-  //   existing: 고른 폴더 바로 안 파일 이름(소문자), saveDir: 쓸 수 있으면 그 폴더 }
+  //   existing: 고른 폴더 바로 안 파일 이름(소문자), marked: 그 가운데 이 화면이 만든 표시가 있는 그림(소문자),
+  //   saveDir: 쓸 수 있으면 그 폴더 }
   const [source, setSource] = useState(null);
   // 체크를 끈 묶음(groupKey). 폴더를 새로 고르면 모두 다시 켠다
   const [unchecked, setUnchecked] = useState(() => new Set());
@@ -101,7 +129,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...settings, v: SETTINGS_VERSION }));
     } catch {
       // 저장 실패는 무시한다. 화면에서는 계속 쓸 수 있다
     }
@@ -165,10 +193,15 @@ export default function App() {
     }
   }
 
-  function onFiles(e) {
+  async function onFiles(e) {
     const files = [...e.target.files];
     e.target.value = "";
-    if (files.length) open(groupFileList(files), null);
+    if (!files.length) return;
+    setStatus("scanning");
+    const scan = groupFileList(files);
+    // 고른 폴더 바로 안의 그림 가운데 이 화면이 전에 만든 것(표시가 있는 것)을 찾는다
+    scan.marked = await findMarked(scan.rootFiles);
+    open(scan, null);
   }
 
   // 고른 사진을 목록에 올린다. entries: [{ file, handle(파일 고르기 창으로 고른 것만) }].
@@ -245,13 +278,13 @@ export default function App() {
   // 묶음 하나를 만든다. 그림을 다 만든 뒤, 고른 폴더에 쓸 수 있으면 거기에 저장하고 아니면 다운로드로 받는다.
   // 고른 폴더에 끝내 저장하지 못한 장은 다운로드로 받고, 까닭(saveError)과 그 장수(fellBack)를 함께 돌려준다.
   // planned는 고른 형식으로 지은 이름이다. JPG로 만들 수 없어 PNG로 만들어졌으면 확장자를 바꿔 저장하고,
-  // 길어서 JPG 여러 장으로 나눴으면 이름에 번호를 붙인다(결과의 names, name은 "첫 이름 ~ 끝 이름")
-  async function saveGroup(files, planned, report) {
+  // 길어서 JPG 여러 장으로 나눴으면 이름에 번호를 붙인다(결과의 names, name은 "첫 이름 ~ 끝 이름").
+  // 그렇게 정한 이름이 쓸 수 없는 이름(blocked: 고른 폴더에 있는 다른 파일, 이번에 다른 묶음이 쓰는 이름)이면 번호를 올린다
+  async function saveGroup(files, planned, report, blocked) {
     const made = await runJob(files, { format, quality, split, splitMode }, (p) => report(describe(p)));
     if (made.type !== "done") return made;
     const { parts, ...rest } = made;
-    const single = planned.replace(/\.[^.]*$/, `.${made.format}`);
-    const names = parts.length > 1 ? parts.map((_, k) => partName(single, k + 1)) : [single];
+    const names = finalNames(planned, made.format, parts.length, blocked);
     const result = { ...rest, name: partRange(names), names, parts: parts.length };
     const dir = source.saveDir;
     if (!dir) {
@@ -282,8 +315,11 @@ export default function App() {
 
   async function start() {
     const cleaned = cleanSuffix(suffix);
-    const { groups, names } = planGroups(source, cleaned, used, naming, format);
+    const { groups, names, isOurs } = planGroups(source, cleaned, used, naming, format, [OLD_SUFFIX, ...old]);
     const chosen = [...groups.keys()].filter((i) => !unchecked.has(groupKey(groups[i])));
+    // 이번에 저장한 이름(소문자). 뒤의 묶음이 같은 이름을 쓰지 않게 한다
+    const savedNow = new Set();
+    const toFolder = Boolean(source.saveDir);
     // 이 붙일 말로 만든 결과를 다음에 고른 폴더에서 알아보도록 기억해 둔다
     setSettings((s) => ({ ...s, used: [cleaned, ...s.used.filter((u) => u !== cleaned)].slice(0, MAX_USED) }));
     stopRef.current = false;
@@ -299,14 +335,19 @@ export default function App() {
       let result;
       try {
         const files = await Promise.all(group.files.map((f) => (typeof f.getFile === "function" ? f.getFile() : f)));
-        result = await saveGroup(files, names[index], (p) => setProgress({ ...at, ...p }));
+        // 쓸 수 없는 이름: 이번에 이미 저장한 이름, 다른 묶음이 쓰기로 한 이름, 고른 폴더에 있는 다른 파일(지난 결과가 아닌 것)
+        const others = new Set(names.filter((_, j) => j !== index).map((name) => name.toLowerCase()));
+        const blocked = (lower) => savedNow.has(lower) || others.has(lower) || (toFolder && source.existing.has(lower) && !isOurs(lower));
+        result = await saveGroup(files, names[index], (p) => setProgress({ ...at, ...p }), blocked);
       } catch (err) {
         result = { type: "error", message: err.message, skipped: [] };
       }
       result = { ...result, ms: performance.now() - startedAt };
+      for (const name of result.names ?? []) savedNow.add(name.toLowerCase());
       if (result.savedTo === "folder") {
+        // 저장한 그림은 고른 폴더에 있는 지난 결과가 된다 (표시가 들어 있다). 다시 만들면 덮어쓴다
         const saved = result.names.map((name) => name.toLowerCase());
-        setSource((s) => ({ ...s, existing: new Set([...s.existing, ...saved]) }));
+        setSource((s) => ({ ...s, existing: new Set([...s.existing, ...saved]), marked: new Set([...s.marked, ...saved]) }));
       }
       setResults((list) => {
         const next = [...list];
@@ -346,7 +387,9 @@ export default function App() {
   const cleaned = cleanSuffix(suffix);
   // 이름 방식 예시: a 폴더를 골랐을 때 그 안의 1 폴더 결과 이름
   const namingExamples = NAMINGS.map((n) => outputNames([{ path: ["1"] }], cleaned, "a", n, format)[0]);
-  const { groups, names } = source ? planGroups(source, cleaned, used, naming, format) : { groups: [], names: [] };
+  const { groups, names, avoided } = source
+    ? planGroups(source, cleaned, used, naming, format, [OLD_SUFFIX, ...old])
+    : { groups: [], names: [], avoided: [] };
   const keys = groups.map(groupKey);
   const checkedCount = keys.filter((k) => !unchecked.has(k)).length;
   const imageCount = groups.reduce((sum, g) => sum + g.files.length, 0);
@@ -406,10 +449,15 @@ export default function App() {
           <input
             value={suffix}
             maxLength={40}
+            placeholder="없음 (예: _합본)"
             disabled={working}
             onChange={(e) => changeSettings({ suffix: e.target.value })}
           />
         </label>
+        <p className="st-suffix-hint">
+          적은 그대로 이름 뒤에 붙습니다. <code>_합본</code>이면 <code>1_합본.jpg</code>, 비워 두면 <code>1.jpg</code>입니다. 빈칸도
+          적은 대로 들어갑니다.
+        </p>
         {/* 폴더 이름으로 이름을 짓는 방식은 폴더로 붙일 때만 쓴다 */}
         {!picked && (
           <fieldset className="st-naming" disabled={working}>
@@ -551,6 +599,11 @@ export default function App() {
                           이 화면이 전에 만든 그림 {number(group.excluded)}개는 빼고 붙입니다.
                         </p>
                       )}
+                      {avoided[i] && (
+                        <p className="st-muted st-small st-avoided">
+                          고른 폴더에 같은 이름의 다른 파일이 있어 덮어쓰지 않고 이름에 번호를 붙였습니다.
+                        </p>
+                      )}
                       <div className="st-out">
                         <span className="st-name">→ {result?.name ?? names[i]}</span>
                         {current ? (
@@ -615,7 +668,7 @@ export default function App() {
           <li>폭은 폴더에서 가장 넓은 사진에 맞춥니다. 크기를 줄이지 않고, 좁은 사진은 가운데에 두고 양옆을 흰색으로 채웁니다.</li>
           <li>
             JPG는 사진에 알맞고 작습니다. JPG 한 장에는 높이 {number(JPG_MAX_SIDE)}px까지 담을 수 있어서, 그보다 긴 묶음은
-            사진과 사진 사이에서 나눠 여러 장(1_합본_1.jpg, 1_합본_2.jpg …)으로 저장합니다. 폭이 넓으면 한 장의 높이가 더
+            사진과 사진 사이에서 나눠 여러 장(1_1.jpg, 1_2.jpg …)으로 저장합니다. 폭이 넓으면 한 장의 높이가 더
             짧아집니다. 사진 한 장이 그보다 길면 그 사진만 중간에서 자릅니다. 나누지 않기로 하면 PNG 한 장으로 저장하고,
             폭이 {number(JPG_MAX_SIDE)}px을 넘는 묶음도 PNG로 저장합니다. 큰 묶음을 JPG로 만들 때는 메모리를 많이 씁니다.
           </li>
@@ -632,9 +685,11 @@ export default function App() {
             바꿉니다. 브라우저가 고른 사진의 폴더에 쓸 권한은 주지 않아서, 만들 때 저장할 자리를 한 번 묻습니다.
           </li>
           <li>
-            같은 이름 파일이 있으면 덮어씁니다. 다 만들기 전에 멈추면 원래 파일은 그대로 남습니다. 여러 장으로 나눠 저장하다
-            멈추면 그때까지 저장한 장은 남습니다.
+            만든 그림에는 이 화면이 만들었다는 보이지 않는 표시를 넣습니다. 고른 폴더에 같은 이름의 파일이 있을 때, 표시가
+            있는 그림(이 화면이 전에 만든 것)은 붙일 사진에서 빼고 새 그림으로 덮어씁니다. 표시가 없는 파일은 덮어쓰지 않고
+            새 그림의 이름에 번호를 붙입니다(1 (2).jpg). 표시를 넣기 전에 만든 <code>_합본</code> 그림은 이름으로 알아봅니다.
           </li>
+          <li>다 만들기 전에 멈추면 원래 파일은 그대로 남습니다. 여러 장으로 나눠 저장하다 멈추면 그때까지 저장한 장은 남습니다.</li>
           <li>
             고른 폴더에 저장하지 못하면 잠깐 뒤 다시 해 보고, 그래도 안 되면 다운로드 폴더로 받습니다. 백신이나 클라우드
             백업 같은 다른 프로그램이 그 파일을 잡고 있을 때 생깁니다.

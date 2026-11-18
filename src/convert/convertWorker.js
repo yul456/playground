@@ -6,6 +6,7 @@
 // 한 번에 하나만 맡는다. 멈출 때는 화면 쪽이 작업자를 통째로 끝낸다 (브라우저가 그림을 열고 만드는 일은 중간에 멈출 수 없다).
 // 파일로 저장하는 일은 화면 쪽이 한다 (shared/saveToFolder.js)
 import { jpegSize, jpgMaxHeight, pngInfo, rowSplit, sizeProblem, widthProblem } from "../shared/imageInfo.js";
+import { addMark, hasMark } from "../shared/resultMark.js";
 
 // 자를 줄을 찾을 때 한 번에 읽는 화소 수의 한계(약 1,600만 개, 64MB). 폭이 넓으면 찾는 범위가 좁아진다
 const WINDOW_PIXELS = 16_000_000;
@@ -204,7 +205,11 @@ self.onmessage = async ({ data }) => {
   if (data.type !== "run") return;
   const post = (message) => self.postMessage({ id: data.id, ...message });
   try {
-    post({ type: "done", ...(await convert(data, post)) });
+    const made = await convert(data, post);
+    // 사진 세로로 붙이기가 만든 그림(표시가 있는 PNG)을 바꾼 것이면 그 표시(shared/resultMark.js)를 옮겨 넣는다.
+    // 붙이기 화면이 바꾼 JPG도 지난 결과로 알아보게 하려는 것이다
+    if (await hasMark(data.file)) for (const part of made.parts) part.blob = await addMark(part.blob);
+    post({ type: "done", ...made });
   } catch (err) {
     const message = err instanceof Refused ? err.message : `브라우저가 이 그림을 바꾸지 못했습니다 (${err?.message || err})`;
     post({ type: "error", message });

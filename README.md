@@ -59,7 +59,7 @@ extensions/
 src/
   shared/               여러 기능이 함께 쓰는 것 (base.css, site.js, weatherCodes.js, WeatherIcon.jsx, geo.js, Confetti.jsx, random.js,
                         고른 폴더에 저장하는 saveToFolder.js, download.js, format.js, fileNames.js,
-                        그림 머리와 JPG 크기 한계 imageInfo.js, JPG 품질 jpgQuality.js,
+                        그림 머리와 JPG 크기 한계 imageInfo.js, JPG 품질 jpgQuality.js, 만든 그림에 넣는 표시 resultMark.js,
                         고른 폴더 읽기 folderScan.js, 오디오 태그 보이기·견주기 audioTags.js, 깨진 한글 고치기 textRepair.js)
   home/                 첫 화면. FEATURES 배열에 기능 카드를 둔다
   weather/              날씨 기능

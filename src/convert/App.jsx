@@ -3,7 +3,7 @@ import { download } from "../shared/download.js";
 import { partRange } from "../shared/fileNames.js";
 import { fileSize, number } from "../shared/format.js";
 import { JPG_MAX_SIDE, SPLIT_EXAMPLES, SPLIT_LABELS, SPLIT_MODES } from "../shared/imageInfo.js";
-import { DEFAULT_JPG_QUALITY } from "../shared/jpgQuality.js";
+import { DEFAULT_JPG_QUALITY, JPG_QUALITIES } from "../shared/jpgQuality.js";
 import { explainSaveError, fileExists, SAVE_TRIES, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
 import {
@@ -22,14 +22,15 @@ import { cancelJob, runJob } from "./jobs.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
 const STORAGE_KEY = "playground.convert.v1";
-// 고를 수 있는 JPG 품질과 그 설명. 기본값은 shared/jpgQuality.js에 있다 (처음엔 100이었다가 95로 바꿨다).
-// 줄어드는 정도는 3840×2160 사진 두 장으로 잰 어림이다
-const QUALITIES = [
-  { value: 100, hint: "화질이 원본과 거의 같습니다. 사진은 PNG의 60%쯤으로 줄어듭니다." },
-  { value: 95, hint: "눈으로 구분하기 어렵습니다. 사진은 PNG의 20%쯤으로 줄어듭니다." },
-  { value: 90, hint: "흔히 쓰는 값입니다. 사진은 PNG의 13%쯤으로 줄어듭니다." },
-  { value: 80, hint: "확대하면 차이가 보일 수 있습니다. 사진은 PNG의 9%쯤으로 줄어듭니다." },
-];
+// 고를 수 있는 JPG 품질(shared/jpgQuality.js의 JPG_QUALITIES)의 설명. 기본값도 거기 있다 (처음엔 100이었다가 95로 바꿨다).
+// 줄어드는 정도는 3840×2160 사진 두 장으로 잰 어림이다. 85는 재지 않았고, 90(13%)과 전에 있던 80(9%) 사이로 어림했다
+const QUALITY_HINTS = {
+  100: "화질이 원본과 거의 같습니다. 사진은 PNG의 60%쯤으로 줄어듭니다.",
+  95: "눈으로 구분하기 어렵습니다. 사진은 PNG의 20%쯤으로 줄어듭니다.",
+  90: "흔히 쓰는 값입니다. 사진은 PNG의 13%쯤으로 줄어듭니다.",
+  85: "확대하면 차이가 보일 수 있습니다. 사진은 PNG의 11%쯤으로 줄어듭니다.",
+};
+const QUALITIES = JPG_QUALITIES.map((value) => ({ value, hint: QUALITY_HINTS[value] }));
 
 // JPG 한 장에 담기에 너무 긴 그림(높이 65,500px 넘음)은 여러 장으로 나누거나(기본) 바꾸지 않는다.
 // 나누는 방법은 균등하게(기본) · 최대 + 나머지 (shared/imageInfo.js의 SPLIT_MODES)
@@ -41,7 +42,7 @@ function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (DIRECTIONS.some((d) => d.key === saved?.direction)) settings.direction = saved.direction;
-    if (QUALITIES.some((q) => q.value === saved?.quality)) settings.quality = saved.quality;
+    if (JPG_QUALITIES.includes(saved?.quality)) settings.quality = saved.quality;
     if (typeof saved?.split === "boolean") settings.split = saved.split;
     if (SPLIT_MODES.includes(saved?.splitMode)) settings.splitMode = saved.splitMode;
   } catch {
