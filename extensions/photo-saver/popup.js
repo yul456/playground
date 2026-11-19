@@ -7,6 +7,7 @@ import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountLinks } from "./links.js";
 import { mountVideos } from "./videos.js";
 import { mountHide } from "./hide.js";
+import { mountOpenUrls } from "./open-urls.js";
 import { mountSearch } from "./search.js";
 import { mountUnlock } from "./unlock.js";
 import { applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
@@ -658,6 +659,7 @@ async function init() {
   unlock = mountUnlock();
   hider = mountHide({ inPanel });
   mountSearch();
+  mountOpenUrls();
   renderRules();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

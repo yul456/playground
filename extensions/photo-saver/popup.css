@@ -70,6 +70,10 @@ h1 { margin: 0; font-size: 15px; }
 .rule-list.search-words { margin: -4px 0 8px; }
 /* 앞의 빈칸(띄어 붙이는 말)이 보이게 */
 .rule-list.search-words span { white-space: pre; }
+/* 고른 글자를 넣어 열 주소: 길어서 한 줄에 하나씩 */
+.rule-list.url-templates { flex-direction: column; flex-wrap: nowrap; align-items: stretch; margin: -4px 0 8px; }
+.rule-list.url-templates[hidden] { display: none; }
+.url-templates li { justify-content: space-between; border-radius: 8px; }
 .rule-list.search-words[hidden] { display: none; }
 
 /* 이 페이지 링크: 주소 모양별 묶음과 링크 체크박스 */

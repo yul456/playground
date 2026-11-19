@@ -11,6 +11,7 @@ import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase, videoB
 import { applyOpenIn, loadOpenIn } from "./opener.js";
 import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
 import { SEARCH_KEY, cleanSelection, loadWords, searchUrl } from "./search-words.js";
+import { URL_KEY, fillTemplate, loadTemplates, templateLabel } from "./url-templates.js";
 import { UNLOCK_CSS, UNLOCK_KEY, syncUnlockScripts } from "./unlock-sites.js";
 
 // 아이콘을 누르면 팝업과 사이드바 가운데 무엇을 열지 다시 맞춘다 (브라우저를 켤 때, 확장 프로그램을 설치하거나 새로 고칠 때).
@@ -175,17 +176,41 @@ function forgetUrl(plan) {
   else byUrl.delete(plan.url);
 }
 
+// 보이지 않는 문서는 이어 붙이기와 클립보드 읽기("복사한 글로")가 함께 쓴다 (확장 프로그램마다 하나만 열 수 있다)
+let stitchingDoc = false; // 이어 붙이기가 쓰는 중 (클립보드를 읽은 뒤에 닫지 않게)
 async function openOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
   await chrome.offscreen.createDocument({
     url: OFFSCREEN,
-    reasons: ["BLOBS"],
-    justification: "고른 사진을 세로로 이어 붙인 그림을 만들어 받는다",
+    reasons: ["BLOBS", "CLIPBOARD"],
+    justification: "고른 사진을 세로로 이어 붙인 그림을 만들어 받고, 오른쪽 클릭 메뉴의 '복사한 글로'에서 클립보드의 글을 읽는다",
   });
 }
 
+// 이어 붙이기가 끝났거나 실패했을 때
 function closeOffscreen() {
+  stitchingDoc = false;
   chrome.offscreen.closeDocument().catch(() => {});
+}
+
+// 클립보드의 글 (오른쪽 클릭 메뉴 "복사한 글로", 1.23.0). 서비스 워커는 클립보드를 읽지 못해서 보이지 않는 문서(offscreen.js)가 읽는다.
+// 메뉴를 누를 때만 읽는다. 겹쳐 돌지 않게 차례로 하고, 이어 붙이기가 쓰는 중이 아니면 읽은 뒤 문서를 닫는다
+let clipboardQueue = Promise.resolve();
+function readClipboard() {
+  const read = async () => {
+    try {
+      await openOffscreen();
+      const text = await chrome.runtime.sendMessage({ target: "offscreen", type: "clipboard-read" });
+      return typeof text === "string" ? text : "";
+    } catch {
+      return "";
+    } finally {
+      if (!stitchingDoc) chrome.offscreen.closeDocument().catch(() => {});
+    }
+  };
+  const run = clipboardQueue.then(read, read);
+  clipboardQueue = run.catch(() => {});
+  return run;
 }
 
 // 한 장(또는 이어 붙인 그림)이 끝났다. error가 있으면 받지 못함
@@ -282,6 +307,7 @@ async function begin(plan) {
 
 async function startStitch(job, urls) {
   try {
+    stitchingDoc = true;
     await openOffscreen();
     await chrome.runtime.sendMessage({
       target: "offscreen",
@@ -713,23 +739,40 @@ function onHideMessage(message, sender, reply) {
 }
 
 // 오른쪽 클릭 메뉴 -----------------------------------------------------------------
-// - 고른 글자: "구글 검색: 고른 글 + 붙일 말" (붙일 말마다 한 줄, 적은 그대로 바로 뒤에 붙인다. 1.21.0. search-words.js)
+// - 고른 글자: "구글 검색: 고른 글 + 붙일 말" (붙일 말마다 한 줄, 적은 그대로 바로 뒤에 붙인다. 1.21.0. search-words.js),
+//   "열기: 주소" (정해 둔 주소의 자리에 고른 글을 소문자로 바꿔 넣는다. 1.22.0. url-templates.js)
+// - 빈 곳(고른 글자가 없을 때): 같은 구글 검색·주소 열기를 같은 자리에 "(복사한 글)"로. 고른 글 대신 클립보드의 글을 쓴다 (1.23.0, readClipboard)
 // - 링크: "열린 탭 받기 목록에 넣기". 넣었는지는 그 페이지 아래쪽에 잠깐 글로 알린다 (툴바 배지는 받기 진행을 보이는 데 쓴다)
 // - 어디서나: "이 부분 숨기기"·"이 부분 늘 숨기기" (1.20.0)
 // 한 확장 프로그램의 메뉴가 둘 이상 보이면 크롬이 "페이지 도우미" 아래로 묶고, 만든 순서대로 보인다
 const MENU_ID = "add-link";
 const SEARCH_PREFIX = "search:"; // 구글 검색 메뉴의 id는 이 뒤에 붙일 말을 그대로 붙인다 (목록이 바뀌는 사이에 눌러도 그 말로 찾게)
+const OPEN_PREFIX = "open:"; // 주소 열기 메뉴의 id는 이 뒤에 주소를 그대로 붙인다
+const CLIP_SEARCH = "clip-search:"; // 빈 곳의 구글 검색 (뒤에 붙일 말)
+const CLIP_OPEN = "clip-open:"; // 빈 곳의 주소 열기 (뒤에 주소)
+const CLIP_TEXT = "(복사한 글)"; // 크롬 메뉴는 고른 글(%s)만 메뉴 글에 넣어 보일 수 있어서 복사한 글 자리는 이렇게 적는다
 let menuItems = [];
 let menuBuild = Promise.resolve();
 
-// 구글 검색 메뉴: %s는 크롬이 고른 글로 바꿔 보인다. 찾을 말 그대로 보이게 붙일 말을 바로 뒤에 붙인다 (띄어 쓰는 말은 앞에 빈칸이 있다).
-// 윈도우 메뉴는 &를 단축키 표시로 읽어서 두 번 적는다
-// 붙일 말마다 한 줄, 그 아래 구분선 (그 아래에 숨기기가 온다)
-function searchMenus(words) {
-  if (!words.length) return [];
+// 구글 검색·주소 열기 메뉴. 글자를 고르면 고른 글로, 고른 글자가 없는 빈 곳이면 복사해 둔 글로 한다 (사용자 요청: 둘이 같은 메뉴를 쓰게).
+// 크롬 메뉴는 고른 글(%s)만 메뉴 글에 넣을 수 있어서, 줄마다 둘을 만들어 한 번에 하나만 보이게 한다:
+// - 고른 글자(selection): "구글 검색: %s가격", "열기: aaa.com/%s/b" (%s는 크롬이 고른 글로 바꿔 보인다.
+//   찾을 말 그대로 보이게 붙일 말을 바로 뒤에 붙인다. 띄어 쓰는 말은 앞에 빈칸이 있다)
+// - 빈 곳(page: 고른 글자·링크·그림·입력 칸이 아닌 곳. 틀 안의 빈 곳도): 같은 자리에 "(복사한 글)"로
+// 그 아래 구분선 (그 아래에 링크·숨기기가 온다). 윈도우 메뉴는 &를 단축키 표시로 읽어서 두 번 적는다
+function searchMenus(words, templates) {
+  if (!words.length && !templates.length) return [];
+  const amp = (text) => text.replace(/&/g, "&&");
   return [
-    ...words.map((word) => ({ id: `${SEARCH_PREFIX}${word}`, title: `구글 검색: %s${word.replace(/&/g, "&&")}`, contexts: ["selection"] })),
-    { id: "search-end", type: "separator", contexts: ["selection"] },
+    ...words.flatMap((word) => [
+      { id: `${SEARCH_PREFIX}${word}`, title: `구글 검색: %s${amp(word)}`, contexts: ["selection"] },
+      { id: `${CLIP_SEARCH}${word}`, title: `구글 검색: ${CLIP_TEXT}${amp(word)}`, contexts: ["page"] },
+    ]),
+    ...templates.flatMap((template) => [
+      { id: `${OPEN_PREFIX}${template}`, title: `열기: ${amp(templateLabel(template))}`, contexts: ["selection"] },
+      { id: `${CLIP_OPEN}${template}`, title: `열기: ${amp(templateLabel(template).replaceAll("%s", CLIP_TEXT))}`, contexts: ["page"] },
+    ]),
+    { id: "search-end", type: "separator", contexts: ["selection", "page"] },
   ];
 }
 
@@ -737,11 +780,11 @@ function searchMenus(words) {
 function buildMenus() {
   menuBuild = menuBuild
     .then(async () => {
-      const words = await loadWords();
+      const [words, templates] = await Promise.all([loadWords(), loadTemplates()]);
       // 웹 페이지에서만 (크롬 설정 같은 페이지에서는 숨길 수 없다)
       const documentUrlPatterns = ["http://*/*", "https://*/*"];
       const items = [
-        ...searchMenus(words),
+        ...searchMenus(words, templates),
         { id: MENU_ID, title: "열린 탭 받기 목록에 넣기", contexts: ["link"] },
         { id: "hide-once", title: "이 부분 숨기기", contexts: HIDE_CONTEXTS, documentUrlPatterns },
         { id: "hide-always", title: "이 부분 늘 숨기기 (이 사이트에서 기억)", contexts: HIDE_CONTEXTS, documentUrlPatterns },
@@ -762,21 +805,46 @@ function buildMenus() {
 }
 chrome.runtime.onInstalled.addListener(buildMenus);
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes[SEARCH_KEY]) buildMenus();
+  if (area === "local" && (changes[SEARCH_KEY] || changes[URL_KEY])) buildMenus();
 });
 
-// 구글 검색: 지금 탭 바로 뒤에 새 탭으로 연다 (그 탭을 닫으면 원래 탭으로 돌아간다)
-async function searchFromMenu(word, info, tab) {
-  const text = cleanSelection(info.selectionText);
-  if (!text) return;
-  const url = searchUrl(text, word);
+// 지금 탭 바로 뒤에 새 탭으로 연다 (그 탭을 닫으면 원래 탭으로 돌아간다)
+async function openNextTo(url, tab) {
   const placed = tab?.id != null && tab.index != null ? { index: tab.index + 1, openerTabId: tab.id, windowId: tab.windowId } : {};
   await chrome.tabs.create({ url, active: true, ...placed }).catch(() => chrome.tabs.create({ url }));
 }
 
+// 구글 검색: 고른 글 바로 뒤에 붙일 말을 붙여 찾는다
+async function searchFromMenu(word, info, tab) {
+  const text = cleanSelection(info.selectionText);
+  if (text) await openNextTo(searchUrl(text, word), tab);
+}
+
+// 주소 열기: 정해 둔 주소의 자리에 고른 글(소문자, 주소에 쓸 수 있게 바꾼 것)을 넣어 연다
+async function openFromMenu(template, info, tab) {
+  if (cleanSelection(info.selectionText)) await openNextTo(fillTemplate(template, info.selectionText), tab);
+}
+
+// 메뉴를 누른 프레임에서 함수를 돌린다 (알림 띄우기 등)
+async function inMenuFrame(info, tab, func, args) {
+  if (tab?.id == null) return undefined;
+  const target = { tabId: tab.id, frameIds: [info.frameId ?? 0] };
+  return (await chrome.scripting.executeScript({ target, func, args }).catch(() => []))[0]?.result;
+}
+
+// "복사한 글로": 클립보드의 글로 구글 검색이나 주소 열기. 글이 없으면 그 페이지에 알린다.
+// clipboardText는 시험이 클립보드 대신 넣는다 (시험이 이 컴퓨터의 클립보드를 건드리지 않게)
+async function clipboardFromMenu(makeUrl, info, tab, clipboardText) {
+  const text = cleanSelection(clipboardText ?? (await readClipboard()));
+  if (!text) {
+    await inMenuFrame(info, tab, showToast, ["복사한 글이 없습니다. 글자를 복사한 뒤 다시 눌러 주세요."]);
+    return;
+  }
+  await openNextTo(makeUrl(text), tab);
+}
+
 async function addLinkFromMenu(info, tab) {
-  const target = tab?.id != null ? { tabId: tab.id, frameIds: [info.frameId ?? 0] } : null;
-  const inPage = async (func, args) => (target ? (await chrome.scripting.executeScript({ target, func, args }).catch(() => []))[0]?.result : undefined);
+  const inPage = (func, args) => inMenuFrame(info, tab, func, args);
   const title = (await inPage(linkTextOf, [info.linkUrl])) ?? "";
   const result = await queueAdd([{ url: info.linkUrl, title }]);
   let text;
@@ -787,9 +855,19 @@ async function addLinkFromMenu(info, tab) {
   await inPage(showToast, [text]);
 }
 
-function onMenuClick(info, tab) {
+// options.clipboardText: 시험이 클립보드 대신 넣는 글 (크롬은 info, tab만 준다)
+function onMenuClick(info, tab, options = {}) {
   const id = String(info.menuItemId);
   if (id.startsWith(SEARCH_PREFIX)) return searchFromMenu(id.slice(SEARCH_PREFIX.length), info, tab);
+  if (id.startsWith(OPEN_PREFIX)) return openFromMenu(id.slice(OPEN_PREFIX.length), info, tab);
+  if (id.startsWith(CLIP_SEARCH)) {
+    const word = id.slice(CLIP_SEARCH.length);
+    return clipboardFromMenu((text) => searchUrl(text, word), info, tab, options.clipboardText);
+  }
+  if (id.startsWith(CLIP_OPEN)) {
+    const template = id.slice(CLIP_OPEN.length);
+    return clipboardFromMenu((text) => fillTemplate(template, text), info, tab, options.clipboardText);
+  }
   if (id in HIDE_MENU) return hideFromMenu(info, tab);
   if (id === MENU_ID) return addLinkFromMenu(info, tab);
   return undefined;

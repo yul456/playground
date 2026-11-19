@@ -17,6 +17,26 @@
   const MARK = "data-photo-saver-hide";
   const top = window === window.top;
 
+  // 확장 프로그램을 새로 고치거나 지우면, 이미 열려 있던 페이지의 이 스크립트는 확장 프로그램과 끊긴다(chrome.runtime.id가 없어진다).
+  // 그때 chrome.runtime.sendMessage는 약속(promise)을 돌려주지 않고 그 자리에서 오류(Extension context invalidated)를 던져서
+  // .catch로는 잡히지 않는다. 주소만 바뀌는 페이지에서 늘 숨기는 곳을 다시 맞추다 확장 프로그램 관리 화면의 오류에 쌓였다(2026-11-19).
+  // 그래서 크롬에 말을 걸기 전에 끊겼는지 보고, 끊겼으면 아무것도 하지 않는다
+  const alive = () => {
+    try {
+      return Boolean(chrome.runtime?.id);
+    } catch {
+      return false;
+    }
+  };
+  function send(message) {
+    if (!alive()) return Promise.resolve(null);
+    try {
+      return chrome.runtime.sendMessage(message).catch(() => null);
+    } catch {
+      return Promise.resolve(null);
+    }
+  }
+
   // unlock-sites.js의 siteKey와 같다: http·https 주소의 호스트, 앞의 www.는 뗀다. 늘 숨기기를 둘 수 없는 주소면 null
   function siteKey(url) {
     try {
@@ -163,17 +183,21 @@
   const cssOf = (list) => list.map((item) => `${item.sel} { display: none !important; }`).join("\n");
   // 숨길 것이 바뀌면 사용자 스타일을 새것으로 바꾼다: 서비스 워커가 새것을 넣은 뒤 옛것을 뺀다 (그 사이에 깜빡 보이지 않게)
   function apply() {
-    chain = chain.then(async () => {
-      const css = cssOf([...rules, ...temp]);
-      if (css === applied) return;
-      const reply = await chrome.runtime.sendMessage({ type: "hide-css", css, old: applied }).catch(() => null);
-      if (reply?.ok) applied = css;
-    });
+    chain = chain
+      .then(async () => {
+        if (!alive()) return;
+        const css = cssOf([...rules, ...temp]);
+        if (css === applied) return;
+        const reply = await send({ type: "hide-css", css, old: applied });
+        if (reply?.ok) applied = css;
+      })
+      .catch(() => {});
     return chain;
   }
 
   // 저장된 늘 숨기는 곳을 다시 읽는다 (처음, 목록이 바뀔 때, 주소만 바뀔 때)
   async function refresh() {
+    if (!alive()) return undefined;
     path = location.pathname;
     let list = [];
     if (here) {
@@ -188,7 +212,7 @@
     return apply();
   }
 
-  const changed = () => chrome.runtime.sendMessage({ type: "hide-changed" }).catch(() => {});
+  const changed = () => send({ type: "hide-changed" });
 
   // el을 숨긴다. remember면 사이트에 기억한다 (선택자를 만들 수 없거나 사이트가 없는 주소면 지금만).
   // { ok, id, label, remembered, site, path, wanted } · 숨길 수 없으면 { ok: false, reason }
@@ -202,11 +226,11 @@
       const rule = { sel: found.sel, path: found.positional ? location.pathname : null, label, at: Date.now() };
       rules = [...rules.filter((r) => !(r.sel === rule.sel && (r.path ?? null) === rule.path)), rule];
       const applying = apply();
-      const reply = await chrome.runtime.sendMessage({ type: "hide-rule-add", site: here, rule }).catch(() => null);
+      const reply = await send({ type: "hide-rule-add", site: here, rule });
       await applying;
       if (reply?.ok) {
         done.set(id, { kind: "rule", sel: rule.sel, path: rule.path, label });
-        chrome.runtime.sendMessage({ type: "hide-did", id }).catch(() => {});
+        send({ type: "hide-did", id });
         return { ok: true, id, label, remembered: true, site: here, path: rule.path };
       }
       // 저장하지 못했으면 지금만 숨긴다
@@ -220,14 +244,14 @@
     temp.push({ id, sel, label });
     await apply();
     done.set(id, { kind: "temp", sel, label });
-    chrome.runtime.sendMessage({ type: "hide-did", id }).catch(() => {});
+    send({ type: "hide-did", id });
     return { ok: true, id, label, remembered: false, wanted: Boolean(remember) };
   }
 
   // 숨긴 것을 되돌린다 (늘 숨기던 것이면 목록에서도 뺀다). { ok, label }
   async function undo(id) {
     const item = done.get(id);
-    if (!item) return { ok: false };
+    if (!item || !alive()) return { ok: false };
     done.delete(id);
     if (item.kind === "temp") {
       temp = temp.filter((t) => t.id !== id);
@@ -236,7 +260,7 @@
     } else {
       rules = rules.filter((r) => !(r.sel === item.sel && (r.path ?? null) === item.path));
       await apply();
-      await chrome.runtime.sendMessage({ type: "hide-rule-remove", site: here, sel: item.sel, path: item.path }).catch(() => {});
+      await send({ type: "hide-rule-remove", site: here, sel: item.sel, path: item.path });
     }
     changed();
     return { ok: true, label: item.label };
@@ -370,7 +394,7 @@
   });
   // 주소만 바뀌는 페이지(pushState): 그 주소에서만 숨기는 곳을 다시 맞춘다
   self.navigation?.addEventListener("currententrychange", () => {
-    if (location.pathname !== path) refresh();
+    if (alive() && location.pathname !== path) refresh();
   });
 
   self.__photoSaverHide = {

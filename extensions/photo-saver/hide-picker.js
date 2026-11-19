@@ -43,7 +43,29 @@
   let frameRaf = 0;
 
   const ours = (event) => event.target instanceof Element && event.target.localName === UI;
-  const send = (message) => chrome.runtime.sendMessage(message).catch(() => {});
+  // 확장 프로그램을 새로 고치면 이 고르기는 확장 프로그램과 끊긴다(chrome.runtime.id가 없어진다). 새 확장 프로그램은 이 고르기를 모르고,
+  // 끊긴 뒤에는 크롬에 말을 걸면 그 자리에서 오류가 난다(.catch로 못 잡는다). 그래서 이벤트마다 끊겼는지 보고, 끊겼으면 고르기를 그만두어
+  // 막아 둔 클릭을 풀고 안내 줄을 치운다 (그대로 두면 그 페이지는 새로 고칠 때까지 클릭이 막혀 있었다)
+  const alive = () => {
+    try {
+      return Boolean(chrome.runtime?.id);
+    } catch {
+      return false;
+    }
+  };
+  const send = (message) => {
+    if (!alive()) return Promise.resolve();
+    try {
+      return chrome.runtime.sendMessage(message).catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  };
+  const orphaned = () => {
+    if (alive()) return false;
+    stop();
+    return true;
+  };
 
   function build() {
     host = document.createElement(UI);
@@ -98,7 +120,12 @@
       statusLine = bar.querySelector(".status");
       check.addEventListener("change", () => {
         remember = check.checked;
-        chrome.storage.local.set({ [REMEMBER]: remember }).catch(() => {});
+        if (!alive()) return;
+        try {
+          chrome.storage.local.set({ [REMEMBER]: remember }).catch(() => {});
+        } catch {
+          // 확장 프로그램과 끊겼다
+        }
       });
       bar.querySelector("[data-act=undo]").addEventListener("click", () => send({ type: "hide-pick-key", key: "undo" }));
       bar.querySelector("[data-act=stop]").addEventListener("click", () => send({ type: "hide-pick-key", key: "stop" }));
@@ -178,7 +205,7 @@
   }
   // 0.5초마다: 새로 생긴 틀에 묻고(ping), 1초가 지나도 대답이 없는 틀은 덮고, 없어진 틀의 막은 걷는다
   function syncShields() {
-    if (!root) return;
+    if (!root || orphaned()) return;
     const now = Date.now();
     const frames = new Set(document.querySelectorAll("iframe, frame"));
     for (const frame of frames) {
@@ -193,7 +220,7 @@
   }
   // 막 위에서 마우스가 움직일 때: 그 자리의 맨 위 요소를 고른다. 대개 그 틀이고, 틀 위에 다른 요소가 겹쳐 있으면 그 요소다
   function onShieldMove(event) {
-    if (!event.isTrusted) return;
+    if (!event.isTrusted || orphaned()) return;
     mouse = { x: event.clientX, y: event.clientY };
     const hit = document.elementsFromPoint(event.clientX, event.clientY).find((el) => el.localName !== UI);
     if (!hit || hit === document.documentElement || hit === document.body) {
@@ -209,7 +236,7 @@
   }
 
   function onOver(event) {
-    if (!event.isTrusted || ours(event)) return;
+    if (!event.isTrusted || ours(event) || orphaned()) return;
     mouse = { x: event.clientX, y: event.clientY };
     if (core.atomic) return; // 틀째 고르는 틀: 바깥 프레임이 막으로 고른다
     if (handed) {
@@ -231,13 +258,14 @@
   }
 
   function onOut(event) {
-    if (!event.isTrusted || event.relatedTarget || handed) return;
+    if (!event.isTrusted || event.relatedTarget || handed || orphaned()) return;
     // 마우스가 이 프레임(창) 밖으로 나갔다
     clearCurrent();
   }
 
   function block(event) {
-    if (ours(event)) return;
+    // 끊겼으면 고르기를 그만두고 이 클릭은 페이지에 그대로 보낸다
+    if (ours(event) || orphaned()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (event.type !== "click" || !event.isTrusted || event.button !== 0 || core.atomic) return;
@@ -254,7 +282,7 @@
   }
 
   function onKey(event) {
-    if (!event.isTrusted) return;
+    if (!event.isTrusted || orphaned()) return;
     let key = KEYS[event.key];
     if (!key && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && String(event.key).toLowerCase() === "z") key = "undo";
     if (!key) return;
@@ -318,7 +346,7 @@
   // 틀끼리 주고받는 말 (postMessage). 페이지도 받을 수 있는 길이라 이름표(photoSaverHide)가 맞고 아는 틀에서 온 것만 받는다
   function onFrameMessage(event) {
     const kind = event.data?.photoSaverHide;
-    if (typeof kind !== "string") return;
+    if (typeof kind !== "string" || orphaned()) return;
     if (event.source === parent && !top) {
       if (kind === "ping") parent.postMessage({ photoSaverHide: core.atomic ? "atomic" : "ready" }, "*");
       else if (kind === "down" && handed) {
@@ -382,7 +410,13 @@
     syncShields();
     shieldTimer = setInterval(syncShields, 500);
     if (options.remember != null) remember = Boolean(options.remember);
-    else remember = Boolean((await chrome.storage.local.get(REMEMBER).catch(() => ({})))[REMEMBER]);
+    else {
+      try {
+        remember = Boolean((await chrome.storage.local.get(REMEMBER))[REMEMBER]);
+      } catch {
+        remember = false;
+      }
+    }
     if (check) check.checked = remember && !check.disabled;
     if (options.status) setStatus(options.status, options.warn);
   }
@@ -397,8 +431,12 @@
     removeEventListener("scroll", schedule, true);
     removeEventListener("resize", schedule);
     removeEventListener("message", onFrameMessage);
-    chrome.runtime.onMessage.removeListener(onRuntime);
-    chrome.storage.onChanged.removeListener(onStorage);
+    try {
+      chrome.runtime.onMessage.removeListener(onRuntime);
+      chrome.storage.onChanged.removeListener(onStorage);
+    } catch {
+      // 확장 프로그램과 끊겼으면 크롬 쪽 듣기는 이미 없다
+    }
     cancelAnimationFrame(frameRaf);
     frameRaf = 0;
     clearInterval(shieldTimer);
