@@ -74,4 +74,14 @@ export function mountSearch() {
     words = next;
     render();
   });
+
+  // 고른 글 옆 단추 (select-button.js가 글자를 고를 때마다 이 값을 읽는다). 처음엔 켬
+  const selectButton = $("selectButton");
+  chrome.storage.local
+    .get("selectButton")
+    .then((got) => {
+      selectButton.checked = got.selectButton !== false;
+    })
+    .catch(() => {});
+  selectButton.addEventListener("change", () => chrome.storage.local.set({ selectButton: selectButton.checked }).catch(() => {}));
 }

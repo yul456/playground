@@ -814,15 +814,33 @@ async function openNextTo(url, tab) {
   await chrome.tabs.create({ url, active: true, ...placed }).catch(() => chrome.tabs.create({ url }));
 }
 
+// 고른 글로 열었으면 그 페이지에서 글자의 고름을 풀어 준다 (사용자 요청, 2026-11-19). 입력 칸 안이면 끝에 커서만 남긴다.
+// 메뉴를 누른 프레임에 executeScript로 넣는 함수라 함수 밖의 이름을 쓰면 안 된다
+function clearSelection() {
+  const active = document.activeElement;
+  if (active && (active.localName === "input" || active.localName === "textarea") && typeof active.selectionEnd === "number") {
+    try {
+      active.setSelectionRange(active.selectionEnd, active.selectionEnd);
+    } catch {
+      // 고를 수 없는 입력 칸
+    }
+  }
+  getSelection()?.removeAllRanges();
+}
+
 // 구글 검색: 고른 글 바로 뒤에 붙일 말을 붙여 찾는다
 async function searchFromMenu(word, info, tab) {
   const text = cleanSelection(info.selectionText);
-  if (text) await openNextTo(searchUrl(text, word), tab);
+  if (!text) return;
+  await openNextTo(searchUrl(text, word), tab);
+  await inMenuFrame(info, tab, clearSelection, []);
 }
 
 // 주소 열기: 정해 둔 주소의 자리에 고른 글(소문자, 주소에 쓸 수 있게 바꾼 것)을 넣어 연다
 async function openFromMenu(template, info, tab) {
-  if (cleanSelection(info.selectionText)) await openNextTo(fillTemplate(template, info.selectionText), tab);
+  if (!cleanSelection(info.selectionText)) return;
+  await openNextTo(fillTemplate(template, info.selectionText), tab);
+  await inMenuFrame(info, tab, clearSelection, []);
 }
 
 // 메뉴를 누른 프레임에서 함수를 돌린다 (알림 띄우기 등)
@@ -873,6 +891,37 @@ function onMenuClick(info, tab, options = {}) {
   return undefined;
 }
 chrome.contextMenus.onClicked.addListener(onMenuClick);
+
+// 고른 글 옆 단추(select-button.js, 1.24.0): 고른 글로 완성한 목록과 고른 줄 열기. 오른쪽 클릭 메뉴와 같은 목록·규칙을 쓴다
+// (구글 검색은 고른 글 바로 뒤에 붙일 말, 주소는 소문자로 바꿔 인코딩해 넣는다). 주소는 사람이 읽게 앞의 http(s)://는 떼고 %XX는 풀어 보인다
+function shownUrl(url) {
+  let text = url.replace(/^https?:\/\//i, "");
+  try {
+    text = decodeURI(text);
+  } catch {
+    // 풀 수 없으면 그대로
+  }
+  return text;
+}
+async function textActions(text) {
+  const clean = cleanSelection(text);
+  if (!clean) return [];
+  const [words, templates] = await Promise.all([loadWords(), loadTemplates()]);
+  return [
+    ...words.map((word) => ({ id: `${SEARCH_PREFIX}${word}`, label: `구글 검색: ${clean}${word}` })),
+    ...templates.map((template) => ({ id: `${OPEN_PREFIX}${template}`, label: `열기: ${shownUrl(fillTemplate(template, clean))}` })),
+  ];
+}
+// 창 맨 위의 바로 열기(quick.js)도 쓴다. 창에서 오면 sender.tab이 없어 지금 탭(tabId)을 함께 보내고,
+// 페이지에서 고른 글로 열었으면(clear) 그 페이지의 고름을 풀어 준다
+async function textOpen(id, text, tab, clear) {
+  const clean = cleanSelection(text);
+  if (!clean) return;
+  if (id.startsWith(SEARCH_PREFIX)) await openNextTo(searchUrl(clean, id.slice(SEARCH_PREFIX.length)), tab);
+  else if (id.startsWith(OPEN_PREFIX)) await openNextTo(fillTemplate(id.slice(OPEN_PREFIX.length), clean), tab);
+  else return;
+  if (clear && tab?.id != null) await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: clearSelection }).catch(() => {});
+}
 // 시험(local-tests)이 메뉴를 누른 것처럼 부르고, 만든 메뉴를 본다 (headless 크롬에서는 오른쪽 클릭 메뉴를 누를 수 없다)
 globalThis.photoSaverMenu = { click: onMenuClick, items: () => menuItems, built: () => menuBuild };
 
@@ -883,6 +932,18 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   }
   if (QUEUE_OPS[message?.type]) {
     QUEUE_OPS[message.type](message).then(reply, (err) => reply({ error: err.message }));
+    return true;
+  }
+  if (message?.type === "text-actions") {
+    textActions(message.text).then(reply, () => reply([]));
+    return true;
+  }
+  if (message?.type === "text-open") {
+    const tab = sender.tab ? Promise.resolve(sender.tab) : message.tabId != null ? chrome.tabs.get(message.tabId).catch(() => null) : Promise.resolve(null);
+    tab.then((t) => textOpen(String(message.id ?? ""), message.text, t, Boolean(message.clear) && !sender.tab)).then(
+      () => reply({ ok: true }),
+      () => reply({ ok: false }),
+    );
     return true;
   }
   if (HIDE_OPS[message?.type]) {

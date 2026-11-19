@@ -8,6 +8,7 @@ import { mountLinks } from "./links.js";
 import { mountVideos } from "./videos.js";
 import { mountHide } from "./hide.js";
 import { mountOpenUrls } from "./open-urls.js";
+import { mountQuick } from "./quick.js";
 import { mountSearch } from "./search.js";
 import { mountUnlock } from "./unlock.js";
 import { applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
@@ -38,6 +39,7 @@ let videos = null;
 // 오른쪽 클릭 줄 (막아 둔 오른쪽 클릭·글자 고르기·복사 풀기)
 let unlock = null;
 let hider = null;
+let quick = null;
 // 사진 찾기를 시작한 차례. 탭을 빨리 바꾸면 늦게 끝난 앞 탭의 결과를 버린다
 let scanRun = 0;
 let pageTitle = "";
@@ -547,6 +549,7 @@ function follow(id) {
   links?.setTab(id);
   unlock?.setTab(id);
   hider?.setTab(id);
+  quick?.setTab(id);
   scan();
 }
 
@@ -660,6 +663,7 @@ async function init() {
   hider = mountHide({ inPanel });
   mountSearch();
   mountOpenUrls();
+  quick = mountQuick({ inPanel });
   renderRules();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -670,6 +674,7 @@ async function init() {
   links.setTab(tabId);
   unlock.setTab(tabId);
   hider.setTab(tabId);
+  quick.setTab(tabId);
   if (inPanel) {
     chrome.tabs.onActivated.addListener((info) => {
       if (info.windowId === windowId) follow(info.tabId);

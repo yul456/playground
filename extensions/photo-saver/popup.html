@@ -17,6 +17,11 @@
       </span>
     </div>
     <p class="page" id="page">&nbsp;</p>
+    <!-- 바로 열기: 고른 글이나 복사한 글로 완성한 구글 검색·주소 열기 (quick.js) -->
+    <section class="quick" id="quick" aria-label="바로 열기" hidden>
+      <p class="quick-source" id="quickSource"></p>
+      <div class="quick-list" id="quickList"></div>
+    </section>
     <!-- 기능별 영역: 페이지 손보기(오른쪽 클릭 막기 풀기, 숨기기) · 고른 글자로 찾기·열기(구글 검색, 주소 열기) · 사진·영상 받기. 영역 사이에 선을 긋는다 (사용자 요청, 2026-11-19) -->
     <section class="area" aria-label="페이지 손보기">
       <!-- 오른쪽 클릭·글자 고르기 막기 풀기 (unlock.js) -->
@@ -65,6 +70,11 @@
       </div>
       <ul class="rule-list url-templates" id="urlTemplates" hidden></ul>
       <p class="pick-hint" id="urlNote" hidden></p>
+      <!-- 고른 글 옆 단추 (select-button.js) -->
+      <label class="option" title="페이지에서 마우스로 글자를 고르면 끝에 작은 단추가 뜨고, 누르면 구글 검색·주소 열기가 고른 글로 완성되어 나옵니다">
+        <input type="checkbox" id="selectButton">
+        <span>글자를 고르면 옆에 단추 보이기 <small>(누르면 위 목록이 고른 글로 완성되어 나옵니다)</small></span>
+      </label>
     </section>
     <section class="area" aria-label="사진·영상 받기">
       <!-- 링크를 열린 탭 받기 목록에 넣기 (links.js) -->

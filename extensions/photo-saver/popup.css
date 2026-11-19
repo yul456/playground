@@ -44,6 +44,15 @@ h1 { margin: 0; font-size: 15px; }
 
 .message { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); }
 
+/* 창 맨 위의 바로 열기: 고른 글이나 복사한 글로 완성한 구글 검색·주소 열기 (quick.js) */
+.quick { margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; background: var(--card); }
+.quick[hidden] { display: none; }
+.quick-source { margin: 0; overflow: hidden; color: var(--muted); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.quick-list { display: flex; flex-direction: column; gap: 4px; }
+.quick-list:not(:empty) { margin-top: 6px; }
+.quick-list button { overflow: hidden; padding: 6px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--accent); text-align: left; white-space: nowrap; text-overflow: ellipsis; }
+.quick-list button:hover { border-color: var(--accent); }
+
 /* 기능별 영역(페이지 손보기 · 구글 검색 · 사진·영상 받기) 사이의 선 */
 .area + .area { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border); }
 
