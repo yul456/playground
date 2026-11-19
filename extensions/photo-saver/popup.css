@@ -44,6 +44,9 @@ h1 { margin: 0; font-size: 15px; }
 
 .message { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); }
 
+/* 기능별 영역(페이지 손보기 · 구글 검색 · 사진·영상 받기) 사이의 선 */
+.area + .area { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border); }
+
 /* 링크 줄: 고르기, 이 페이지 링크, 열린 탭 받기 목록의 수 (links.js) */
 .links-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 8px; }
 .links-label { color: var(--muted); }
@@ -51,6 +54,23 @@ h1 { margin: 0; font-size: 15px; }
 .links-count { margin-left: auto; color: var(--muted); font-size: 12px; }
 .pick-hint { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--card); font-size: 12px; }
 .pick-hint[hidden] { display: none; }
+.pick-hint.warn { color: var(--warn); }
+.unlock-always { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
+.unlock-always input { margin: 0; accent-color: var(--accent); }
+.unlock-always:has(input:disabled) { opacity: 0.5; cursor: default; }
+.rules.unlock-sites[hidden] { display: none; }
+/* 늘 숨기는 곳: 이름이 길어 한 줄에 하나씩 */
+.rules.hide-rules[hidden] { display: none; }
+.hide-rules .rule-list { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-height: 160px; }
+.hide-rules .rule-list li { justify-content: space-between; border-radius: 8px; }
+.hide-rules > button.link { font-size: 12px; }
+/* 구글 검색에 붙일 말 */
+.search-add { display: flex; flex: 1; align-items: baseline; gap: 8px; min-width: 0; margin: 0; }
+.search-add input { flex: 1; min-width: 0; padding: 3px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+.rule-list.search-words { margin: -4px 0 8px; }
+/* 앞의 빈칸(띄어 붙이는 말)이 보이게 */
+.rule-list.search-words span { white-space: pre; }
+.rule-list.search-words[hidden] { display: none; }
 
 /* 이 페이지 링크: 주소 모양별 묶음과 링크 체크박스 */
 .links { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }

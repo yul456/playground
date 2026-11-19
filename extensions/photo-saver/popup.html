@@ -2,14 +2,14 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <title>페이지 사진 받기</title>
+  <title>페이지 도우미</title>
   <link rel="stylesheet" href="popup.css">
   <script type="module" src="popup.js"></script>
 </head>
 <body>
   <main>
     <div class="head">
-      <h1>페이지 사진 받기</h1>
+      <h1>페이지 도우미</h1>
       <span class="head-links">
         <button type="button" class="link" id="openPanel" title="같은 화면을 크롬 사이드바에 엽니다. 다음부터 아이콘을 누르면 사이드바가 열립니다" disabled>사이드바로 열기</button>
         <button type="button" class="link" id="openPopup" title="사이드바를 닫고 팝업으로 엽니다. 다음부터 아이콘을 누르면 팝업이 열립니다" hidden disabled>팝업으로 돌아가기</button>
@@ -17,114 +17,155 @@
       </span>
     </div>
     <p class="page" id="page">&nbsp;</p>
-    <!-- 링크를 열린 탭 받기 목록에 넣기 (links.js) -->
-    <div class="links-bar">
-      <span class="links-label">링크</span>
-      <button type="button" class="link" id="pickLinks" aria-pressed="false">고르기</button>
-      <button type="button" class="link" id="showLinks" title="이 페이지의 링크를 주소 모양별로 묶어 보이고, 고른 것을 열린 탭 받기 목록에 넣습니다">이 페이지 링크</button>
-      <span class="links-count" id="queueCount"></span>
-    </div>
-    <p class="pick-hint" id="pickHint" hidden></p>
-    <section class="links" id="links" hidden>
-      <div class="links-head">
-        <strong id="linksTitle">이 페이지 링크</strong>
-        <button type="button" class="link" id="closeLinks">닫기</button>
+    <!-- 기능별 영역: 페이지 손보기(오른쪽 클릭 막기 풀기, 숨기기) · 구글 검색 · 사진·영상 받기. 영역 사이에 선을 긋는다 (사용자 요청, 2026-11-19) -->
+    <section class="area" aria-label="페이지 손보기">
+      <!-- 오른쪽 클릭·글자 고르기 막기 풀기 (unlock.js) -->
+      <div class="links-bar">
+        <span class="links-label">오른쪽 클릭</span>
+        <button type="button" class="link" id="unlockPage" title="이 페이지에서 오른쪽 클릭, 글자 고르기, 복사를 막아 둔 것을 풉니다. 새로 고치면 다시 막힙니다" disabled>막기 풀기</button>
+        <label class="unlock-always" title="이 사이트의 페이지는 열 때마다 저절로 풉니다"><input type="checkbox" id="unlockAlways" disabled> <span id="unlockAlwaysLabel">이 사이트에서 늘 풀기</span></label>
       </div>
-      <input class="links-filter" id="linkFilter" placeholder="글자나 주소 일부로 거르기" spellcheck="false" autocomplete="off" aria-label="링크 거르기">
-      <div class="link-groups" id="linkGroups"></div>
-      <div class="links-actions">
-        <button type="button" id="addLinks" disabled>열린 탭 받기 목록에 넣기</button>
-        <span class="links-note" id="linksNote"></span>
-      </div>
-    </section>
-    <!-- 영상 골라 받기 (videos.js) -->
-    <div class="links-bar">
-      <span class="links-label">영상</span>
-      <button type="button" class="link" id="showVideos" title="이 페이지의 영상을 보이고, 고른 것을 받습니다" disabled>영상 찾는 중</button>
-    </div>
-    <section class="links" id="videos" hidden>
-      <div class="links-head">
-        <strong>이 페이지 영상</strong>
-        <span class="head-links">
-          <button type="button" class="link" id="toggleVideos" hidden>모두 고르기</button>
-          <button type="button" class="link" id="closeVideos">닫기</button>
-        </span>
-      </div>
-      <p class="videos-hint" id="videosHint"></p>
-      <ul class="video-list" id="videoList"></ul>
-      <div class="links-actions">
-        <button type="button" id="startVideos" disabled>영상 받기</button>
-        <span class="links-note" id="videosNote"></span>
-      </div>
-    </section>
-    <div class="sets" id="sets"></div>
-    <div class="message" id="message" hidden></div>
-
-    <div id="form" hidden>
-      <fieldset class="modes">
-        <legend>받는 방식</legend>
-        <label><input type="radio" name="mode" value="files"> 사진 따로</label>
-        <label><input type="radio" name="mode" value="stitch"> 이어 붙인 한 장</label>
-        <label><input type="radio" name="mode" value="both"> 둘 다</label>
-      </fieldset>
-      <!-- 사진을 따로 받을 때의 폴더와 파일 이름 -->
-      <div id="filesOptions">
-        <label class="path">
-          <span class="where">폴더: 다운로드 › <span id="base"></span> ›</span>
-          <input id="folder" maxlength="60" spellcheck="false" autocomplete="off">
-        </label>
-        <fieldset class="modes">
-          <legend>사진 이름</legend>
-          <label><input type="radio" name="fileNames" value="original"> 원본 이름 <small>photo.jpg</small></label>
-          <label><input type="radio" name="fileNames" value="number"> 번호 <small>001.jpg</small></label>
-        </fieldset>
-      </div>
-      <!-- 이어 붙인 그림의 파일 이름과 형식 -->
-      <div id="stitchOptions">
-        <fieldset class="modes">
-          <legend>이어 붙인 그림 이름</legend>
-          <label><input type="radio" name="stitchName" value="page"> 페이지 이름</label>
-          <label><input type="radio" name="stitchName" value="custom"> 직접 입력</label>
-          <input class="text" id="customName" maxlength="60" spellcheck="false" autocomplete="off" placeholder="파일 이름" aria-label="이어 붙인 그림의 파일 이름">
-        </fieldset>
-        <fieldset class="modes">
-          <legend>이어 붙인 그림 형식</legend>
-          <label><input type="radio" name="stitchFormat" value="jpg"> JPG <small>작게</small></label>
-          <label><input type="radio" name="stitchFormat" value="png"> PNG <small>화질 그대로</small></label>
-          <label id="qualityBox">품질 <select id="jpgQuality" aria-label="JPG 품질"></select></label>
-        </fieldset>
-        <fieldset class="modes" id="splitRow">
-          <legend title="높이가 65,500px을 넘어 JPG 한 장에 담지 못할 때">너무 길면</legend>
-          <label><input type="radio" name="tooLong" value="split"> 여러 장으로 나눔</label>
-          <label><input type="radio" name="tooLong" value="png"> PNG 한 장</label>
-          <label id="splitModeBox">나누기 <select id="splitMode" aria-label="나누는 방법"></select></label>
-        </fieldset>
-      </div>
-      <p class="preview" id="preview"></p>
-      <fieldset class="exts" id="exts" hidden>
-        <legend>확장자 <small>(끄면 그 확장자 사진의 체크를 끕니다)</small></legend>
-        <span class="ext-list" id="extList"></span>
-      </fieldset>
-      <label class="option">
-        <input type="checkbox" id="hideDecor">
-        <span>꾸밈 그림 숨기기 <small>(작은 그림, SVG, 배경 그림, 미리보기가 안 뜨는 것)</small></span>
-      </label>
-      <details class="rules" id="rules" hidden>
-        <summary>빼 둔 이름 <span id="ruleCount"></span>개</summary>
-        <p class="hint">
-          받기를 누를 때 직접 끈 사진의 파일 이름입니다. 다른 페이지에서도 이 이름의 사진은 처음부터 꺼 둡니다.
-          주소 끝이 파일 이름이 아닌 사진(…/128 등)은 주소 전체로 기억합니다. 다시 켜고 받으면 여기서 빠집니다.
-        </p>
-        <ul class="rule-list" id="ruleList"></ul>
-        <button type="button" class="link" id="clearRules">모두 지우기</button>
+      <p class="pick-hint" id="unlockNote" hidden></p>
+      <details class="rules unlock-sites" id="unlockSites" hidden>
+        <summary>늘 푸는 사이트 <span id="unlockSiteCount"></span>곳</summary>
+        <ul class="rule-list" id="unlockSiteList"></ul>
       </details>
-      <div class="toolbar">
-        <span class="count" id="count"></span>
-        <button type="button" class="link" id="toggleAll">모두 고르기</button>
-        <button type="button" class="link" id="rescan">다시 찾기</button>
+      <!-- 보기 싫은 부분 숨기기 (hide.js. 페이지 쪽은 hide-core.js·hide-picker.js, 오른쪽 클릭 메뉴는 background.js) -->
+      <div class="links-bar">
+        <span class="links-label">숨기기</span>
+        <button type="button" class="link" id="hidePick" aria-pressed="false" title="페이지에서 숨길 곳을 마우스로 골라 숨깁니다. 페이지의 오른쪽 클릭 메뉴(이 부분 숨기기)로도 숨길 수 있습니다" disabled>숨길 곳 고르기</button>
+        <span class="links-count" id="hideTemp" hidden></span>
+        <button type="button" class="link" id="hideShow" title="이 페이지에서 잠깐 숨긴 곳을 다시 보입니다 (늘 숨기는 곳은 아래 목록에서 뺍니다)" hidden>다시 보이기</button>
       </div>
-      <ol class="grid" id="grid"></ol>
-    </div>
+      <p class="pick-hint" id="hideNote" hidden></p>
+      <details class="rules hide-rules" id="hideRules" hidden>
+        <summary><span id="hideRulesTitle"></span> <span id="hideRuleCount"></span>곳</summary>
+        <ul class="rule-list" id="hideRuleList"></ul>
+        <button type="button" class="link" id="hideClearRules">모두 다시 보이기</button>
+      </details>
+    </section>
+    <section class="area" aria-label="구글 검색">
+      <!-- 고른 글자에 붙일 말을 더해 구글 검색 (search.js. 오른쪽 클릭 메뉴는 background.js) -->
+      <div class="links-bar">
+        <span class="links-label" title="페이지에서 글자를 드래그하거나 두 번 눌러 고른 뒤 오른쪽 클릭하면, 페이지 도우미 아래에 붙일 말마다 한 줄씩 나옵니다. 누르면 고른 글 바로 뒤에 그 말을 붙여 새 탭에서 구글로 찾습니다. 띄어 쓰려면 붙일 말 앞에 빈칸을 넣으세요">구글 검색</span>
+        <form class="search-add" id="searchAdd">
+          <input id="searchWord" maxlength="50" placeholder="붙일 말 (띄우려면 앞에 빈칸)" autocomplete="off" spellcheck="false" aria-label="검색에 붙일 말">
+          <button type="submit" class="link">더하기</button>
+        </form>
+      </div>
+      <ul class="rule-list search-words" id="searchWords" hidden></ul>
+      <p class="pick-hint" id="searchNote" hidden></p>
+    </section>
+    <section class="area" aria-label="사진·영상 받기">
+      <!-- 링크를 열린 탭 받기 목록에 넣기 (links.js) -->
+      <div class="links-bar">
+        <span class="links-label">링크</span>
+        <button type="button" class="link" id="pickLinks" aria-pressed="false">고르기</button>
+        <button type="button" class="link" id="showLinks" title="이 페이지의 링크를 주소 모양별로 묶어 보이고, 고른 것을 열린 탭 받기 목록에 넣습니다">이 페이지 링크</button>
+        <span class="links-count" id="queueCount"></span>
+      </div>
+      <p class="pick-hint" id="pickHint" hidden></p>
+      <section class="links" id="links" hidden>
+        <div class="links-head">
+          <strong id="linksTitle">이 페이지 링크</strong>
+          <button type="button" class="link" id="closeLinks">닫기</button>
+        </div>
+        <input class="links-filter" id="linkFilter" placeholder="글자나 주소 일부로 거르기" spellcheck="false" autocomplete="off" aria-label="링크 거르기">
+        <div class="link-groups" id="linkGroups"></div>
+        <div class="links-actions">
+          <button type="button" id="addLinks" disabled>열린 탭 받기 목록에 넣기</button>
+          <span class="links-note" id="linksNote"></span>
+        </div>
+      </section>
+      <!-- 영상 골라 받기 (videos.js) -->
+      <div class="links-bar">
+        <span class="links-label">영상</span>
+        <button type="button" class="link" id="showVideos" title="이 페이지의 영상을 보이고, 고른 것을 받습니다" disabled>영상 찾는 중</button>
+      </div>
+      <section class="links" id="videos" hidden>
+        <div class="links-head">
+          <strong>이 페이지 영상</strong>
+          <span class="head-links">
+            <button type="button" class="link" id="toggleVideos" hidden>모두 고르기</button>
+            <button type="button" class="link" id="closeVideos">닫기</button>
+          </span>
+        </div>
+        <p class="videos-hint" id="videosHint"></p>
+        <ul class="video-list" id="videoList"></ul>
+        <div class="links-actions">
+          <button type="button" id="startVideos" disabled>영상 받기</button>
+          <span class="links-note" id="videosNote"></span>
+        </div>
+      </section>
+      <div class="sets" id="sets"></div>
+      <div class="message" id="message" hidden></div>
+
+      <div id="form" hidden>
+        <fieldset class="modes">
+          <legend>받는 방식</legend>
+          <label><input type="radio" name="mode" value="files"> 사진 따로</label>
+          <label><input type="radio" name="mode" value="stitch"> 이어 붙인 한 장</label>
+          <label><input type="radio" name="mode" value="both"> 둘 다</label>
+        </fieldset>
+        <!-- 사진을 따로 받을 때의 폴더와 파일 이름 -->
+        <div id="filesOptions">
+          <label class="path">
+            <span class="where">폴더: 다운로드 › <span id="base"></span> ›</span>
+            <input id="folder" maxlength="60" spellcheck="false" autocomplete="off">
+          </label>
+          <fieldset class="modes">
+            <legend>사진 이름</legend>
+            <label><input type="radio" name="fileNames" value="original"> 원본 이름 <small>photo.jpg</small></label>
+            <label><input type="radio" name="fileNames" value="number"> 번호 <small>001.jpg</small></label>
+          </fieldset>
+        </div>
+        <!-- 이어 붙인 그림의 파일 이름과 형식 -->
+        <div id="stitchOptions">
+          <fieldset class="modes">
+            <legend>이어 붙인 그림 이름</legend>
+            <label><input type="radio" name="stitchName" value="page"> 페이지 이름</label>
+            <label><input type="radio" name="stitchName" value="custom"> 직접 입력</label>
+            <input class="text" id="customName" maxlength="60" spellcheck="false" autocomplete="off" placeholder="파일 이름" aria-label="이어 붙인 그림의 파일 이름">
+          </fieldset>
+          <fieldset class="modes">
+            <legend>이어 붙인 그림 형식</legend>
+            <label><input type="radio" name="stitchFormat" value="jpg"> JPG <small>작게</small></label>
+            <label><input type="radio" name="stitchFormat" value="png"> PNG <small>화질 그대로</small></label>
+            <label id="qualityBox">품질 <select id="jpgQuality" aria-label="JPG 품질"></select></label>
+          </fieldset>
+          <fieldset class="modes" id="splitRow">
+            <legend title="높이가 65,500px을 넘어 JPG 한 장에 담지 못할 때">너무 길면</legend>
+            <label><input type="radio" name="tooLong" value="split"> 여러 장으로 나눔</label>
+            <label><input type="radio" name="tooLong" value="png"> PNG 한 장</label>
+            <label id="splitModeBox">나누기 <select id="splitMode" aria-label="나누는 방법"></select></label>
+          </fieldset>
+        </div>
+        <p class="preview" id="preview"></p>
+        <fieldset class="exts" id="exts" hidden>
+          <legend>확장자 <small>(끄면 그 확장자 사진의 체크를 끕니다)</small></legend>
+          <span class="ext-list" id="extList"></span>
+        </fieldset>
+        <label class="option">
+          <input type="checkbox" id="hideDecor">
+          <span>꾸밈 그림 숨기기 <small>(작은 그림, SVG, 배경 그림, 미리보기가 안 뜨는 것)</small></span>
+        </label>
+        <details class="rules" id="rules" hidden>
+          <summary>빼 둔 이름 <span id="ruleCount"></span>개</summary>
+          <p class="hint">
+            받기를 누를 때 직접 끈 사진의 파일 이름입니다. 다른 페이지에서도 이 이름의 사진은 처음부터 꺼 둡니다.
+            주소 끝이 파일 이름이 아닌 사진(…/128 등)은 주소 전체로 기억합니다. 다시 켜고 받으면 여기서 빠집니다.
+          </p>
+          <ul class="rule-list" id="ruleList"></ul>
+          <button type="button" class="link" id="clearRules">모두 지우기</button>
+        </details>
+        <div class="toolbar">
+          <span class="count" id="count"></span>
+          <button type="button" class="link" id="toggleAll">모두 고르기</button>
+          <button type="button" class="link" id="rescan">다시 찾기</button>
+        </div>
+        <ol class="grid" id="grid"></ol>
+      </div>
+    </section>
 
     <footer>
       <div class="row">

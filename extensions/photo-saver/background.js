@@ -6,15 +6,34 @@
 //   JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 와서 "제목_1.jpg", "제목_2.jpg" …로 받는다
 import { parseUrl } from "./addresses.js";
 import { linkTextOf, showToast } from "./collect.js";
+import { HIDE_KEY, HIDE_SITE_MAX, HIDE_SITES_MAX, loadHideRules, rulesOf, syncHideScripts, validRule, validSite } from "./hide-sites.js";
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase, videoBase, videoExtFromMime, videoExtFromName, videoExtFromUrl, videoMime } from "./names.js";
 import { applyOpenIn, loadOpenIn } from "./opener.js";
 import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
+import { SEARCH_KEY, cleanSelection, loadWords, searchUrl } from "./search-words.js";
+import { UNLOCK_CSS, UNLOCK_KEY, syncUnlockScripts } from "./unlock-sites.js";
 
 // 아이콘을 누르면 팝업과 사이드바 가운데 무엇을 열지 다시 맞춘다 (브라우저를 켤 때, 확장 프로그램을 설치하거나 새로 고칠 때).
 // 크롬이 이 설정을 기억하는지 문서에 없어서 그때마다 맞춘다
 const restoreOpenIn = () => loadOpenIn().then(applyOpenIn).catch(() => {});
 chrome.runtime.onStartup.addListener(restoreOpenIn);
 chrome.runtime.onInstalled.addListener(restoreOpenIn);
+
+// 오른쪽 클릭을 늘 풀 사이트의 콘텐츠 스크립트를 목록대로 다시 등록한다 (브라우저를 켤 때, 설치하거나 새로 고칠 때, 목록이 바뀔 때).
+// 등록한 것은 크롬이 기억하지만, 업데이트할 때 지워지는지 문서마다 말이 달라 그때마다 맞춘다. 겹쳐 돌지 않게 차례로 한다
+let unlockSync = Promise.resolve();
+const resyncUnlock = () => (unlockSync = unlockSync.then(syncUnlockScripts).catch(() => {}));
+chrome.runtime.onStartup.addListener(resyncUnlock);
+chrome.runtime.onInstalled.addListener(resyncUnlock);
+// 늘 숨기는 곳이 있는 사이트에 hide-core.js를 등록하는 것도 같은 때 맞춘다 (hide-sites.js)
+let hideSync = Promise.resolve();
+const resyncHide = () => (hideSync = hideSync.then(syncHideScripts).catch(() => {}));
+chrome.runtime.onStartup.addListener(resyncHide);
+chrome.runtime.onInstalled.addListener(resyncHide);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[UNLOCK_KEY]) resyncUnlock();
+  if (area === "local" && changes[HIDE_KEY]) resyncHide();
+});
 
 // 한 번에 시작을 기다리는 다운로드 수. 시작만 기다리고 끝나기는 기다리지 않아서 실제로는 여러 장을 함께 받는다
 const STARTING = 4;
@@ -515,17 +534,247 @@ const QUEUE_OPS = {
   "queue-toggle": (message) => queueToggle(message.page),
 };
 
-// 링크 오른쪽 클릭 메뉴: "열린 탭 받기 목록에 넣기". 넣었는지는 그 페이지 아래쪽에 잠깐 글로 알린다
-// (툴바 배지는 받기 진행을 보이는 데 쓴다)
-const MENU_ID = "add-link";
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: MENU_ID, title: "열린 탭 받기 목록에 넣기", contexts: ["link"] });
+// 보기 싫은 부분 숨기기 (1.20.0) ----------------------------------------------------
+// 페이지 쪽은 hide-watch.js(오른쪽 클릭한 곳 기억), hide-core.js(숨기기), hide-picker.js(숨길 곳 고르기)이고, 여기서는
+// 오른쪽 클릭 메뉴, 사용자 스타일 넣고 빼기, 늘 숨기는 곳 저장, 되돌릴 순서, 고르기의 키와 안내 줄을 맡는다
+const HIDE_MENU = { "hide-once": false, "hide-always": true }; // 메뉴 id → 늘 숨기기인지
+// 숨기기는 어디서나 보인다. 글자를 고른 채 누를 때도 (구글 검색과 함께 "페이지 도우미" 아래에 나온다. 사용자 결정, 2026-11-19)
+const HIDE_CONTEXTS = ["page", "frame", "selection", "link", "editable", "image", "video", "audio"];
+const UNDO_KEY = "hideUndo"; // 탭마다 숨긴 순서 (chrome.storage.session. 서비스 워커가 잠들어도 남는다)
+
+// 늘 숨기는 곳 목록과 되돌릴 순서는 여러 프레임이 함께 고쳐서 하나씩 차례로 한다 (둘은 따로: 되돌리기가 목록 고치기를 기다리므로)
+function serial() {
+  let lock = Promise.resolve();
+  return (task) => {
+    const run = lock.then(task);
+    lock = run.catch(() => {});
+    return run;
+  };
+}
+const ruleQueue = serial();
+const undoQueue = serial();
+
+// 그 프레임의 문서에 넣는다 (그 사이 프레임이 다른 페이지로 넘어갔으면 넣지 않게 documentId로)
+const docTarget = (tabId, frameId, documentId) => (documentId ? { tabId, documentIds: [documentId] } : { tabId, frameIds: [frameId ?? 0] });
+
+function hideRuleAdd(site, rule) {
+  return ruleQueue(async () => {
+    if (!validSite(site) || !validRule(rule)) return { ok: false };
+    const all = await loadHideRules();
+    const path = rule.path ?? null;
+    const list = rulesOf(all, site).filter((r) => !(r.sel === rule.sel && (r.path ?? null) === path));
+    list.push({ sel: rule.sel, path, label: String(rule.label ?? "").slice(0, 100), at: Number(rule.at) || Date.now() });
+    delete all[site];
+    all[site] = list.slice(-HIDE_SITE_MAX);
+    // 사이트가 너무 많으면 오래전에 고친 사이트부터 버린다 (고친 사이트를 맨 뒤로 옮겨 두었다)
+    const sites = Object.keys(all);
+    for (const old of sites.slice(0, Math.max(0, sites.length - HIDE_SITES_MAX))) delete all[old];
+    await chrome.storage.local.set({ [HIDE_KEY]: all });
+    return { ok: true, count: all[site].length };
+  });
+}
+
+// sel이 없으면 그 사이트를 모두 뺀다 (창의 "모두 다시 보이기")
+function hideRuleRemove(site, sel, path) {
+  return ruleQueue(async () => {
+    const all = await loadHideRules();
+    if (!all[site]) return { ok: true, count: 0 };
+    const list = sel == null ? [] : rulesOf(all, site).filter((r) => !(r.sel === sel && (r.path ?? null) === (path ?? null)));
+    if (list.length) all[site] = list;
+    else delete all[site];
+    await chrome.storage.local.set({ [HIDE_KEY]: all });
+    return { ok: true, count: list.length };
+  });
+}
+
+const readUndo = async () => (await chrome.storage.session.get(UNDO_KEY).catch(() => ({})))[UNDO_KEY] ?? {};
+const writeUndo = (all) => chrome.storage.session.set({ [UNDO_KEY]: all }).catch(() => {});
+function undoPush(tabId, entry) {
+  return undoQueue(async () => {
+    const all = await readUndo();
+    all[tabId] = [...(all[tabId] ?? []), entry].slice(-50);
+    await writeUndo(all);
+  });
+}
+// 이 탭에서 마지막으로 숨긴 것을 되돌린다. 그 문서가 없어졌으면(새로 고침 등) 그 앞의 것. { ok, label }
+function undoLast(tabId) {
+  return undoQueue(async () => {
+    const all = await readUndo();
+    const list = all[tabId] ?? [];
+    let result = { ok: false };
+    while (list.length && !result.ok) {
+      const entry = list.pop();
+      const [done] = await chrome.scripting
+        .executeScript({ target: docTarget(tabId, entry.frameId, entry.documentId), func: (id) => self.__photoSaverHide?.undo(id), args: [entry.id] })
+        .catch(() => []);
+      if (done?.result?.ok) result = done.result;
+    }
+    all[tabId] = list;
+    await writeUndo(all);
+    return result;
+  });
+}
+chrome.tabs.onRemoved.addListener((tabId) => {
+  undoQueue(async () => {
+    const all = await readUndo();
+    if (!all[tabId]) return;
+    delete all[tabId];
+    await writeUndo(all);
   });
 });
 
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== MENU_ID) return;
+// 지금 탭의 모든 프레임에 한다. 들어갈 수 없는 프레임이 있어 실패하면 맨 위 프레임에만
+async function everyFrame(tabId, call) {
+  try {
+    return await call({ tabId, allFrames: true });
+  } catch {
+    return call({ tabId });
+  }
+}
+
+// 숨길 곳 고르기를 시작한다 (창의 단추, 또는 오른쪽 클릭 메뉴가 누른 곳을 모를 때). options: { remember, status }
+async function startPick(tabId, options = {}) {
+  await everyFrame(tabId, (target) => chrome.scripting.executeScript({ target, files: ["hide-core.js", "hide-picker.js"] }));
+  await everyFrame(tabId, (target) => chrome.scripting.executeScript({ target, func: (opts) => self.__photoSaverPicker?.start(opts), args: [options] }));
+  chrome.runtime.sendMessage({ type: "hide-pick-state", tabId, on: true }).catch(() => {});
+}
+async function stopPick(tabId) {
+  await everyFrame(tabId, (target) => chrome.scripting.executeScript({ target, func: () => self.__photoSaverPicker?.stop() })).catch(() => {});
+  chrome.runtime.sendMessage({ type: "hide-pick-state", tabId, on: false }).catch(() => {});
+}
+// 고르기의 안내 줄(맨 위 프레임)에 글을 보인다
+const pickStatus = (tabId, text, warn = false) => chrome.tabs.sendMessage(tabId, { type: "hide-pick-status", text, warn }, { frameId: 0 }).catch(() => {});
+
+// 고르기 중에 누른 키 (어느 프레임에서 눌렀든 여기로 온다): 끝내기와 되돌리기는 여기서, 넓히기·좁히기·숨기기는 모든 프레임에 돌려준다
+async function pickKey(tabId, key) {
+  if (key === "stop") return stopPick(tabId);
+  if (key === "undo") {
+    const result = await undoLast(tabId);
+    return pickStatus(tabId, result.ok ? `되돌렸습니다: ${result.label}` : "되돌릴 것이 없습니다", !result.ok);
+  }
+  if (["up", "down", "hide"].includes(key)) await chrome.tabs.sendMessage(tabId, { type: "hide-pick-key", key }).catch(() => {});
+}
+
+// 오른쪽 클릭 메뉴 "이 부분 숨기기"·"이 부분 늘 숨기기". 누른 곳은 그 프레임의 hide-watch.js가 기억해 둔다.
+// 다른 사이트의 틀 안이면 바깥 프레임이 틀째 숨겨서, 모든 프레임에 hide-core.js를 넣고 이번 메뉴의 번호를 준다(arm)
+async function hideFromMenu(info, tab) {
+  if (tab?.id == null) return;
+  const tabId = tab.id;
+  const remember = HIDE_MENU[info.menuItemId];
+  const nonce = crypto.randomUUID();
+  await everyFrame(tabId, (target) => chrome.scripting.executeScript({ target, files: ["hide-core.js"] })).catch(() => {});
+  await everyFrame(tabId, (target) => chrome.scripting.executeScript({ target, func: (n) => self.__photoSaverHide?.arm(n), args: [nonce] })).catch(() => {});
+  const [done] = await chrome.scripting
+    .executeScript({ target: { tabId, frameIds: [info.frameId ?? 0] }, func: (r, n) => self.__photoSaverHide?.fromMenu(r, n), args: [remember, nonce] })
+    .catch(() => []);
+  // 누른 곳을 모르면(확장 프로그램을 설치하거나 새로 고치기 전에 연 페이지 등) 고르기로 숨기게 한다
+  if (done?.result?.reason === "no-target") {
+    await startPick(tabId, { remember, status: "누른 곳을 알 수 없어 고르기로 숨깁니다. 숨길 곳을 누르세요. (페이지를 새로 고치면 오른쪽 클릭으로 바로 숨길 수 있습니다)", warn: true }).catch(() => {});
+  }
+}
+
+const HIDE_OPS = {
+  "hide-rule-add": (message) => hideRuleAdd(message.site, message.rule),
+  "hide-rule-remove": (message) => hideRuleRemove(message.site, message.sel, message.path),
+  "hide-rules-clear": (message) => hideRuleRemove(message.site, null, null),
+  "hide-pick-start": (message) => startPick(message.tabId).then(() => ({ ok: true })),
+  "hide-pick-stop": (message, sender) => stopPick(message.tabId ?? sender.tab?.id).then(() => ({ ok: true })),
+};
+
+// 페이지 쪽(hide-core.js·hide-picker.js)에서 오는 말
+function onHideMessage(message, sender, reply) {
+  const tabId = sender.tab?.id;
+  if (message.type === "hide-css") {
+    if (tabId == null) return false;
+    // 새것을 넣은 뒤 옛것을 뺀다 (그 사이에 깜빡 보이지 않게). 사용자 스타일이라 사이트의 !important보다 앞선다
+    const target = docTarget(tabId, sender.frameId, sender.documentId);
+    (async () => {
+      if (message.css) await chrome.scripting.insertCSS({ target, css: message.css, origin: "USER" });
+      if (message.old) await chrome.scripting.removeCSS({ target, css: message.old, origin: "USER" }).catch(() => {});
+    })().then(
+      () => reply({ ok: true }),
+      (err) => reply({ error: err.message }),
+    );
+    return true;
+  }
+  if (message.type === "hide-did") {
+    if (tabId != null) undoPush(tabId, { frameId: sender.frameId ?? 0, documentId: sender.documentId ?? null, id: message.id });
+    return false;
+  }
+  if (message.type === "hide-pick-key") {
+    if (tabId != null) pickKey(tabId, message.key);
+    return false;
+  }
+  if (message.type === "hide-pick-status") {
+    if (tabId != null) pickStatus(tabId, String(message.text ?? ""), Boolean(message.warn));
+    return false;
+  }
+  return false;
+}
+
+// 오른쪽 클릭 메뉴 -----------------------------------------------------------------
+// - 고른 글자: "구글 검색: 고른 글 + 붙일 말" (붙일 말마다 한 줄, 적은 그대로 바로 뒤에 붙인다. 1.21.0. search-words.js)
+// - 링크: "열린 탭 받기 목록에 넣기". 넣었는지는 그 페이지 아래쪽에 잠깐 글로 알린다 (툴바 배지는 받기 진행을 보이는 데 쓴다)
+// - 어디서나: "이 부분 숨기기"·"이 부분 늘 숨기기" (1.20.0)
+// 한 확장 프로그램의 메뉴가 둘 이상 보이면 크롬이 "페이지 도우미" 아래로 묶고, 만든 순서대로 보인다
+const MENU_ID = "add-link";
+const SEARCH_PREFIX = "search:"; // 구글 검색 메뉴의 id는 이 뒤에 붙일 말을 그대로 붙인다 (목록이 바뀌는 사이에 눌러도 그 말로 찾게)
+let menuItems = [];
+let menuBuild = Promise.resolve();
+
+// 구글 검색 메뉴: %s는 크롬이 고른 글로 바꿔 보인다. 찾을 말 그대로 보이게 붙일 말을 바로 뒤에 붙인다 (띄어 쓰는 말은 앞에 빈칸이 있다).
+// 윈도우 메뉴는 &를 단축키 표시로 읽어서 두 번 적는다
+// 붙일 말마다 한 줄, 그 아래 구분선 (그 아래에 숨기기가 온다)
+function searchMenus(words) {
+  if (!words.length) return [];
+  return [
+    ...words.map((word) => ({ id: `${SEARCH_PREFIX}${word}`, title: `구글 검색: %s${word.replace(/&/g, "&&")}`, contexts: ["selection"] })),
+    { id: "search-end", type: "separator", contexts: ["selection"] },
+  ];
+}
+
+// 메뉴를 처음부터 다시 만든다 (설치하거나 새로 고칠 때, 붙일 말이 바뀔 때). 겹쳐 돌지 않게 차례로 한다
+function buildMenus() {
+  menuBuild = menuBuild
+    .then(async () => {
+      const words = await loadWords();
+      // 웹 페이지에서만 (크롬 설정 같은 페이지에서는 숨길 수 없다)
+      const documentUrlPatterns = ["http://*/*", "https://*/*"];
+      const items = [
+        ...searchMenus(words),
+        { id: MENU_ID, title: "열린 탭 받기 목록에 넣기", contexts: ["link"] },
+        { id: "hide-once", title: "이 부분 숨기기", contexts: HIDE_CONTEXTS, documentUrlPatterns },
+        { id: "hide-always", title: "이 부분 늘 숨기기 (이 사이트에서 기억)", contexts: HIDE_CONTEXTS, documentUrlPatterns },
+      ];
+      await chrome.contextMenus.removeAll();
+      for (const item of items) {
+        await new Promise((resolve) =>
+          chrome.contextMenus.create(item, () => {
+            void chrome.runtime.lastError;
+            resolve();
+          }),
+        );
+      }
+      menuItems = items;
+    })
+    .catch(() => {});
+  return menuBuild;
+}
+chrome.runtime.onInstalled.addListener(buildMenus);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[SEARCH_KEY]) buildMenus();
+});
+
+// 구글 검색: 지금 탭 바로 뒤에 새 탭으로 연다 (그 탭을 닫으면 원래 탭으로 돌아간다)
+async function searchFromMenu(word, info, tab) {
+  const text = cleanSelection(info.selectionText);
+  if (!text) return;
+  const url = searchUrl(text, word);
+  const placed = tab?.id != null && tab.index != null ? { index: tab.index + 1, openerTabId: tab.id, windowId: tab.windowId } : {};
+  await chrome.tabs.create({ url, active: true, ...placed }).catch(() => chrome.tabs.create({ url }));
+}
+
+async function addLinkFromMenu(info, tab) {
   const target = tab?.id != null ? { tabId: tab.id, frameIds: [info.frameId ?? 0] } : null;
   const inPage = async (func, args) => (target ? (await chrome.scripting.executeScript({ target, func, args }).catch(() => []))[0]?.result : undefined);
   const title = (await inPage(linkTextOf, [info.linkUrl])) ?? "";
@@ -536,7 +785,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   else if (!parseUrl(info.linkUrl)) text = "주소가 없는 링크라 넣을 수 없습니다";
   else text = "이미 열린 탭 받기 목록에 있습니다";
   await inPage(showToast, [text]);
-});
+}
+
+function onMenuClick(info, tab) {
+  const id = String(info.menuItemId);
+  if (id.startsWith(SEARCH_PREFIX)) return searchFromMenu(id.slice(SEARCH_PREFIX.length), info, tab);
+  if (id in HIDE_MENU) return hideFromMenu(info, tab);
+  if (id === MENU_ID) return addLinkFromMenu(info, tab);
+  return undefined;
+}
+chrome.contextMenus.onClicked.addListener(onMenuClick);
+// 시험(local-tests)이 메뉴를 누른 것처럼 부르고, 만든 메뉴를 본다 (headless 크롬에서는 오른쪽 클릭 메뉴를 누를 수 없다)
+globalThis.photoSaverMenu = { click: onMenuClick, items: () => menuItems, built: () => menuBuild };
 
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message?.target === "background") {
@@ -546,6 +806,18 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (QUEUE_OPS[message?.type]) {
     QUEUE_OPS[message.type](message).then(reply, (err) => reply({ error: err.message }));
     return true;
+  }
+  if (HIDE_OPS[message?.type]) {
+    HIDE_OPS[message.type](message, sender).then(reply, (err) => reply({ error: err.message }));
+    return true;
+  }
+  if (typeof message?.type === "string" && message.type.startsWith("hide-")) return onHideMessage(message, sender, reply);
+  if (message?.type === "unlock-css") {
+    // 늘 푸는 사이트의 프레임이 뜰 때(unlock-css.js): 글자 고르기를 막은 꾸밈을 사용자 스타일로 덮는다
+    if (sender.tab?.id != null) {
+      chrome.scripting.insertCSS({ target: { tabId: sender.tab.id, frameIds: [sender.frameId ?? 0] }, css: UNLOCK_CSS, origin: "USER" }).catch(() => {});
+    }
+    return false;
   }
   if (message?.type === "status") {
     // 끝난 받기를 팝업에서 봤으니 툴바의 표시(!)를 지운다

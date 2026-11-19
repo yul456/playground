@@ -6,6 +6,9 @@ import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountLinks } from "./links.js";
 import { mountVideos } from "./videos.js";
+import { mountHide } from "./hide.js";
+import { mountSearch } from "./search.js";
+import { mountUnlock } from "./unlock.js";
 import { applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
 import { mountSets } from "./sets.js";
 
@@ -31,6 +34,9 @@ let windowId = null;
 let links = null;
 // 영상 줄 (이 페이지의 영상을 골라 받기)
 let videos = null;
+// 오른쪽 클릭 줄 (막아 둔 오른쪽 클릭·글자 고르기·복사 풀기)
+let unlock = null;
+let hider = null;
 // 사진 찾기를 시작한 차례. 탭을 빨리 바꾸면 늦게 끝난 앞 탭의 결과를 버린다
 let scanRun = 0;
 let pageTitle = "";
@@ -538,6 +544,8 @@ function follow(id) {
   items = [];
   folderEdited = false;
   links?.setTab(id);
+  unlock?.setTab(id);
+  hider?.setTab(id);
   scan();
 }
 
@@ -647,6 +655,9 @@ async function init() {
     .catch(() => {});
   links = mountLinks({ inPanel, openPanel });
   videos = mountVideos({ getFolder: jobFolder, onStarted: showJob });
+  unlock = mountUnlock();
+  hider = mountHide({ inPanel });
+  mountSearch();
   renderRules();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -655,6 +666,8 @@ async function init() {
   $("openPanel").disabled = windowId == null;
   $("openPopup").disabled = windowId == null;
   links.setTab(tabId);
+  unlock.setTab(tabId);
+  hider.setTab(tabId);
   if (inPanel) {
     chrome.tabs.onActivated.addListener((info) => {
       if (info.windowId === windowId) follow(info.tabId);

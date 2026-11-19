@@ -698,7 +698,7 @@ export default function App() {
           <li>바탕화면·문서·다운로드 폴더 자체는 크롬·엣지가 고르지 못하게 막습니다. 그 안의 폴더를 고르세요.</li>
           <li>JPG·PNG·WebP·GIF·BMP를 붙입니다. 아이폰 원본(HEIC)과 TIFF는 브라우저가 열지 못해 빼고 붙입니다.</li>
           <li>
-            웹 페이지의 사진은 <a href={`${import.meta.env.BASE_URL}photo-saver/`}>페이지 사진 받기</a> 확장
+            웹 페이지의 사진은 <a href={`${import.meta.env.BASE_URL}photo-saver/`}>페이지 도우미</a> 확장
             프로그램으로 받으면 페이지 순서대로 번호가 붙어 그대로 붙일 수 있습니다.
           </li>
         </ul>
