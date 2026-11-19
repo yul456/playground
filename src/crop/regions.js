@@ -14,9 +14,11 @@
 //
 // 직선 경계: 이웃한 두 줄(가로줄이나 세로줄) 사이에서 색이 40 넘게 바뀌는 화소가 그 줄 길이의 절반 이상인 곳 (edgeShare).
 // 사진 두 장을 나란히 붙인 그림이면 두 사진이 만나는 세로줄이 그렇다. 사진 속 무늬는 짧아서 경계가 되지 않는다.
-// 누르기(fitAt)는 먼저 누른 곳과 같은 색으로 이어진 곳을 보고(fitRegion, 테두리 그림처럼 색이 고른 그림), 그곳의 네 변이 모두
-// 직선 경계(나 그림 끝)에 닿아 있을 때만 그것을 쓴다. 아니면(사진처럼 색이 고르지 않으면) 누른 곳에서 네 쪽으로 가장 가까운 직선 경계까지를
-// 남긴다(fitStraight)
+// 누르기(fitAt)는 먼저 누른 곳과 같은 색으로 이어진 곳을 본다(fitRegion. 이웃한 화소끼리 STEP 넘게 다르면 넘어가지 않아 옅은 칸 선에서도
+// 멈춘다). 그곳이 한 가지 색이고 네 변이 모두 곧은 경계(squareSides)일 때만 그것을 쓴다(테두리 그림, 표의 칸, 화면의 띠).
+// 결이 있는 테두리(액자의 나무)는 그 테두리와 안쪽을 남긴다(fitFrame).
+// 아니면(사진처럼 색이 고르지 않거나 변이 들쭉날쭉하면) 누른 곳을 둘러싼 직선 경계 안쪽을 남긴다(fitStraight: 큰 경계부터 찾고,
+// 그 안에서 누른 곳을 품는 가장 작은 네모. 액자의 매트 안 사진처럼 겹친 네모)
 
 // 같은 곳으로 볼 색 차이 (누른 화소의 색과 채널마다 견준다)
 const TOLERANCE = 48;
@@ -30,13 +32,19 @@ const FLAT_COLOR = 12;
 const FLAT_SHARE = 0.6;
 // 둘러싼 쪽 화소를 피하려고 변을 당기는 것은 이만큼까지 (둥근 모서리). 팔각형처럼 비스듬한 모서리는 남긴다
 const CORNER_MAX = 4;
+// 누르기의 이어진 곳: 이웃한 화소끼리 이보다 더 다르면 넘어가지 않는다 (표의 옅은 칸 선 #c8d2df와 줄무늬 칸 #f6f8fb는 46,
+// 머리 칸 #e6edf6과는 30, 대화 칸 #e8edf1과 흰 입력 칸은 23 다르다). 사진의 잔무늬는 이보다 작게 바뀌어 그대로 이어진다
+const STEP = 20;
+// 곧은 변: 변의 줄이 이만큼 이어진 곳이고, 그 화소들이 이만큼 바깥과 STEP 넘게 다르다
+const SQUARE = 0.75;
 
 const near = (data, i, color, tolerance) =>
   Math.abs(data[i] - color[0]) <= tolerance && Math.abs(data[i + 1] - color[1]) <= tolerance && Math.abs(data[i + 2] - color[2]) <= tolerance;
 
 // (x, y)와 비슷한 색으로 이어진 곳. mask[p] = 1이면 그곳. box: 둘레 { x0, y0, x1, y1 } (끝 포함),
-// flat: 그곳의 화소 가운데 누른 색과 거의 같은(12 안) 것의 몫 (그림처럼 한 가지 색으로 칠한 곳은 1에 가깝고, 사진은 작다)
-export function floodRegion({ width, height, data }, x, y, tolerance = TOLERANCE) {
+// flat: 그곳의 화소 가운데 누른 색과 거의 같은(12 안) 것의 몫 (그림처럼 한 가지 색으로 칠한 곳은 1에 가깝고, 사진은 작다).
+// step: 이웃한 화소끼리 이보다 더 다르면 넘어가지 않는다 (누른 색과의 차이 tolerance와 함께 본다)
+export function floodRegion({ width, height, data }, x, y, tolerance = TOLERANCE, step = Infinity) {
   const start = y * width + x;
   const color = [data[start * 4], data[start * 4 + 1], data[start * 4 + 2]];
   const mask = new Uint8Array(width * height);
@@ -50,11 +58,13 @@ export function floodRegion({ width, height, data }, x, y, tolerance = TOLERANCE
   let y1 = y;
   let count = 0;
   let same = 0;
-  const visit = (p) => {
-    if (!mask[p] && near(data, p * 4, color, tolerance)) {
-      mask[p] = 1;
-      stack[top++] = p;
-    }
+  const visit = (p, from) => {
+    if (mask[p] || !near(data, p * 4, color, tolerance)) return;
+    const i = p * 4;
+    const j = from * 4;
+    if (Math.abs(data[i] - data[j]) > step || Math.abs(data[i + 1] - data[j + 1]) > step || Math.abs(data[i + 2] - data[j + 2]) > step) return;
+    mask[p] = 1;
+    stack[top++] = p;
   };
   while (top) {
     const p = stack[--top];
@@ -66,12 +76,51 @@ export function floodRegion({ width, height, data }, x, y, tolerance = TOLERANCE
     if (px > x1) x1 = px;
     if (py < y0) y0 = py;
     if (py > y1) y1 = py;
-    if (px > 0) visit(p - 1);
-    if (px < width - 1) visit(p + 1);
-    if (py > 0) visit(p - width);
-    if (py < height - 1) visit(p + width);
+    if (px > 0) visit(p - 1, p);
+    if (px < width - 1) visit(p + 1, p);
+    if (py > 0) visit(p - width, p);
+    if (py < height - 1) visit(p + width, p);
   }
   return { mask, color, box: { x0, y0, x1, y1 }, count, flat: same / count };
+}
+
+// 이어진 곳의 둘레 네모(box)에서 곧은 변의 수. 변마다 바깥쪽부터 세 줄 가운데 이어진 곳이 가장 많이 든 줄을 보고, 그 줄의 75% 넘게가
+// 이어진 곳이고, 그 화소들의 75% 넘게가 바깥 이웃과 STEP 넘게 다르면(선이나 다른 색. 그림 끝도 된다) 곧은 변이다.
+// 둥근 모서리는 괜찮고, 산등성이처럼 들쭉날쭉한 변이나 색이 서서히 바뀌어 멈춘 변(그러데이션)은 아니다
+function squareSides({ width, height, data }, { mask, box }) {
+  const side = (horizontal, outer, inward, from, to) => {
+    let best = outer;
+    let most = -1;
+    for (let k = 0; k < 3; k++) {
+      const at = outer + k * inward;
+      if (horizontal ? at < box.y0 || at > box.y1 : at < box.x0 || at > box.x1) break;
+      let n = 0;
+      for (let t = from; t <= to; t++) if (mask[horizontal ? at * width + t : t * width + at]) n++;
+      if (n > most) {
+        most = n;
+        best = at;
+      }
+    }
+    if (most < (to - from + 1) * SQUARE) return false;
+    const out = best - inward;
+    if (out < 0 || out >= (horizontal ? height : width)) return true;
+    let hard = 0;
+    for (let t = from; t <= to; t++) {
+      const p = horizontal ? best * width + t : t * width + best;
+      if (!mask[p]) continue;
+      const q = horizontal ? out * width + t : t * width + out;
+      const i = p * 4;
+      const j = q * 4;
+      if (mask[q] || Math.abs(data[i] - data[j]) > STEP || Math.abs(data[i + 1] - data[j + 1]) > STEP || Math.abs(data[i + 2] - data[j + 2]) > STEP) hard++;
+    }
+    return hard >= most * SQUARE;
+  };
+  return (
+    Number(side(true, box.y0, 1, box.x0, box.x1)) +
+    Number(side(true, box.y1, -1, box.x0, box.x1)) +
+    Number(side(false, box.x0, 1, box.y0, box.y1)) +
+    Number(side(false, box.x1, -1, box.y0, box.y1))
+  );
 }
 
 // box 안에서 bad(p)인 화소가 가장자리 줄에 없을 때까지 줄을 안으로 당긴다. 매번 bad 화소가 가장 많은(몫으로) 줄을 당긴다.
@@ -153,36 +202,51 @@ function outsideOf(box, width, inside) {
 
 // 가장자리 줄이 누른 색과 평균으로 FRINGE보다 다르면(선의 흐린 가장자리) FRINGE_MAX까지 더 당긴다.
 // 그곳(mask)의 화소만 본다. 팔각형의 모서리처럼 줄에 걸친 바깥 화소는 흐린 가장자리가 아니다
+// 4줄 안쪽 줄과도 견주는 것은 위아래로 색이 서서히 바뀌는 곳(벽의 그러데이션) 때문이다. 아래쪽을 누르면 위 가장자리 줄이 누른 색과
+// 16 넘게 달라 흐린 가장자리로 잘못 보고 3줄을 깎았다. 진짜 흐린 가장자리는 바로 안쪽의 고른 색과도 다르다
+const FRINGE_INWARD = 4;
 function trimFringe(rect, image, color, mask) {
   const { width, data } = image;
-  const lineDiff = (from, step, n) => {
-    let sum = 0;
+  const gap = (i, j) => Math.max(Math.abs(data[i] - data[j]), Math.abs(data[i + 1] - data[j + 1]), Math.abs(data[i + 2] - data[j + 2]));
+  // from: 가장자리 줄의 첫 화소, step: 줄을 따라가는 간격, n: 화소 수, inward: 안쪽 줄 화소까지의 거리(0이면 견주지 않는다)
+  const fringe = (from, step, n, inward) => {
+    let toSeed = 0;
     let m = 0;
+    let toInner = 0;
+    let both = 0;
     for (let k = 0; k < n; k++) {
       const p = from + k * step;
       if (mask && !mask[p]) continue;
       const i = p * 4;
-      sum += Math.max(Math.abs(data[i] - color[0]), Math.abs(data[i + 1] - color[1]), Math.abs(data[i + 2] - color[2]));
+      toSeed += Math.max(Math.abs(data[i] - color[0]), Math.abs(data[i + 1] - color[1]), Math.abs(data[i + 2] - color[2]));
       m++;
+      if (inward && (!mask || mask[p + inward])) {
+        toInner += gap(i, (p + inward) * 4);
+        both++;
+      }
     }
-    return m < n * 0.3 ? 0 : sum / m;
+    if (m < n * 0.3 || toSeed / m <= FRINGE) return false;
+    return !both || toInner / both > FRINGE;
   };
+  // 남길 곳이 얇으면 안쪽 줄과 견주지 않는다 (전처럼 누른 색과만 견준다)
+  const into = (span) => (span > FRINGE_INWARD * 2 ? FRINGE_INWARD : 0);
   let { x0, y0, x1, y1 } = rect;
-  for (let k = 0; k < FRINGE_MAX && y0 < y1 && lineDiff(y0 * width + x0, 1, x1 - x0 + 1) > FRINGE; k++) y0++;
-  for (let k = 0; k < FRINGE_MAX && y1 > y0 && lineDiff(y1 * width + x0, 1, x1 - x0 + 1) > FRINGE; k++) y1--;
-  for (let k = 0; k < FRINGE_MAX && x0 < x1 && lineDiff(y0 * width + x0, width, y1 - y0 + 1) > FRINGE; k++) x0++;
-  for (let k = 0; k < FRINGE_MAX && x1 > x0 && lineDiff(y0 * width + x1, width, y1 - y0 + 1) > FRINGE; k++) x1--;
+  for (let k = 0; k < FRINGE_MAX && y0 < y1 && fringe(y0 * width + x0, 1, x1 - x0 + 1, into(y1 - y0) * width); k++) y0++;
+  for (let k = 0; k < FRINGE_MAX && y1 > y0 && fringe(y1 * width + x0, 1, x1 - x0 + 1, -into(y1 - y0) * width); k++) y1--;
+  for (let k = 0; k < FRINGE_MAX && x0 < x1 && fringe(y0 * width + x0, width, y1 - y0 + 1, into(x1 - x0)); k++) x0++;
+  for (let k = 0; k < FRINGE_MAX && x1 > x0 && fringe(y0 * width + x1, width, y1 - y0 + 1, -into(x1 - x0)); k++) x1--;
   return { x0, y0, x1, y1 };
 }
 
 const toCrop = (rect, width, height) => ({ top: rect.y0, bottom: height - 1 - rect.y1, left: rect.x0, right: width - 1 - rect.x1 });
 
 // 누른 곳 (x, y)에 맞춘 자를 곳 { top, bottom, left, right } 와 어떻게 맞췄는지(how: area · inside). 못 찾으면 null.
-// inside: 누른 선이 둘러싼 곳에 맞춘다(선은 잘라 낸다). 둘러싼 곳이 없으면 이어진 곳에 맞춘다
-export function fitRegion(image, x, y, { inside = false } = {}) {
+// inside: 누른 선이 둘러싼 곳에 맞춘다(선은 잘라 낸다). 둘러싼 곳이 없으면 이어진 곳에 맞춘다.
+// step: 이어진 곳을 찾을 때 이웃한 화소끼리의 차이 한도 (floodRegion). area에는 곧은 변의 수(square)도 붙인다
+export function fitRegion(image, x, y, { inside = false, step = Infinity } = {}) {
   const { width, height } = image;
   if (x < 0 || y < 0 || x >= width || y >= height) return null;
-  const region = floodRegion(image, x, y);
+  const region = floodRegion(image, x, y, TOLERANCE, step);
   const { mask, box, color } = region;
   const isRegion = (p) => mask[p] === 1;
   const outside = outsideOf(box, width, isRegion);
@@ -206,7 +270,7 @@ export function fitRegion(image, x, y, { inside = false } = {}) {
   let rect = shrinkAway(box, width, outside, CORNER_MAX);
   if (!rect) return null;
   if (onLines(rect, width, outside)) rect = box;
-  return { ...toCrop(trimFringe(rect, image, color, mask), width, height), how: "area", flat: region.flat, count: region.count };
+  return { ...toCrop(trimFringe(rect, image, color, mask), width, height), how: "area", flat: region.flat, count: region.count, square: squareSides(image, region) };
 }
 
 // box 안에서 hole(p)인 화소들이 이어진 덩어리 가운데 가장 큰 것의 둘레
@@ -375,34 +439,62 @@ function snapScore(image, horizontal, b, from, to) {
   return here - Math.max(score(b - AROUND), score(b + AROUND)) >= Math.min(PROMINENCE, here * 0.6) ? here : 0;
 }
 
-// 자를 곳의 네 변 가운데 직선 경계(끌 때 붙는 경계와 같은 기준, snapScore)나 그림 끝에 닿은 변의 수.
-// 변에서 바깥쪽으로 3줄 안에 경계가 있으면 닿은 것으로 본다 (흐린 가장자리를 잘라 내느라 변이 경계보다 한두 줄 안에 있을 수 있다)
-function sidesOnEdges(image, crop) {
-  const { width, height } = image;
-  const x0 = crop.left;
-  const x1 = width - crop.right;
-  const y0 = crop.top;
-  const y1 = height - crop.bottom;
-  const near = (horizontal, from, step, a, b) => {
-    for (let k = 0; k <= 3; k++) {
-      const at = from + k * step;
-      if (at <= 0 || at >= (horizontal ? height : width)) return true;
-      if (snapScore(image, horizontal, at, a, b) > 0) return true;
+// 겹친 네모를 찾을 때: 변이 될 줄은 바뀌는 화소가 끊이지 않고 이만큼(px) 넘게 이어지고, 쪽마다 누른 곳에서 가까운 몇 개만 본다.
+// 네모의 변은 제 길이의 80% 넘게 바뀌어야 하고, 네모는 가로세로 16px보다 커야 한다
+const NESTED_RUN = 24;
+const NESTED_K = 8;
+const NESTED_MIN = 16;
+const COVER = 0.8;
+
+// 줄 b가 [from, to)에서 COVER 넘게 바뀌고 4줄 떨어진 양쪽보다 뚜렷한지
+function covers(image, horizontal, b, from, to) {
+  const share = edgeShare(image, horizontal, b, from, to);
+  if (share < COVER) return false;
+  const size = horizontal ? image.height : image.width;
+  const side = (at) => (at < 1 || at > size - 1 ? 0 : edgeShare(image, horizontal, at, from, to));
+  return share - Math.max(side(b - AROUND), side(b + AROUND)) >= Math.min(PROMINENCE, share * 0.6);
+}
+
+// 직선 경계로 찾은 네모(rect, 끝 빼고) 안에서 누른 곳을 품는 더 작은 네모 (액자의 매트 안 사진처럼 겹친 네모. 사진이 그림 폭의 절반이 안 되고
+// 둘러싼 네모 폭의 80%가 안 되면 rect를 찾는 단계에서는 경계로 보지 않는다). 네 변이 모두 제 길이의 80% 넘게 바뀌는 네모 가운데 가장 작은 것, 없으면 rect
+function innerRect(image, x, y, rect) {
+  const lines = (horizontal, start, stop, dir) => {
+    const from = horizontal ? rect.x0 : rect.y0;
+    const to = horizontal ? rect.x1 : rect.y1;
+    const found = [];
+    for (let b = start; dir < 0 ? b > stop : b < stop; b += dir) {
+      if (longestRun(image, horizontal, b, from, to) * (to - from) >= NESTED_RUN) {
+        found.push(b);
+        if (found.length === NESTED_K) break;
+      }
     }
-    return false;
+    return [...found, stop];
   };
-  return (
-    Number(y0 === 0 || near(true, y0, -1, x0, x1)) +
-    Number(y1 === height || near(true, y1, 1, x0, x1)) +
-    Number(x0 === 0 || near(false, x0, -1, y0, y1)) +
-    Number(x1 === width || near(false, x1, 1, y0, y1))
-  );
+  const lefts = lines(false, x, rect.x0, -1);
+  const rights = lines(false, x + 1, rect.x1, 1);
+  const tops = lines(true, y, rect.y0, -1);
+  const bottoms = lines(true, y + 1, rect.y1, 1);
+  // rect의 변은 이미 경계다
+  const ok = (horizontal, b, from, to, outer) => b === outer || covers(image, horizontal, b, from, to);
+  let best = null;
+  for (const y0 of tops) {
+    for (const y1 of bottoms) {
+      if (y1 - y0 < NESTED_MIN) continue;
+      const x0 = lefts.find((b) => ok(false, b, y0, y1, rect.x0));
+      const x1 = rights.find((b) => ok(false, b, y0, y1, rect.x1));
+      if (x1 - x0 < NESTED_MIN) continue;
+      if (!ok(true, y0, x0, x1, rect.y0) || !ok(true, y1, x0, x1, rect.y1)) continue;
+      const area = (x1 - x0) * (y1 - y0);
+      if (!best || area < best.area) best = { x0, x1, y0, y1, area };
+    }
+  }
+  return best ? { x0: best.x0, x1: best.x1, y0: best.y0, y1: best.y1 } : rect;
 }
 
 // 누른 곳 (x, y)를 둘러싼 직선 경계 안쪽. 네 쪽으로 가장 가까운 경계(없으면 그림 끝)까지를 남긴다.
 // 처음에는 그림 전체 길이로 재서 절반 이상 바뀌는 줄을 찾고, 찾은 네모 안에서 한 번 더 찾을 때는 네모 길이의 80% 넘게 바뀌어야
 // 경계로 본다 (네모 안의 글자 띠 같은 짧은 줄에 걸리지 않게). 누른 곳에서 바깥쪽으로 찾으므로 두세 줄에 걸친 흐린 경계는 안쪽 끝에서 멈춘다.
-// 그림 전체가 남으면(경계가 없으면) null
+// 마지막으로 그 안에서 누른 곳을 품는 더 작은 네모를 찾는다(innerRect). 그림 전체가 남으면(경계가 없으면) null
 export function fitStraight(image, x, y) {
   const { width, height } = image;
   if (x < 0 || y < 0 || x >= width || y >= height) return null;
@@ -437,28 +529,113 @@ export function fitStraight(image, x, y) {
     if (next.x0 === rect.x0 && next.x1 === rect.x1 && next.y0 === rect.y0 && next.y1 === rect.y1) break;
     rect = next;
   }
+  rect = innerRect(image, x, y, rect);
   if (rect.x0 === 0 && rect.y0 === 0 && rect.x1 === width && rect.y1 === height) return null;
   return { top: rect.y0, bottom: height - rect.y1, left: rect.x0, right: width - rect.x1, how: "straight" };
 }
 
+// 무늬가 있는 테두리(액자의 나무 결): 둘레 네모의 이만큼 넘게를 차지하는 구멍을 품어야 하고, 둘레 네모는 가로세로 이만큼(px)보다 커야 한다
+const FRAME_HOLE = 0.25;
+const FRAME_MIN = 32;
+// 둘레를 넓힐 때 넘는 띠 바깥과 안쪽의 평균 색이 이만큼 안이면 같은 바탕으로 본다
+const FRAME_SAME = 24;
+
+// (x, y) 둘레 (2r+1)×(2r+1)에서 채널마다 가운데 값(중앙값)에 가장 가까운 화소. 결의 짙은 줄처럼 튀는 화소를 눌러도
+// 테두리의 보통 색에서 찾게 한다 (누른 화소에서 찾으면 시험 사진 액자의 나무 454곳 가운데 6곳에서 고리가 끊겼다)
+function typicalNear({ width, height, data }, x, y, r = 2) {
+  const at = [];
+  const channels = [[], [], []];
+  for (let yy = Math.max(0, y - r); yy <= Math.min(height - 1, y + r); yy++) {
+    for (let xx = Math.max(0, x - r); xx <= Math.min(width - 1, x + r); xx++) {
+      const i = (yy * width + xx) * 4;
+      at.push([xx, yy]);
+      for (let k = 0; k < 3; k++) channels[k].push(data[i + k]);
+    }
+  }
+  const middle = channels.map((v) => [...v].sort((a, b) => a - b)[v.length >> 1]);
+  let best = 0;
+  let bestGap = Infinity;
+  for (let n = 0; n < at.length; n++) {
+    const gap = Math.max(Math.abs(channels[0][n] - middle[0]), Math.abs(channels[1][n] - middle[1]), Math.abs(channels[2][n] - middle[2]));
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = n;
+    }
+  }
+  return { x: at[best][0], y: at[best][1] };
+}
+
+// 무늬가 있는 테두리를 누르면 그 테두리와 안쪽. 결이 있어 한 가지 색이 아니고, 막대 하나하나가 직선 경계 사이에 끼어 있어서
+// 직선 경계로 찾으면 누른 막대 한 줄만 잡힌다. 누른 색과 48 안으로 이어진 곳(Alt와 같은 찾기, 이웃 차이 한도 없음)이 네 변이 곧은 고리이고
+// 안에 큰 구멍(그 테두리 안쪽)을 품으면 테두리로 본다. 결 때문에 누른 색에 따라 가장자리 한두 줄이 빠질 수 있어 둘레는 가까운(2줄 안)
+// 직선 경계에 맞춘다. 고리가 그림 전체를 둘러싸면(액자 둘레의 벽) 쓰지 않는다. 테두리가 아니면 null
+function fitFrame(image, x, y) {
+  const { width, height } = image;
+  const seed = typicalNear(image, x, y);
+  const region = floodRegion(image, seed.x, seed.y);
+  const { mask, box } = region;
+  const bw = box.x1 - box.x0 + 1;
+  const bh = box.y1 - box.y0 + 1;
+  if (bw < FRAME_MIN || bh < FRAME_MIN) return null;
+  if (box.x0 === 0 && box.y0 === 0 && box.x1 === width - 1 && box.y1 === height - 1) return null;
+  if (squareSides(image, region) < 4) return null;
+  const isRegion = (p) => mask[p] === 1;
+  const outside = outsideOf(box, width, isRegion);
+  const hole = largestHole(box, width, (p) => !isRegion(p) && !outside(p));
+  if (!hole) return null;
+  const hw = hole.x1 - hole.x0 + 1;
+  const hh = hole.y1 - hole.y0 + 1;
+  if (hw < NESTED_MIN || hh < NESTED_MIN || hw * hh < bw * bh * FRAME_HOLE) return null;
+  // 둘레 밖으로 3줄 안의 직선 경계(끌 때 붙는 기준) 가운데 가장 바깥 것까지 넓힌다. 액자 바깥 두 줄의 밝은 턱은 짙은 나무를 누르면
+  // 같은 색으로 들지 않는데, 가장 뚜렷한 경계에 맞추면 턱과 나무 사이(안쪽)가 골라져 테두리가 두 줄 깎였다.
+  // 다만 넘는 띠 바깥의 색이 둘레 안쪽 줄의 색과 비슷하면(바탕에 그은 가는 선) 넘지 않는다. 안 그러면 벽에 그은 3px 선 안쪽의 벽을 눌렀을 때
+  // 그 선까지 잡혔다
+  const mean = (horizontal, line, from, to) => {
+    const sum = [0, 0, 0];
+    for (let t = from; t < to; t++) {
+      const i = (horizontal ? line * width + t : t * width + line) * 4;
+      for (let c = 0; c < 3; c++) sum[c] += image.data[i + c];
+    }
+    return sum.map((v) => v / (to - from));
+  };
+  const widen = (horizontal, at, dir, from, to) => {
+    const inside = mean(horizontal, dir < 0 ? at : at - 1, from, to);
+    let edge = at;
+    for (let k = 1; k <= 3; k++) {
+      const b = at + dir * k;
+      if (b < 1 || b > (horizontal ? height : width) - 1) break;
+      if (snapScore(image, horizontal, b, from, to) <= 0) continue;
+      const out = mean(horizontal, dir < 0 ? b - 1 : b, from, to);
+      if (Math.max(...out.map((v, c) => Math.abs(v - inside[c]))) > FRAME_SAME) edge = b;
+    }
+    return edge;
+  };
+  const top = widen(true, box.y0, -1, box.x0, box.x1 + 1);
+  const bottom = widen(true, box.y1 + 1, 1, box.x0, box.x1 + 1);
+  const left = widen(false, box.x0, -1, box.y0, box.y1 + 1);
+  const right = widen(false, box.x1 + 1, 1, box.y0, box.y1 + 1);
+  return { top, bottom: height - bottom, left, right: width - right, how: "area" };
+}
+
 // 누른 곳에 맞추기. inside(Alt): 누른 선의 안쪽(fitRegion).
-// 아니면 같은 색으로 이어진 곳을 먼저 본다. 한 가지 색으로 칠한 곳(그곳 화소의 60% 넘게가 누른 색과 12 안: 테두리 그림, 표지판)이고
-// 16×16보다 크고, 그 둘레의 네 변 가운데 셋 이상이 직선 경계(나 그림 끝)에 닿아 있으면 그 둘레에 맞춘다.
-// 사진은 이어진 곳의 색이 고르지 않거나(얼굴, 옷: 10~20%), 고르더라도(흐린 배경: 80%쯤) 둘레가 곧은 줄이 아니어서 쓰지 않고,
+// 아니면 같은 색으로 이어진 곳을 먼저 본다(이웃한 화소끼리 STEP 넘게 다르면 넘어가지 않는다). 한 가지 색으로 칠한 곳(그곳 화소의 60% 넘게가
+// 누른 색과 12 안: 테두리 그림, 표의 칸, 화면의 띠)이고 16×16보다 크고, 네 변이 모두 곧은 경계(squareSides)이면 그 둘레에 맞춘다.
+// 다음으로 무늬가 있는 테두리(fitFrame: 액자의 나무)면 그 테두리와 안쪽.
+// 사진은 이어진 곳의 색이 고르지 않거나(얼굴, 옷: 10~20%), 고르더라도(흐린 배경, 노을 속 산) 변이 들쭉날쭉해서 쓰지 않고,
 // 누른 곳을 둘러싼 직선 경계 안쪽에 맞춘다(fitStraight: 나란히 붙인 사진이면 누른 쪽 사진). 직선 경계가 없으면 한 가지 색으로 칠한 곳의
-// 둘레(표지판의 손 등)를 쓴다. 그것도 없으면 null
+// 둘레(표지판의 손, 팔각형 안쪽 등)를 쓴다. 그것도 없으면 null
 export function fitAt(image, x, y, { inside = false } = {}) {
   if (inside) return fitRegion(image, x, y, { inside: true });
-  const area = fitRegion(image, x, y);
+  const area = fitRegion(image, x, y, { step: STEP });
   let flatCrop = null;
   if (area) {
-    const { flat, count, ...crop } = area;
+    const { flat, count, square, ...crop } = area;
     const w = image.width - crop.left - crop.right;
     const h = image.height - crop.top - crop.bottom;
     if (flat >= FLAT_SHARE && w >= 16 && h >= 16 && count >= 64) {
-      if (sidesOnEdges(image, crop) >= 3) return crop;
+      if (square === 4) return crop;
       flatCrop = crop;
     }
   }
-  return fitStraight(image, x, y) ?? flatCrop;
+  return fitFrame(image, x, y) ?? fitStraight(image, x, y) ?? flatCrop;
 }
