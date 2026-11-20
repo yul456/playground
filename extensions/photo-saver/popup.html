@@ -52,7 +52,7 @@
     <section class="area" aria-label="고른 글자로 찾기·열기">
       <!-- 고른 글자에 붙일 말을 더해 구글 검색 (search.js. 오른쪽 클릭 메뉴는 background.js) -->
       <div class="links-bar">
-        <span class="links-label" title="페이지에서 글자를 드래그하거나 두 번 눌러 고른 뒤 오른쪽 클릭하면, 페이지 도우미 아래에 붙일 말마다 한 줄씩 나옵니다. 누르면 고른 글 바로 뒤에 그 말을 붙여 새 탭에서 구글로 찾습니다. 띄어 쓰려면 붙일 말 앞에 빈칸을 넣으세요. 복사해 둔 글로 찾으려면 빈 곳을 오른쪽 클릭 › 페이지 도우미 › 복사한 글로">구글 검색</span>
+        <span class="links-label" title="페이지에서 글자를 드래그하거나 두 번 눌러 고른 뒤 오른쪽 클릭하면, 페이지 도우미 아래에 붙일 말마다 한 줄씩 나옵니다. 누르면 고른 글 바로 뒤에 그 말을 붙여 새 탭에서 구글로 찾습니다. 띄어 쓰려면 붙일 말 앞에 빈칸을 넣으세요. 복사해 둔 글로 찾으려면 글자를 고르지 않고 빈 곳을 오른쪽 클릭하세요">구글 검색</span>
         <form class="search-add" id="searchAdd">
           <input id="searchWord" maxlength="50" placeholder="붙일 말 (띄우려면 앞에 빈칸)" autocomplete="off" spellcheck="false" aria-label="검색에 붙일 말">
           <button type="submit" class="link">더하기</button>
@@ -62,7 +62,7 @@
       <p class="pick-hint" id="searchNote" hidden></p>
       <!-- 고른 글자를 넣어 주소 열기 (open-urls.js, url-templates.js. 오른쪽 클릭 메뉴는 background.js) -->
       <div class="links-bar">
-        <span class="links-label" title="주소에 {a}처럼 고른 글을 넣을 자리를 적어 더해 두면, 페이지에서 글자를 고르고 오른쪽 클릭하면 페이지 도우미 아래에 주소마다 한 줄씩 나옵니다. 누르면 고른 글을 소문자로 바꾸고 주소에 맞게 바꿔(빈칸은 %20) 그 자리에 넣어 새 탭으로 엽니다. 복사해 둔 글로 열려면 빈 곳을 오른쪽 클릭 › 페이지 도우미 › 복사한 글로">주소 열기</span>
+        <span class="links-label" title="주소에 {a}처럼 고른 글을 넣을 자리를 적어 더해 두면, 페이지에서 글자를 고르고 오른쪽 클릭하면 페이지 도우미 아래에 주소마다 한 줄씩 나옵니다. 누르면 고른 글을 소문자로 바꾸고 주소에 맞게 바꿔(빈칸은 %20) 그 자리에 넣어 새 탭으로 엽니다. 복사해 둔 글로 열려면 글자를 고르지 않고 빈 곳을 오른쪽 클릭하세요">주소 열기</span>
         <form class="search-add" id="urlAdd">
           <input id="urlTemplate" maxlength="500" placeholder="https://aaa.com/{a}/b" autocomplete="off" spellcheck="false" aria-label="고른 글을 넣어 열 주소">
           <button type="submit" class="link">더하기</button>
@@ -70,6 +70,15 @@
       </div>
       <ul class="rule-list url-templates" id="urlTemplates" hidden></ul>
       <p class="pick-hint" id="urlNote" hidden></p>
+      <!-- 고른 글·복사한 글의 앞뒤에서 뗄 기호 (search-words.js의 cleanSelection. 칸은 search.js) -->
+      <div class="links-bar">
+        <span class="links-label" title="고른 글이나 복사한 글의 앞뒤에 여기 적어 둔 기호가 붙어 있으면 떼고 구글 검색·주소 열기에 씁니다. 기호를 이어서 적으세요(예: -_). 윈도우 탐색기의 이름 칸에서 399-xxx의 399를 더블클릭하면 399-까지 골라지는데, -를 적어 두면 그대로 복사해도 399로 씁니다. 가운데의 기호(399-xxx)와 적어 두지 않은 기호는 그대로 둡니다. 비우면 고르거나 복사한 그대로 씁니다">기호 떼기</span>
+        <div class="search-add trim-add">
+          <input id="trimChars" maxlength="60" placeholder="예: -_" autocomplete="off" spellcheck="false" aria-label="고른 글·복사한 글의 앞뒤에서 뗄 기호">
+          <small>고른 글·복사한 글 앞뒤에 붙어 있으면 뗍니다</small>
+        </div>
+      </div>
+      <p class="pick-hint" id="trimNote" hidden></p>
       <!-- 고른 글 옆 단추 (select-button.js) -->
       <label class="option" title="페이지에서 마우스로 글자를 고르면 끝에 작은 단추가 뜨고, 누르면 구글 검색·주소 열기가 고른 글로 완성되어 나옵니다">
         <input type="checkbox" id="selectButton">

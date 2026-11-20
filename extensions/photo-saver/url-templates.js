@@ -3,7 +3,7 @@
 // 페이지에서 글자를 고르고 오른쪽 클릭 › 페이지 도우미에서 그 주소를 고르면, 고른 글을 소문자로 바꾸고 주소에 쓸 수 있게 바꿔서
 // (encodeURIComponent: 빈칸은 %20, /는 %2F, 한글은 %XX) 그 자리에 넣고 새 탭으로 연다 (사용자가 정한 규칙).
 // 바꿀 자리는 한 가지만 쓴다 (같은 자리를 여러 번 쓰면 모두 같은 글로 바꾼다). 목록은 chrome.storage.local의 urlTemplates에 더한 순서대로 둔다
-import { cleanSelection } from "./search-words.js";
+import { tidyText } from "./search-words.js";
 
 export const URL_KEY = "urlTemplates";
 export const URL_MAX = 20;
@@ -30,9 +30,10 @@ export function parseTemplate(text) {
   return { template };
 }
 
-// 고른 글을 넣은 주소: 고른 글은 줄 바꿈·여러 칸을 한 칸으로, 앞뒤 빈칸을 떼고, 소문자로 바꿔 주소에 쓸 수 있게 바꾼다
+// 고른 글을 넣은 주소: 고른 글은 줄 바꿈·여러 칸을 한 칸으로, 앞뒤 빈칸을 떼고, 소문자로 바꿔 주소에 쓸 수 있게 바꾼다.
+// 앞뒤의 기호를 뗄지는 부르는 쪽이 정해 다듬은 글을 넘긴다 (search-words.js의 cleanSelection. 여기서는 기호를 떼지 않는다)
 export function fillTemplate(template, selection) {
-  const value = encodeURIComponent(cleanSelection(selection).toLowerCase());
+  const value = encodeURIComponent(tidyText(selection).toLowerCase());
   return template.replace(SLOT, () => value);
 }
 

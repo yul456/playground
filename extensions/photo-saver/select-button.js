@@ -5,12 +5,16 @@
 // - 모든 웹 페이지의 프레임마다 페이지가 뜰 때 들어간다(manifest의 content_scripts). 페이지가 뜰 때는 아무것도 읽지 않고, 글자를 골랐을 때만
 //   목록이 있는지와 창에서 끄지 않았는지(selectButton)를 읽는다
 // - 입력 칸 안에서 고른 글, 키보드로 고른 글, 페이지가 만든 가짜 이벤트에는 뜨지 않는다. 스크롤·다른 곳 누르기·Esc·고른 글이 없어지면 사라진다
+// - 창의 "기호 떼기"에 적어 둔 기호(trimChars, 1.26.0)와 빈칸만 고른 것에도 뜨지 않는다. 고른 글은 앞뒤의 그 기호를 떼고 쓰므로
+//   (search-words.js의 cleanSelection) "-"만 고르면 쓸 글이 없다. 이 스크립트는 그 모듈을 가져다 쓸 수 없어, 저장한 적이 없을 때의
+//   처음 값("-", 그쪽의 TRIM_DEFAULT)을 여기에도 적어 둔다
 // - 확장 프로그램을 새로 고치면 이미 열린 페이지의 이 스크립트는 끊긴다. 그때는 아무것도 하지 않는다 (hide-core.js 참고)
 (() => {
   if (self.__photoSaverSelect) return;
   self.__photoSaverSelect = true;
   const UI = "photo-saver-ui";
-  const KEYS = ["searchWords", "urlTemplates", "selectButton"];
+  const KEYS = ["searchWords", "urlTemplates", "selectButton", "trimChars"];
+  const TRIM_DEFAULT = "-";
   let host = null;
   let root = null;
   let text = ""; // 단추를 띄울 때 고른 글
@@ -140,6 +144,8 @@
       return;
     }
     if (state.selectButton === false) return;
+    const marks = new Set(typeof state.trimChars === "string" ? state.trimChars : TRIM_DEFAULT);
+    if (![...raw].some((ch) => !/\s/.test(ch) && !marks.has(ch))) return;
     const count = (Array.isArray(state.searchWords) ? state.searchWords.length : 0) + (Array.isArray(state.urlTemplates) ? state.urlTemplates.length : 0);
     if (!count) return;
     const now = getSelection();

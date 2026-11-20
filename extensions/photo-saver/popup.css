@@ -76,6 +76,9 @@ h1 { margin: 0; font-size: 15px; }
 /* 구글 검색에 붙일 말 */
 .search-add { display: flex; flex: 1; align-items: baseline; gap: 8px; min-width: 0; margin: 0; }
 .search-add input { flex: 1; min-width: 0; padding: 3px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+/* 기호 떼기: 기호 몇 개만 적는 칸이라 좁게 두고, 옆에 무엇을 하는 칸인지 적는다 */
+.trim-add input { flex: 0 1 96px; }
+.trim-add small { flex: 1; min-width: 0; color: var(--muted); }
 .rule-list.search-words { margin: -4px 0 8px; }
 /* 앞의 빈칸(띄어 붙이는 말)이 보이게 */
 .rule-list.search-words span { white-space: pre; }

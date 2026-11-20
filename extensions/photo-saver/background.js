@@ -10,7 +10,7 @@ import { HIDE_KEY, HIDE_SITE_MAX, HIDE_SITES_MAX, loadHideRules, rulesOf, syncHi
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase, videoBase, videoExtFromMime, videoExtFromName, videoExtFromUrl, videoMime } from "./names.js";
 import { applyOpenIn, loadOpenIn } from "./opener.js";
 import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
-import { SEARCH_KEY, cleanSelection, loadWords, searchUrl } from "./search-words.js";
+import { SEARCH_KEY, cleanSelection, loadMarks, loadWords, searchUrl } from "./search-words.js";
 import { URL_KEY, fillTemplate, loadTemplates, templateLabel } from "./url-templates.js";
 import { UNLOCK_CSS, UNLOCK_KEY, syncUnlockScripts } from "./unlock-sites.js";
 
@@ -828,18 +828,19 @@ function clearSelection() {
   getSelection()?.removeAllRanges();
 }
 
-// 구글 검색: 고른 글 바로 뒤에 붙일 말을 붙여 찾는다
-async function searchFromMenu(word, info, tab) {
-  const text = cleanSelection(info.selectionText);
-  if (!text) return;
-  await openNextTo(searchUrl(text, word), tab);
-  await inMenuFrame(info, tab, clearSelection, []);
-}
+// 고른 글·복사한 글을 쓸 글로 다듬는다: 앞뒤의 빈칸과, 창의 "기호 떼기"에 적어 둔 기호(처음엔 "-")를 뗀다 (cleanSelection, 1.26.0)
+const usable = async (text) => cleanSelection(text, await loadMarks());
+// 뗄 기호만 골랐거나 복사했으면(떼고 나면 남는 글이 없다) 열지 않고 그 프레임에 알린다
+const ONLY_MARKS = "기호뿐이라 쓸 글자가 없습니다.";
 
-// 주소 열기: 정해 둔 주소의 자리에 고른 글(소문자, 주소에 쓸 수 있게 바꾼 것)을 넣어 연다
-async function openFromMenu(template, info, tab) {
-  if (!cleanSelection(info.selectionText)) return;
-  await openNextTo(fillTemplate(template, info.selectionText), tab);
+// 메뉴에서 고른 글로: 다듬은 글로 주소를 만들어 열고 고름을 풀어 준다
+async function selectionFromMenu(makeUrl, info, tab) {
+  const text = await usable(info.selectionText);
+  if (!text) {
+    if (String(info.selectionText ?? "").trim()) await inMenuFrame(info, tab, showToast, [`고른 글이 ${ONLY_MARKS}`]);
+    return;
+  }
+  await openNextTo(makeUrl(text), tab);
   await inMenuFrame(info, tab, clearSelection, []);
 }
 
@@ -853,9 +854,10 @@ async function inMenuFrame(info, tab, func, args) {
 // "복사한 글로": 클립보드의 글로 구글 검색이나 주소 열기. 글이 없으면 그 페이지에 알린다.
 // clipboardText는 시험이 클립보드 대신 넣는다 (시험이 이 컴퓨터의 클립보드를 건드리지 않게)
 async function clipboardFromMenu(makeUrl, info, tab, clipboardText) {
-  const text = cleanSelection(clipboardText ?? (await readClipboard()));
+  const copied = String(clipboardText ?? (await readClipboard()) ?? "");
+  const text = await usable(copied);
   if (!text) {
-    await inMenuFrame(info, tab, showToast, ["복사한 글이 없습니다. 글자를 복사한 뒤 다시 눌러 주세요."]);
+    await inMenuFrame(info, tab, showToast, [copied.trim() ? `복사한 글이 ${ONLY_MARKS}` : "복사한 글이 없습니다. 글자를 복사한 뒤 다시 눌러 주세요."]);
     return;
   }
   await openNextTo(makeUrl(text), tab);
@@ -876,8 +878,15 @@ async function addLinkFromMenu(info, tab) {
 // options.clipboardText: 시험이 클립보드 대신 넣는 글 (크롬은 info, tab만 준다)
 function onMenuClick(info, tab, options = {}) {
   const id = String(info.menuItemId);
-  if (id.startsWith(SEARCH_PREFIX)) return searchFromMenu(id.slice(SEARCH_PREFIX.length), info, tab);
-  if (id.startsWith(OPEN_PREFIX)) return openFromMenu(id.slice(OPEN_PREFIX.length), info, tab);
+  // 구글 검색: 고른 글 바로 뒤에 붙일 말을 붙여 찾는다. 주소 열기: 정해 둔 주소의 자리에 고른 글(소문자, 주소에 쓸 수 있게 바꾼 것)을 넣어 연다
+  if (id.startsWith(SEARCH_PREFIX)) {
+    const word = id.slice(SEARCH_PREFIX.length);
+    return selectionFromMenu((text) => searchUrl(text, word), info, tab);
+  }
+  if (id.startsWith(OPEN_PREFIX)) {
+    const template = id.slice(OPEN_PREFIX.length);
+    return selectionFromMenu((text) => fillTemplate(template, text), info, tab);
+  }
   if (id.startsWith(CLIP_SEARCH)) {
     const word = id.slice(CLIP_SEARCH.length);
     return clipboardFromMenu((text) => searchUrl(text, word), info, tab, options.clipboardText);
@@ -904,7 +913,7 @@ function shownUrl(url) {
   return text;
 }
 async function textActions(text) {
-  const clean = cleanSelection(text);
+  const clean = await usable(text);
   if (!clean) return [];
   const [words, templates] = await Promise.all([loadWords(), loadTemplates()]);
   return [
@@ -915,7 +924,7 @@ async function textActions(text) {
 // 창 맨 위의 바로 열기(quick.js)도 쓴다. 창에서 오면 sender.tab이 없어 지금 탭(tabId)을 함께 보내고,
 // 페이지에서 고른 글로 열었으면(clear) 그 페이지의 고름을 풀어 준다
 async function textOpen(id, text, tab, clear) {
-  const clean = cleanSelection(text);
+  const clean = await usable(text);
   if (!clean) return;
   if (id.startsWith(SEARCH_PREFIX)) await openNextTo(searchUrl(clean, id.slice(SEARCH_PREFIX.length)), tab);
   else if (id.startsWith(OPEN_PREFIX)) await openNextTo(fillTemplate(id.slice(OPEN_PREFIX.length), clean), tab);

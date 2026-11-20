@@ -4,20 +4,21 @@
 // - 지금 페이지에서 고른 글이 있으면 그 글, 없으면 클립보드의 글 ("고른 글: …" / "복사한 글: …")
 // - 그 글로 완성한 구글 검색·주소 열기 단추 (서비스 워커의 text-actions. 오른쪽 클릭 메뉴·고른 글 옆 단추와 같은 목록·규칙)
 // - 누르면 지금 탭 바로 뒤에 새 탭으로 연다 (text-open). 고른 글로 열었으면 그 페이지의 고름을 풀어 준다
-// 구글 검색 붙일 말이나 주소가 하나도 없으면 아무것도 읽지 않고 보이지 않는다. 사이드바는 탭을 바꾸거나 사이드바를 다시 누를 때(focus) 다시 읽는다
-import { SEARCH_KEY, cleanSelection, loadWords } from "./search-words.js";
+// 구글 검색 붙일 말이나 주소가 하나도 없으면 아무것도 읽지 않고 보이지 않는다. 사이드바는 탭을 바꾸거나 사이드바를 다시 누를 때(focus) 다시 읽는다.
+// 창의 "기호 떼기"에 적어 둔 기호(처음엔 "-", 1.26.0)는 앞뒤에서 뗀 글을 보이고 쓴다 ("399-"를 복사했으면 "복사한 글: 399")
+import { SEARCH_KEY, TRIM_KEY, cleanSelection, loadMarks, loadWords } from "./search-words.js";
 import { URL_KEY, loadTemplates } from "./url-templates.js";
 
 const $ = (id) => document.getElementById(id);
 const SHOWN_TEXT = 40; // "복사한 글: …"에 보일 글자 수
 
-// 지금 탭에서 고른 글 (맨 위 프레임 먼저, 없으면 안쪽 틀). 크롬이 막는 페이지면 빈 글
-async function selectedText(tabId) {
+// 지금 탭에서 고른 글 (맨 위 프레임 먼저, 없으면 안쪽 틀). 크롬이 막는 페이지면 빈 글. 다듬고 나면 남는 글이 없는 고름(기호뿐 등)은 건너뛴다
+async function selectedText(tabId, marks) {
   const results = await chrome.scripting
     .executeScript({ target: { tabId, allFrames: true }, func: () => getSelection()?.toString() ?? "" })
     .catch(() => []);
   results.sort((a, b) => (a.frameId === 0 ? -1 : b.frameId === 0 ? 1 : 0));
-  return results.map((r) => r.result).find((text) => typeof text === "string" && cleanSelection(text)) ?? "";
+  return results.map((r) => r.result).find((text) => typeof text === "string" && cleanSelection(text, marks)) ?? "";
 }
 
 // 클립보드의 글 (clipboardRead 권한). 창에 초점이 없으면 navigator.clipboard가 거절해서, 보이지 않는 글 칸에 붙여 넣어 읽는다
@@ -47,20 +48,20 @@ export function mountQuick({ inPanel }) {
 
   async function refresh() {
     const id = ++run;
-    const [words, templates] = await Promise.all([loadWords(), loadTemplates()]);
+    const [words, templates, marks] = await Promise.all([loadWords(), loadTemplates(), loadMarks()]);
     if (id !== run) return;
     if (!words.length && !templates.length) {
       box.hidden = true;
       return;
     }
     let from = "selection";
-    let text = tabId != null ? await selectedText(tabId) : "";
-    if (!cleanSelection(text)) {
+    let text = tabId != null ? await selectedText(tabId, marks) : "";
+    if (!cleanSelection(text, marks)) {
       from = "clipboard";
       text = await clipboardText().catch(() => "");
     }
     if (id !== run) return;
-    const clean = cleanSelection(text);
+    const clean = cleanSelection(text, marks);
     box.hidden = false;
     if (!clean) {
       source.textContent = "글자를 고르거나 복사하면 여기에 완성된 구글 검색·주소 열기가 나옵니다.";
@@ -87,9 +88,9 @@ export function mountQuick({ inPanel }) {
     );
   }
 
-  // 목록을 고치면(이 창이나 다른 창에서) 다시 만든다
+  // 목록을 고치거나 뗄 기호를 바꾸면(이 창이나 다른 창에서) 다시 만든다
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes[SEARCH_KEY] || changes[URL_KEY])) refresh();
+    if (area === "local" && (changes[SEARCH_KEY] || changes[URL_KEY] || changes[TRIM_KEY])) refresh();
   });
   // 사이드바는 열어 둔 채 다른 프로그램에서 복사하고 돌아와 누르므로, 창에 초점이 올 때 다시 읽는다
   if (inPanel) addEventListener("focus", () => refresh());
