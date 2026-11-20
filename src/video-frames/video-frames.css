@@ -1,0 +1,61 @@
+/* 영상 장면 뽑기: 뽑은 장면을 여러 줄로 늘어놓아 다른 페이지보다 넓게 쓴다 */
+.vf-page { max-width: 1100px; }
+.vf-page.dragging { outline: 3px dashed var(--accent); outline-offset: -8px; border-radius: 16px; }
+.vf-page button:disabled { opacity: 0.5; cursor: default; }
+.vf-page input[type="checkbox"], .vf-page input[type="radio"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.vf-page input[type="number"], .vf-page select {
+  font: inherit;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 8px;
+}
+
+.vf-muted { color: var(--muted); }
+.vf-hint { margin: 10px 0 0; color: var(--muted); font-size: 0.9rem; }
+.vf-notice { margin: 10px 0 0; color: #d97706; }
+.vf-ok { margin: 10px 0 0; color: #16a34a; }
+.vf-error { color: #dc2626; font-size: 0.85rem; }
+.vf-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.vf-title { margin: 0 0 10px; }
+
+/* 영상과 재생기 */
+.vf-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin-bottom: 10px; }
+.vf-name { margin: 0; font-size: 1.05rem; word-break: break-all; }
+.vf-head .vf-muted { font-size: 0.9rem; }
+.vf-player { display: block; width: 100%; max-height: 62vh; background: #000; border-radius: 12px; }
+.vf-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.vf-controls button { padding: 8px 14px; }
+.vf-now { font-variant-numeric: tabular-nums; }
+
+/* 자동으로 뽑기 */
+.vf-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 8px; }
+.vf-options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.vf-every { width: 5.5em; }
+.vf-scan { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 2em; }
+.vf-scan button { padding: 6px 12px; }
+.vf-progress { width: 100%; height: 8px; margin-top: 6px; accent-color: var(--accent); }
+
+/* 뽑은 장면 */
+.vf-toolbar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 4px; }
+.vf-toolbar .vf-title { margin: 0; }
+.vf-toolbar button { margin-left: auto; padding: 4px 12px; }
+.vf-tip { margin: 6px 0 12px; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 0.9rem; }
+.vf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.vf-grid li { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.vf-grid li.off .vf-shot { opacity: 0.4; }
+.vf-shot { display: flex; align-items: center; justify-content: center; height: 150px; border-radius: 10px; background: #0b1220; overflow: hidden; }
+.vf-shot img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.vf-shot > span { padding: 8px; text-align: center; font-size: 0.85rem; }
+.vf-caption { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+.vf-time { padding: 0; border: 0; background: none; color: var(--accent); font-variant-numeric: tabular-nums; text-decoration: underline; text-underline-offset: 3px; }
+.vf-badge { padding: 0 6px; border-radius: 6px; background: color-mix(in srgb, #7c3aed 16%, transparent); color: #7c3aed; font-size: 0.78rem; }
+.vf-remove { margin-left: auto; padding: 0 6px; border: 0; background: none; color: var(--muted); font-size: 1.1rem; line-height: 1; }
+.vf-save { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 16px; }
+.vf-save .vf-options { margin: 0; }
+
+@media (max-width: 600px) {
+  .vf-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .vf-shot { height: 110px; }
+}
