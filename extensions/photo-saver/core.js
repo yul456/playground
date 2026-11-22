@@ -43,6 +43,7 @@ export function loadSettings() {
   // stitchFormat: 이어 붙인 그림의 형식 (jpg · png), jpgQuality: JPG 품질
   // tooLong: JPG 한 장에 담기에 너무 길 때 (split 여러 장으로 · png PNG 한 장), splitMode: 나누는 방법 (even 균등하게 · max 최대 + 나머지)
   // closeTabs: 열린 탭 받기에서 다 받은 탭을 닫을지
+  // showPages: 열린 탭 받기에서 받기 전에 탭을 앞에 띄워 끝까지 내려 볼지 (1.27.0, 기본 켬)
   const fallback = {
     hideDecor: true,
     mode: "files",
@@ -54,6 +55,7 @@ export function loadSettings() {
     tooLong: TOO_LONG[0],
     splitMode: SPLIT_MODES[0],
     closeTabs: false,
+    showPages: true,
   };
   try {
     const saved = { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
@@ -66,6 +68,7 @@ export function loadSettings() {
     if (!TOO_LONG.includes(saved.tooLong)) saved.tooLong = fallback.tooLong;
     if (!SPLIT_MODES.includes(saved.splitMode)) saved.splitMode = fallback.splitMode;
     saved.closeTabs = Boolean(saved.closeTabs);
+    saved.showPages = saved.showPages !== false;
     return saved;
   } catch {
     return fallback;

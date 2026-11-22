@@ -221,7 +221,7 @@ function refresh() {
   $("tidyFind").disabled = running || tidying;
   if (running) $("tidyRun").hidden = true;
   setsUi?.setDisabled(running);
-  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], #jpgQuality, #splitMode, #closeTabs")) {
+  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], #jpgQuality, #splitMode, #closeTabs, #showPages")) {
     input.disabled = running;
   }
 }
@@ -276,6 +276,7 @@ function readOptions() {
   $("jpgQuality").value = String(settings.jpgQuality);
   $("splitMode").value = settings.splitMode;
   $("closeTabs").checked = settings.closeTabs;
+  $("showPages").checked = settings.showPages;
   setsUi?.refresh(); // 확장 프로그램 창에서 세트를 바꾸거나 만들었을 수 있다
   showOptions();
 }
@@ -367,6 +368,33 @@ async function findSettled(tabId, fresh) {
     same = now === last ? same + 1 : 1;
     last = now;
   }
+}
+
+// 페이지를 위에서 아래로 한 화면씩 내려 보고 맨 위로 돌아온다 (탭에 넣는 함수라 함수 밖의 이름을 쓰면 안 된다).
+// 내리는 동안 페이지가 길어지면(끝없이 이어지는 목록) 따라가되 MAX_STEPS까지만 한다
+async function scrollThrough() {
+  const MAX_STEPS = 60;
+  const WAIT = 120;
+  const root = document.scrollingElement;
+  if (!root) return;
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const before = root.scrollTop;
+    window.scrollBy(0, Math.max(200, Math.floor(window.innerHeight * 0.8)));
+    await wait(WAIT);
+    if (root.scrollTop === before && root.scrollTop + window.innerHeight >= root.scrollHeight - 2) break;
+  }
+  window.scrollTo(0, 0);
+  await wait(WAIT);
+}
+
+// 탭을 앞에 띄우고 끝까지 내려 본다 (1.27.0, 사용자 제보: 링크로 더해 받으면 덜 뜬 이상한 그림이 받아지는 사이트가 있다).
+// 한 번도 화면에 보이지 않은 탭은 크롬이 그리지 않아서, 보일 때 진짜 사진을 넣는 스크립트(IntersectionObserver 등)가 돌지 않는다.
+// 틀 안의 글(네이버 블로그 본문 등)도 내려 본다. 못 하면(크롬이 막는 페이지 등) 그냥 넘어간다
+async function showPage(tabId) {
+  await chrome.tabs.update(tabId, { active: true }).catch(() => {});
+  await sleep(300);
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: scrollThrough }).catch(() => {});
 }
 
 const send = (message) => chrome.runtime.sendMessage(message).catch((err) => ({ error: err.message }));
@@ -471,6 +499,11 @@ async function runTab(row) {
     const loaded = await ensureLoaded(row.tabId);
     setState(row, "사진 찾는 중", "now");
     const recent = Date.now() - (loadedAt.get(row.tabId) ?? 0) < RECENT_MS;
+    if (settings.showPages) {
+      setState(row, "페이지를 내려 보는 중", "now");
+      await showPage(row.tabId);
+      setState(row, "사진 찾는 중", "now");
+    }
     const page = await findSettled(row.tabId, opened || loaded.fresh || recent);
     // 주소로 더한 줄은 연 페이지의 제목을 보인다
     if (row.added && page.title) {
@@ -671,6 +704,11 @@ async function runAll() {
     }
   }
   for (const row of list.slice(handled)) setState(row, "받지 않음");
+  // 탭들을 앞에 띄웠으면 이 화면으로 돌아온다
+  if (settings.showPages) {
+    const self = await chrome.tabs.getCurrent().catch(() => null);
+    if (self?.id != null) await chrome.tabs.update(self.id, { active: true }).catch(() => {});
+  }
   running = false;
   const parts = [`${count.got}개 탭을 받았습니다`];
   if (count.none) parts.push(`받을 사진이 없던 탭 ${count.none}개`);
@@ -740,6 +778,11 @@ async function init() {
   $("closeTabs").checked = settings.closeTabs;
   $("closeTabs").addEventListener("change", () => {
     settings.closeTabs = $("closeTabs").checked;
+    saveSettings(settings);
+  });
+  $("showPages").checked = settings.showPages;
+  $("showPages").addEventListener("change", () => {
+    settings.showPages = $("showPages").checked;
     saveSettings(settings);
   });
   $("toggleAll").addEventListener("click", () => {
