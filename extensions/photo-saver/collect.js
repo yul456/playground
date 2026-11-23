@@ -235,7 +235,20 @@ export function collectLinks() {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 200);
-    links.push({ url, text });
+    links.push({ url, text, ...place(el) });
+  };
+  // 링크가 놓인 자리: 위로 여덟 겹의 태그 이름(sig)과, 겹마다 형제 가운데 몇째인지(pos).
+  // 주소 모양이 다른 글(공지 등)도 목록 안에서 같은 자리에 있으면 함께 고르려고 쓴다 (linkGroups.js의 alike)
+  const place = (el) => {
+    const tags = [];
+    const pos = [];
+    for (let node = el; node && node.parentElement && tags.length < 8; node = node.parentElement) {
+      let index = 0;
+      for (let prev = node.previousElementSibling; prev; prev = prev.previousElementSibling) index++;
+      tags.push(node.localName);
+      pos.push(index);
+    }
+    return { sig: tags.join("<"), pos };
   };
   const walk = (root) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);

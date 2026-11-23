@@ -5,7 +5,7 @@
 //   가장 큰 묶음(글 목록으로 보이는 것)을 처음에 골라 둔다
 import { wrapWindowOpen } from "./collect.js";
 import { findLinks } from "./core.js";
-import { groupLinks, matchesFilter, shapeLabel } from "./linkGroups.js";
+import { alike, groupLinks, matchesFilter, shapeLabel } from "./linkGroups.js";
 import { QUEUE_MAX, loadQueue, queueAdd, queueToggle, watchQueue } from "./queue.js";
 
 const PORT_NAME = "photo-saver-picker";
@@ -138,14 +138,18 @@ export function mountLinks({ inPanel, openPanel }) {
     if (run !== viewRun) return;
     const groups = groupLinks(page.links);
     const suggested = groups.find((group) => group.suggested);
+    // 주소 모양은 다르지만 글 목록 안에서 같은 자리에 있는 링크(공지 등)도 함께 고른다
+    const extra = alike(page.links, suggested);
+    const extraUrls = new Set(extra.map((link) => link.url));
+    const picked = suggested ? [...suggested.links, ...extra] : [];
     const have = inQueue();
     view = {
       page,
       groups,
-      chosen: new Set(suggested ? suggested.links.map((link) => link.url).filter((url) => !have.has(url)) : []),
-      open: new Set(suggested ? [suggested.shape] : []),
+      chosen: new Set(picked.map((link) => link.url).filter((url) => !have.has(url))),
+      open: new Set(suggested ? [suggested.shape, ...groups.filter((group) => group.links.some((link) => extraUrls.has(link.url))).map((group) => group.shape)] : []),
     };
-    linksNote(suggested ? "글 목록으로 보이는 가장 큰 묶음을 골라 두었습니다." : "");
+    linksNote(!suggested ? "" : extra.length ? `글 목록으로 보이는 가장 큰 묶음과, 주소 모양은 다르지만 목록에서 같은 자리에 있는 링크 ${extra.length}개를 골라 두었습니다.` : "글 목록으로 보이는 가장 큰 묶음을 골라 두었습니다.");
     renderView();
   }
 
