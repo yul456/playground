@@ -524,8 +524,7 @@ async function runTab(row) {
       await showPage(row.tabId, settings.showPage);
       setState(row, "사진 찾는 중", "now");
     }
-    // 빠르게 내려 봤으면 방금 연 페이지도 짧게(두 번 같으면) 지켜본다 (사용자 결정, 2026-11-24: 받기 전 시간을 줄이려고)
-    const page = await findSettled(row.tabId, settings.showPage !== "fast" && (opened || loaded.fresh || recent));
+    const page = await findSettled(row.tabId, opened || loaded.fresh || recent);
     // 주소로 더한 줄은 연 페이지의 제목을 보인다
     if (row.added && page.title) {
       row.title = page.title;
