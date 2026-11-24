@@ -5,7 +5,7 @@ import { JPG_QUALITIES } from "../shared/jpgQuality.js";
 import { explainSaveError, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
 import { clockLabel, frameName, uniqueName } from "./names.js";
-import { AMOUNT_LABELS, AMOUNTS, detectScenes, difference, everyTimes } from "./scenes.js";
+import { AMOUNT_LABELS, AMOUNTS, MIN_SCENES, detectScenes, difference, everyTimes } from "./scenes.js";
 import { EVERY_MAX, EVERY_MIN, MAX_FRAMES, readSettings, STORAGE_KEY } from "./settings.js";
 import { captureElement, captureFrame, closeVideo, openVideo, sampleRate, sampleVideo, VideoOpenError } from "./video.js";
 
@@ -76,6 +76,8 @@ export default function App() {
   scanRef.current = scan;
   // 자동으로 뽑은 시각과 직접 담은 시각
   const [autoTimes, setAutoTimes] = useState([]);
+  // 찾은 장면이 적어 더 고른 장 수 (MIN_SCENES)
+  const [filled, setFilled] = useState(0);
   const [manualTimes, setManualTimes] = useState([]);
   // 만든 그림: key → { t, url, blob, type, quality, width, height } · { error }
   const [frames, setFrames] = useState({});
@@ -184,11 +186,10 @@ export default function App() {
   const showScenes = useCallback(
     (done) => {
       if (settingsRef.current.mode !== "scenes") return;
-      const scenes = detectScenes(samplesRef.current, AMOUNTS[settingsRef.current.amount], { diffs: diffsRef.current, done });
-      const times = scenes
-        .filter((scene) => scene.closed)
-        .slice(0, MAX_FRAMES)
-        .map((scene) => scene.pick);
+      const scenes = detectScenes(samplesRef.current, AMOUNTS[settingsRef.current.amount], { diffs: diffsRef.current, done, atLeast: MIN_SCENES });
+      const shown = scenes.filter((scene) => scene.closed).slice(0, MAX_FRAMES);
+      const times = shown.map((scene) => scene.pick);
+      setFilled(shown.filter((scene) => scene.filled).length);
       setAutoTimes((old) => (sameList(old, times) ? old : times));
       want(times);
     },
@@ -524,7 +525,10 @@ export default function App() {
   let scanText = "";
   if (settings.mode === "scenes") {
     if (scanning) scanText = `장면을 찾는 중… ${Math.floor(scan.progress * 100)}% · 지금까지 ${number(autoTimes.length)}장`;
-    else if (scan.state === "done") scanText = `장면 ${number(autoTimes.length)}개를 찾았습니다.`;
+    else if (scan.state === "done")
+      scanText = filled
+        ? `장면 ${number(autoTimes.length - filled)}개를 찾았고, ${MIN_SCENES}장이 되게 ${number(filled)}장을 더 골랐습니다.`
+        : `장면 ${number(autoTimes.length)}개를 찾았습니다.`;
     else if (scan.state === "stopped") scanText = `영상의 ${Math.floor(scan.progress * 100)}%까지 보고 멈췄습니다. 거기까지 장면 ${number(autoTimes.length)}개.`;
     else if (scan.state === "failed") scanText = `영상을 읽다가 멈췄습니다(${scan.error}). 거기까지 장면 ${number(autoTimes.length)}개.`;
   } else if (info?.decodable) {
@@ -695,7 +699,7 @@ export default function App() {
           {settings.mode === "scenes" && (
             <p className="vf-hint">
               화면이 갑자기 바뀌거나 천천히 바뀌어 많이 달라진 곳마다 한 장씩 뽑습니다. 장면마다 그 장면다운 화면을 고르고, 검은 화면처럼 한
-              가지 색뿐인 장면은 뺍니다. 너무 많거나 적으면 장면 수를 바꿔 보세요(영상을 다시 읽지 않고 바로 다시 고릅니다).
+              가지 색뿐인 장면은 뺍니다. 장면이 {MIN_SCENES}개보다 적으면 서로 다르게 생긴 화면을 더 골라 {MIN_SCENES}장을 채웁니다. 너무 많거나 적으면 장면 수를 바꿔 보세요(영상을 다시 읽지 않고 바로 다시 고릅니다).
             </p>
           )}
         </section>

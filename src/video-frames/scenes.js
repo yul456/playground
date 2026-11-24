@@ -38,6 +38,8 @@ const SETTLE = 2;
 const STILL = 4;
 // 장면이 바뀌었다가 이보다(초) 빨리 바로 앞 장면으로 돌아오면 번쩍임으로 보고 나누지 않는다
 const FLASH = 1;
+// 장면이 이보다 적게 나오면 이만큼이 되게 더 고른다 (사용자 요청, 2026-11-24: 최소 5장)
+export const MIN_SCENES = 5;
 
 // RGBA 화소(SIG_W×SIG_H)의 모양: [색상 N개][채도 N개][밝기 N개], 모두 0~255. 색상은 한 바퀴를 256으로 나눈다
 export function signature(rgba) {
@@ -113,8 +115,9 @@ function pickOf(samples, diff, from, to) {
 
 // samples: [{ t(초), sig }] (시각 순서). 바로 앞 모양과의 차이는 diffs[k]로 미리 셈해 넘길 수 있다 (없으면 여기서 센다).
 // done: 영상을 끝까지 읽었는지. 읽는 중이면 끝쪽 장면은 아직 바뀔 수 있어 열린 장면으로 둔다(closed: false).
-// 결과: [{ start, end, pick, at, reason: "start" | "cut" | "drift", flat, closed }] (start·end·pick은 시각, at은 고른 모양의 번호)
-export function detectScenes(samples, params, { diffs = null, done = true } = {}) {
+// atLeast: 다 읽었는데 장면이 이보다 적으면 이만큼이 되게 더 고른다 (fillScenes, 더 고른 것은 filled: true)
+// 결과: [{ start, end, pick, at, reason: "start" | "cut" | "drift" | "fill", flat, closed }] (start·end·pick은 시각, at은 고른 모양의 번호)
+export function detectScenes(samples, params, { diffs = null, done = true, atLeast = 0 } = {}) {
   const n = samples.length;
   if (!n) return [];
   const diff = diffs ?? samples.map((s, k) => (k ? difference(samples[k - 1].sig, s.sig) : 0));
@@ -133,7 +136,10 @@ export function detectScenes(samples, params, { diffs = null, done = true } = {}
     const cut = diff[k] >= params.cut && diff[k] >= params.ratio * Math.max(around, 1);
     if (!current.settled) {
       current.ref = samples[k].sig;
-      if (diff[k] < STILL || t - current.t >= SETTLE) current.settled = true;
+      if (diff[k] < STILL || t - current.t >= SETTLE) {
+        current.settled = true;
+        current.calm = k;
+      }
     }
     if (cut) {
       // 번쩍임: 잠깐 바뀐 장면이 끝나고 바로 앞 장면으로 돌아왔다. 잠깐 바뀐 장면을 없애고 앞 장면을 이어 간다
@@ -160,6 +166,10 @@ export function detectScenes(samples, params, { diffs = null, done = true } = {}
     const start = samples[from].t;
     const end = last ? samples[to].t : samples[n - 1].t;
     scenes.push({
+      from,
+      to,
+      // 장면이 시작해 화면이 멈춘 곳 (그 앞은 전환 중일 수 있다)
+      calm: starts[s].calm ?? to,
       start,
       end,
       pick: samples[at].t,
@@ -174,9 +184,72 @@ export function detectScenes(samples, params, { diffs = null, done = true } = {}
   // 검은 화면처럼 한 가지 색뿐인 장면, 전환, 고른 길이보다 짧은 장면은 뺀다 (읽는 중인 마지막 장면은 길이를 아직 모른다).
   // 다 빠지면 한 가지 색이 아닌 가장 긴 장면, 그것도 없으면 첫 장면은 둔다
   const kept = scenes.filter((scene) => !scene.flat && !scene.passing && (!scene.closed || scene.end - scene.start >= params.min || scene.end === scene.start));
-  if (kept.length || !done) return kept;
+  if (!done) return kept;
   const colored = scenes.filter((scene) => !scene.flat);
-  return colored.length ? [colored.reduce((a, b) => (b.end - b.start > a.end - a.start ? b : a))] : scenes.slice(0, 1);
+  const found = kept.length ? kept : colored.length ? [colored.reduce((a, b) => (b.end - b.start > a.end - a.start ? b : a))] : scenes.slice(0, 1);
+  return found.length < atLeast ? fillScenes(samples, diff, scenes, found, atLeast) : found;
+}
+
+// 장면이 want개보다 적을 때 더 고른다. 영상을 다시 읽지 않고, 읽어 둔 모양에서 고른다.
+//  1) 길이가 짧아 뺐던 장면을 긴 것부터 되살린다 (한 가지 색인 장면과 전환은 되살리지 않는다)
+//  2) 그래도 모자라면, 이미 고른 화면들과 가장 다르게 생긴 화면을 하나씩 더 고른다 (움직이는 중인 흐린 화면은 덜 좋게 친다).
+//     남은 화면이 고른 화면들과 거의 같으면(화면이 안 바뀌는 영상) 고른 화면들에서 시간이 가장 먼 화면을 고른다.
+// 한 가지 색인 화면과, 고른 화면에 시간이 너무 가까운 화면은 고르지 않는다. 그런 화면뿐이면 want개가 안 될 수 있다
+function fillScenes(samples, diff, scenes, found, want) {
+  const result = [...found];
+  const short = scenes.filter((scene) => !found.includes(scene) && !scene.flat && !scene.passing && scene.closed).sort((a, b) => b.end - b.start - (a.end - a.start));
+  for (const scene of short) {
+    if (result.length >= want) break;
+    result.push({ ...scene, filled: true });
+  }
+  const n = samples.length;
+  const gap = Math.min(1, (samples[n - 1].t - samples[0].t) / (want * 2));
+  const taken = result.map((scene) => scene.at);
+  // 화면마다 고른 화면들과의 가장 작은 차이
+  const nearest = new Float32Array(n).fill(Infinity);
+  const colored = samples.map((sample) => spread(sample.sig) >= FLAT);
+  // 전환 중인 화면(전환으로 본 장면, 장면이 시작해 화면이 멈추기 전)은 두 장면이 겹친 흐린 그림일 수 있어 먼저 피한다.
+  // 그런 화면밖에 없으면 그것도 쓴다
+  const steady = [...colored];
+  for (const scene of scenes) for (let k = scene.from; k < (scene.passing ? scene.to : scene.calm); k++) steady[k] = false;
+  let usable = steady;
+  const note = (at) => {
+    for (let k = 0; k < n; k++) if (colored[k]) nearest[k] = Math.min(nearest[k], difference(samples[at].sig, samples[k].sig));
+  };
+  for (const at of taken) note(at);
+  while (result.length < want) {
+    let best = -1;
+    let bestScore = -Infinity;
+    let far = -1;
+    let farTime = -Infinity;
+    for (let k = 0; k < n; k++) {
+      if (!usable[k]) continue;
+      let apart = Infinity;
+      for (const at of taken) apart = Math.min(apart, Math.abs(samples[k].t - samples[at].t));
+      if (apart < gap || apart === 0) continue;
+      const motion = k + 1 < n ? (diff[k] + diff[k + 1]) / 2 : diff[k];
+      const score = nearest[k] - MOTION_WEIGHT * motion;
+      if (nearest[k] >= STILL && score > bestScore) {
+        bestScore = score;
+        best = k;
+      }
+      if (apart > farTime) {
+        farTime = apart;
+        far = k;
+      }
+    }
+    const at = best >= 0 ? best : far;
+    if (at < 0) {
+      if (usable === colored) break;
+      usable = colored;
+      continue;
+    }
+    taken.push(at);
+    note(at);
+    const t = samples[at].t;
+    result.push({ start: t, end: t, pick: t, at, reason: "fill", flat: false, passing: false, closed: true, filled: true });
+  }
+  return result.sort((a, b) => a.pick - b.pick);
 }
 
 // 일정한 간격으로 뽑을 시각들 (start부터 every초마다, 끝 전까지). 많아도 limit개까지
