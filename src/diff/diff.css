@@ -1,0 +1,127 @@
+/* 두 글을 나란히 놓으므로 다른 페이지보다 넓게 쓴다 */
+.df-page { max-width: 1120px; }
+.df-page .card h2 { margin: 0; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.df-page {
+  --df-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* 지운 쪽은 붉은색, 더한 쪽은 초록색. 줄 바탕은 옅게, 바뀐 글자는 짙게 */
+  --df-del-bg: #fdecec;
+  --df-del-mark: #f9b4b4;
+  --df-del-text: #b42318;
+  --df-ins-bg: #e7f7ec;
+  --df-ins-mark: #a6e3b8;
+  --df-ins-text: #137333;
+  --df-empty: #f3f5f8;
+}
+@media (prefers-color-scheme: dark) {
+  .df-page {
+    --df-del-bg: #3a1d20;
+    --df-del-mark: #8a2f33;
+    --df-del-text: #ff9b9b;
+    --df-ins-bg: #173424;
+    --df-ins-mark: #25683d;
+    --df-ins-text: #7fdc9c;
+    --df-empty: #141c26;
+  }
+}
+
+/* 붙여 넣는 두 칸 */
+.df-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.df-inputs label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-weight: 600; }
+.df-inputs small { color: var(--muted); font-weight: 400; }
+.df-input {
+  display: block;
+  width: 100%;
+  min-height: 9em;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 var(--df-mono);
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+}
+.df-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.df-input.over { outline: 2px dashed var(--accent); outline-offset: 1px; }
+.df-input::placeholder { color: var(--muted); font-family: system-ui, sans-serif; }
+.df-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; margin-top: 12px; }
+.df-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.df-actions button { padding: 8px 14px; }
+.df-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+.df-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0; padding: 0; border: 0; color: var(--muted); font-size: 0.9rem; }
+.df-options legend { float: left; margin-right: 2px; padding: 0; }
+.df-options label, .df-check { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-size: 0.9rem; cursor: pointer; }
+.df-options input, .df-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.df-notice { margin: 12px 0 0; color: #d97706; }
+
+/* 결과 */
+.df-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.df-summary { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.df-summary b { color: var(--text); }
+.df-summary .del { color: var(--df-del-text); }
+.df-summary .ins { color: var(--df-ins-text); }
+.df-same-text { margin: 0; font-weight: 600; }
+
+.df-table {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  font: 13px/1.6 var(--df-mono);
+}
+.df-row { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) 3.4em minmax(0, 1fr); }
+.df-table.unified .df-row { grid-template-columns: 3.4em 3.4em 1.4em minmax(0, 1fr); }
+/* 줄 번호와 +·- 표시는 글이 아니라서 끌어서 골라도 함께 복사되지 않게 한다 */
+.df-n, .df-sign { padding: 0 6px; color: var(--muted); text-align: right; -webkit-user-select: none; user-select: none; }
+.df-sign { padding: 0; text-align: center; }
+/* 여러 빈칸도 적힌 대로 보이고, 긴 줄은 다음 줄로 넘긴다 */
+.df-text { min-width: 0; padding: 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.df-table.split .df-text.left { border-right: 1px solid var(--border); }
+.df-del { background: var(--df-del-bg); }
+.df-ins { background: var(--df-ins-bg); }
+.df-none { background: var(--df-empty); }
+.df-del .df-sign, .df-del.df-n { color: var(--df-del-text); }
+.df-ins .df-sign, .df-ins.df-n { color: var(--df-ins-text); }
+.df-text mark { border-radius: 2px; color: inherit; }
+.df-del mark { background: var(--df-del-mark); }
+.df-ins mark { background: var(--df-ins-mark); }
+/* 지금 간 바뀐 곳 */
+.df-row.here { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* 접어 둔 같은 줄 */
+.df-gap {
+  all: unset;
+  display: block;
+  width: 100%;
+  padding: 3px 0;
+  border-block: 1px solid var(--border);
+  background: var(--df-empty);
+  color: var(--muted);
+  font: 12px/1.6 system-ui, sans-serif;
+  text-align: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.df-gap:first-child { border-top: 0; }
+.df-gap:last-child { border-bottom: 0; }
+.df-gap:hover { color: var(--accent); }
+.df-gap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.df-more { display: block; margin: 12px auto 0; padding: 8px 14px; }
+
+/* 알아 둘 것 */
+.df-notes { color: var(--muted); font-size: 0.9rem; }
+.df-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.df-notes ul { margin: 0; padding-left: 1.2em; }
+.df-notes li { margin-bottom: 4px; }
+
+/* 좁은 화면: 입력 칸을 위아래로 놓고, 결과는 한 줄로만 보인다 (보는 방법 칸은 숨긴다) */
+@media (max-width: 760px) {
+  .df-inputs { grid-template-columns: 1fr; }
+  .df-view { display: none; }
+  .df-n { padding: 0 4px; }
+  .df-table.unified .df-row { grid-template-columns: 2.8em 2.8em 1.2em minmax(0, 1fr); }
+}

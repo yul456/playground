@@ -22,6 +22,7 @@
 - 오디오 형식 바꾸기: https://yul456.github.io/playground/audio-convert/
 - 파일 이름 바꾸기: https://yul456.github.io/playground/rename/
 - JSON 보기: https://yul456.github.io/playground/json/
+- 글 비교: https://yul456.github.io/playground/diff/
 
 ## 실행
 
@@ -60,6 +61,7 @@ audio-cut/index.html    오디오 자르기 입구
 audio-convert/index.html 오디오 형식 바꾸기 입구
 rename/index.html       파일 이름 바꾸기 입구
 json/index.html         JSON 보기 입구
+diff/index.html         글 비교 입구
 extensions/
   photo-saver/          페이지 도우미 크롬 확장 프로그램(1.18.0까지 이름은 페이지 사진 받기). 빌드 없이 이 폴더째 설치한다
 src/
@@ -98,6 +100,7 @@ src/
                         한꺼번에 고치기 Batch.jsx, 표의 줄 Rows.jsx, 그림 파일 미리보기 Thumb.jsx, 표 정렬 sort.js)
   json/                 JSON 보기 (글을 읽고 틀린 자리를 알리는 parse.js, 펼친 대로 화면 줄을 만드는 tree.js,
                         줄을 그리는 Tree.jsx)
+  diff/                 글 비교 (줄·글자 단위로 견주고 접을 줄을 정하는 diff.js)
 scripts/
   zip-folder.mjs        폴더를 ZIP으로 묶는다 (vite.config.js가 확장 프로그램 ZIP을 만들 때 쓴다)
   check-copies.mjs      확장 프로그램이 복사해 쓰는 파일(png.js, imageInfo.js)이 원본과 같은지 검사 (npm run check에서 돈다)
@@ -126,6 +129,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 오디오 형식 바꾸기 | `src/audio-convert/`, `audio-convert/` | `mediabunny` (풀고 다시 만들기, 바꾸기를 누를 때 받음), `@mediabunny/mp3-encoder` (LAME, MP3로 바꿀 때만 받음), `@mediabunny/flac-encoder` (FLAC으로 바꿀 때만 받음), `@mediabunny/aac-encoder` (FFmpeg의 AAC 인코더, 크롬이 그 설정으로 AAC를 만들지 못할 때만 받음). 모두 MPL-2.0 |
 | 파일 이름 바꾸기 | `src/rename/`, `rename/` | 없음 (이름은 브라우저의 `FileSystemFileHandle.move`로 바꾸고, MP3·M4A·FLAC·WAV 태그는 자체 코드(`id3.js`, `mp4.js`, `flac.js`, `wav.js`)로 읽고 쓴다. 앨범 아트 찾기는 MH Covers(https://covers.musichoarders.xyz)를 새 창으로 열어 사용자가 고른 그림을 받고, 구글 이미지 검색은 새 탭으로 열기만 한다(복사한 그림을 붙여 넣어 받는다)) |
 | JSON 보기 | `src/json/`, `json/` | 없음 (브라우저 내장 JSON.parse 대신 자체 코드 `parse.js`로 읽는다. 큰 수·키 순서·겹친 키를 적힌 그대로 보이려는 것) |
+| 글 비교 | `src/diff/`, `diff/` | 없음 (자체 코드 `diff.js`로 견준다) |
 | 페이지 도우미 | `extensions/photo-saver/`, `src/photo-saver/`, `photo-saver/` | 없음 (확장 프로그램은 빌드 없이 쓰는 자바스크립트, 이어 붙이기는 `src/stitch/png.js`와 `src/shared/imageInfo.js` 복사본을 쓰고, ZIP은 Node 내장 zlib로 묶음) |
 
 새 패키지를 추가하면 위 표에 어느 기능이 쓰는지 적어 둡니다. 기능을 분리할 때 옮길 패키지를 고르는 기준이 됩니다.

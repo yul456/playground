@@ -61,11 +61,14 @@ export const BITRATE_HINTS = {
   },
 };
 
-// 목록에 올릴 오디오 파일 (크롬이 풀 수 있는 형식). .mp4·.mov는 대개 동영상이라 넣지 않는다
+// 목록에 올릴 오디오 파일 (크롬이 풀 수 있는 형식)
 export const SOURCE_EXTENSIONS = ["mp3", "m4a", "aac", "flac", "wav", "ogg", "oga", "opus", "weba", "webm", "mka"];
+// 영상 파일. 소리만 뽑는다. 폴더를 읽을 때는 "영상에서 소리 뽑기"를 켰을 때만 목록에 올린다 (.webm은 소리만 든 것도 많아 위에 있다)
+export const VIDEO_EXTENSIONS = ["mp4", "m4v", "mov", "mkv"];
 
 export const extensionOf = (name) => (/\.([^.]+)$/.exec(name)?.[1] ?? "").toLowerCase();
 export const isAudioFile = (name) => SOURCE_EXTENSIONS.includes(extensionOf(name));
+export const isVideoFile = (name) => VIDEO_EXTENSIONS.includes(extensionOf(name));
 // 저장할 이름: 같은 이름에 확장자만 바꾼다 (x.m4a → x.mp3)
 export const outName = (name, target) => `${name.replace(/\.[^.]*$/, "")}.${target.ext}`;
 
@@ -74,15 +77,17 @@ export const outName = (name, target) => `${name.replace(/\.[^.]*$/, "")}.${targ
 // 이미 바꿀 형식인 파일(MP3로 바꿀 때 x.mp3)은 바꾸지 않는다. 다시 압축하면 음질만 깎인다.
 // exists는 같은 이름의 결과가 이미 있다는 뜻이고, 그런 파일은 덮어쓰지 않고 건너뛴다.
 // 한 폴더의 x.m4a와 x.ogg처럼 저장할 이름이 겹치면 앞의 것만 바꾸고 뒤의 것은 exists가 된다.
-// 윈도우는 대소문자가 달라도 같은 이름으로 본다
-export function planFolders(scan, target) {
+// 윈도우는 대소문자가 달라도 같은 이름으로 본다.
+// video: 영상 파일(VIDEO_EXTENSIONS)도 올린다. 그런 항목에는 video: true가 붙는다
+export function planFolders(scan, target, video = false) {
   const folders = [];
   let same = 0;
   for (const folder of scan.folders) {
     const taken = new Set(folder.files.map((file) => file.name.toLowerCase()));
     const items = [];
     for (const file of folder.files) {
-      if (!isAudioFile(file.name)) continue;
+      const fromVideo = video && isVideoFile(file.name);
+      if (!isAudioFile(file.name) && !fromVideo) continue;
       if (extensionOf(file.name) === target.ext) {
         same++;
         continue;
@@ -90,7 +95,7 @@ export function planFolders(scan, target) {
       const out = outName(file.name, target);
       const exists = taken.has(out.toLowerCase());
       taken.add(out.toLowerCase());
-      items.push({ name: file.name, source: file, out, exists });
+      items.push({ name: file.name, source: file, out, exists, video: fromVideo });
     }
     if (items.length) folders.push({ path: folder.path, dir: folder.dir, items });
   }

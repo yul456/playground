@@ -4,17 +4,19 @@ import { addFile, folderKey, groupFileList, pickedScan, scanDirectory } from "..
 import { fileSize, number } from "../shared/format.js";
 import { explainSaveError, fileExists, SAVE_TRIES, saveToFolder } from "../shared/saveToFolder.js";
 import { HUB_URL } from "../shared/site.js";
-import { BITRATE_HINTS, planFolders, SOURCE_EXTENSIONS, TARGETS, targetOf } from "./formats.js";
+import { BITRATE_HINTS, planFolders, SOURCE_EXTENSIONS, TARGETS, targetOf, VIDEO_EXTENSIONS } from "./formats.js";
 
 // localStorage 키는 기능 이름을 앞에 붙여 다른 기능과 겹치지 않게 한다
 const STORAGE_KEY = "playground.audioConvert.v1";
 const ACCEPT = SOURCE_EXTENSIONS.map((ext) => `.${ext}`);
+const VIDEO_ACCEPT = VIDEO_EXTENSIONS.map((ext) => `.${ext}`);
 
-// 설정: { target: 바꿀 형식(formats.js TARGETS의 key), bitrates: { mp3: kbps, m4a: kbps } }
+// 설정: { target: 바꿀 형식(formats.js TARGETS의 key), bitrates: { mp3: kbps, m4a: kbps }, video: 폴더의 영상 파일에서도 소리를 뽑을지 }
 function loadSettings() {
   const settings = {
     target: TARGETS[0].key,
     bitrates: Object.fromEntries(TARGETS.filter((t) => t.lossy).map((t) => [t.key, t.bitrates[0]])),
+    video: true,
   };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -22,6 +24,7 @@ function loadSettings() {
     for (const t of TARGETS) {
       if (t.lossy && t.bitrates.includes(saved?.bitrates?.[t.key])) settings.bitrates[t.key] = saved.bitrates[t.key];
     }
+    if (typeof saved?.video === "boolean") settings.video = saved.video;
   } catch {
     // 저장소를 못 쓰는 환경(사생활 보호 모드 등)이면 기본값으로 시작한다
   }
@@ -64,6 +67,8 @@ export default function App() {
   // 고른 폴더: { name, folders: [{ path, dir, files }] (shared/folderScan.js scanDirectory), canSave: 원본 옆에 저장할 수 있는지 }.
   // 파일을 직접 골랐으면 picked가 붙고 폴더가 하나뿐이다 (pickedScan). 저장할 폴더는 바꿀 때 묻는다
   const [source, setSource] = useState(null);
+  // 영상 파일도 목록에 올릴지. 파일을 직접 골랐으면 설정과 상관없이 올린다 (고른 것이니)
+  const withVideo = settings.video || Boolean(source?.picked);
   // 체크를 끈 파일(itemKey). 폴더나 파일을 새로 고르면 모두 다시 켠다
   const [off, setOff] = useState(() => new Set());
   const [status, setStatus] = useState("idle"); // idle · scanning · ready · running · done
@@ -163,7 +168,7 @@ export default function App() {
         id: "audio-convert-files",
         startIn: "music",
         multiple: true,
-        types: [{ description: "오디오", accept: { "audio/*": ACCEPT } }],
+        types: [{ description: "오디오·영상", accept: { "audio/*": ACCEPT, "video/*": VIDEO_ACCEPT } }],
       });
     } catch (err) {
       if (err.name === "AbortError") return; // 고르지 않고 닫음
@@ -233,7 +238,7 @@ export default function App() {
       }
     }
     pickedDirRef.current = pickedDir;
-    const jobs = planFolders(source, target)
+    const jobs = planFolders(source, target, withVideo)
       .folders.flatMap((folder) => folder.items.map((item) => ({ folder, item, key: itemKey(folder, item) })))
       .filter((job) => !off.has(job.key));
     stopRef.current = false;
@@ -302,7 +307,7 @@ export default function App() {
     });
   }
 
-  const plan = source ? planFolders(source, target) : { folders: [], same: 0 };
+  const plan = source ? planFolders(source, target, withVideo) : { folders: [], same: 0 };
   const folders = plan.folders;
   const allKeys = folders.flatMap((folder) => folder.items.map((item) => itemKey(folder, item)));
   const fileCount = allKeys.length;
@@ -370,7 +375,7 @@ export default function App() {
         <h1>오디오 형식 바꾸기</h1>
         <p className="subtitle">
           폴더나 파일을 고르면 그 안의 오디오 파일을 MP3·M4A·FLAC·WAV 가운데 고른 형식으로 바꿔 원본과 같은 자리에
-          저장합니다. 앨범 아트 같은 태그도 옮깁니다. 파일은 이 PC 밖으로 나가지 않고 브라우저 안에서만 처리합니다.
+          저장합니다. 영상 파일에서는 소리만 뽑습니다. 앨범 아트 같은 태그도 옮깁니다. 파일은 이 PC 밖으로 나가지 않고 브라우저 안에서만 처리합니다.
         </p>
       </header>
 
@@ -409,6 +414,12 @@ export default function App() {
             ? "MP3·M4A·OGG처럼 이미 압축된 파일을 바꾸면 한 번 더 압축되어 음질이 조금 깎입니다. 높은 음질을 고르면 귀로 구분하기 어렵습니다."
             : "MP3·M4A·OGG처럼 이미 압축된 파일을 바꾸면 음질은 원본 그대로이고(좋아지지는 않습니다) 파일만 커집니다."}
         </p>
+        <fieldset className="au-options" disabled={running}>
+          <label>
+            <input type="checkbox" checked={settings.video} onChange={(e) => changeSettings({ video: e.target.checked })} />
+            폴더의 영상 파일({VIDEO_EXTENSIONS.join(", ")})에서도 소리 뽑기
+          </label>
+        </fieldset>
         <div className="au-actions">
           <button type="button" onClick={pickFolder} disabled={busy}>
             {source && !source.picked ? "다른 폴더 고르기" : "폴더 고르기"}
@@ -417,7 +428,7 @@ export default function App() {
             {source?.picked ? "다른 파일 고르기" : "파일 고르기"}
           </button>
           <input ref={inputRef} type="file" webkitdirectory="" multiple hidden onChange={onFiles} />
-          <input ref={fileInputRef} type="file" accept={`audio/*,${ACCEPT.join(",")}`} multiple hidden onChange={onPickedFiles} />
+          <input ref={fileInputRef} type="file" accept={`audio/*,${[...ACCEPT, ...VIDEO_ACCEPT].join(",")}`} multiple hidden onChange={onPickedFiles} />
         </div>
         {!source && <p className="au-save">{saveNote}</p>}
         {notice && (
@@ -443,7 +454,7 @@ export default function App() {
             <p>
               {plan.same
                 ? `이미 ${target.label}인 파일만 있습니다. 다른 형식을 고르면 바꿀 수 있습니다.`
-                : `오디오 파일(${SOURCE_EXTENSIONS.join(", ")})이 없습니다.`}
+                : `오디오 파일(${[...SOURCE_EXTENSIONS, ...(withVideo ? VIDEO_EXTENSIONS : [])].join(", ")})이 없습니다.`}
             </p>
           ) : (
             <>
@@ -487,6 +498,7 @@ export default function App() {
                                   <input type="checkbox" checked={checked} disabled={running} onChange={() => toggleFile(key)} />
                                   <span className="au-name">
                                     {item.name} → {item.out}
+                                    {item.video && <span className="au-muted"> · 영상에서 소리만</span>}
                                   </span>
                                 </label>
                                 {current ? <span>{progress.text}</span> : <ResultText result={result} exists={checked && item.exists} label={target.label} />}
@@ -544,6 +556,11 @@ export default function App() {
           <li>
             이미 고른 형식인 파일(MP3로 바꿀 때의 MP3)은 바꾸지 않습니다. 같은 이름의 파일이 이미 있으면 덮어쓰지 않고
             건너뜁니다.
+          </li>
+          <li>
+            영상 파일(mp4, m4v, mov, mkv, webm)은 소리만 뽑아 저장하고 영상은 그대로 둡니다. 휴대폰 영상이나 받은 MP4는
+            소리가 대개 AAC라, M4A를 고르면 다시 압축하지 않고 그대로 옮겨 담습니다(음질 그대로, 가장 빠름). 소리가 없는
+            영상은 "바꾸지 못함"으로 끝납니다.
           </li>
           <li>.aac 파일을 M4A로 바꿀 때처럼 소리 형식이 같으면 다시 압축하지 않고 옮겨 담아 음질이 그대로입니다.</li>
           <li>
