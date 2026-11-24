@@ -61,6 +61,7 @@ export default defineConfig({
         photoCompare: resolve(import.meta.dirname, "photo-compare/index.html"),
         crop: resolve(import.meta.dirname, "crop/index.html"),
         videoFrames: resolve(import.meta.dirname, "video-frames/index.html"),
+        gif: resolve(import.meta.dirname, "gif/index.html"),
         photoSaver: resolve(import.meta.dirname, "photo-saver/index.html"),
         audioCut: resolve(import.meta.dirname, "audio-cut/index.html"),
         audioConvert: resolve(import.meta.dirname, "audio-convert/index.html"),

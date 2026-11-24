@@ -1,0 +1,49 @@
+.gif-page .card h2 { margin: 0 0 10px; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+.gif-muted { color: var(--muted); font-size: 0.9rem; }
+.gif-notice { margin: 12px 0 0; color: #d97706; }
+
+/* 영상 고르기. 끌어 올리면 테두리로 알린다 */
+.gif-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.gif-page.over .gif-drop { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.gif-player { display: block; width: 100%; max-height: 60vh; margin-top: 14px; border-radius: 10px; background: #000; }
+
+/* 구간 */
+.gif-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; }
+.gif-range label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 0.85rem; }
+.gif-time { display: flex; align-items: center; gap: 6px; }
+.gif-time input {
+  width: 6.5em;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.gif-range button { padding: 8px 12px; }
+.gif-info { margin: 12px 0 0; font-variant-numeric: tabular-nums; }
+
+/* 고르기 칸 */
+.gif-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 14px 0 0; padding: 0; border: 0; }
+.gif-options legend { float: left; margin-right: 4px; padding: 0; color: var(--muted); }
+.gif-options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.gif-options input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.gif-hint { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
+
+.gif-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 16px; }
+.gif-bar { height: 6px; margin-top: 12px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.gif-bar span { display: block; height: 100%; background: var(--accent); }
+
+/* 만든 움짤 */
+.gif-result img { display: block; max-width: 100%; max-height: 70vh; border-radius: 10px; background: var(--bg); }
+.gif-result p { margin: 10px 0 0; font-variant-numeric: tabular-nums; }
+.gif-ok { color: #16a34a; }
+.gif-warn { color: #d97706; }
+
+/* 알아 둘 것 */
+.gif-notes { color: var(--muted); font-size: 0.9rem; }
+.gif-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.gif-notes ul { margin: 0; padding-left: 1.2em; }
+.gif-notes li { margin-bottom: 4px; }
