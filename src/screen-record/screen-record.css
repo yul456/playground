@@ -1,0 +1,31 @@
+.sr-page .card h2 { margin: 0 0 10px; font-size: 1.05rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+.sr-muted { color: var(--muted); font-size: 0.9rem; }
+.sr-notice { margin: 12px 0 0; color: #d97706; }
+.sr-ok { color: #16a34a; }
+.sr-warn { color: #d97706; }
+
+/* 고르기 칸 */
+.sr-options { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 12px; padding: 0; border: 0; }
+.sr-options legend { float: left; margin-right: 4px; padding: 0; color: var(--muted); }
+.sr-options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.sr-options input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.sr-hint { margin: -6px 0 12px; color: var(--muted); font-size: 0.9rem; }
+.sr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 4px; }
+
+/* 녹화 중 */
+.sr-live { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 12px; font-variant-numeric: tabular-nums; }
+.sr-dot { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; background: #dc2626; animation: sr-blink 1.2s infinite; }
+.sr-dot.paused { background: var(--muted); animation: none; }
+@keyframes sr-blink { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .sr-dot { animation: none; } }
+.sr-time { font-size: 1.3rem; font-weight: 600; }
+.sr-stop { background: #dc2626; }
+.sr-video { display: block; width: 100%; max-height: 60vh; margin-top: 14px; border-radius: 10px; background: #000; }
+.sr-result p { margin: 10px 0 0; font-variant-numeric: tabular-nums; }
+
+/* 알아 둘 것 */
+.sr-notes { color: var(--muted); font-size: 0.9rem; }
+.sr-notes h2 { margin: 24px 0 8px; color: var(--text); font-size: 1rem; }
+.sr-notes ul { margin: 0; padding-left: 1.2em; }
+.sr-notes li { margin-bottom: 4px; }

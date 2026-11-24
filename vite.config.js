@@ -62,6 +62,7 @@ export default defineConfig({
         crop: resolve(import.meta.dirname, "crop/index.html"),
         videoFrames: resolve(import.meta.dirname, "video-frames/index.html"),
         gif: resolve(import.meta.dirname, "gif/index.html"),
+        screenRecord: resolve(import.meta.dirname, "screen-record/index.html"),
         photoSaver: resolve(import.meta.dirname, "photo-saver/index.html"),
         audioCut: resolve(import.meta.dirname, "audio-cut/index.html"),
         audioConvert: resolve(import.meta.dirname, "audio-convert/index.html"),

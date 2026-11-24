@@ -93,6 +93,12 @@ const FEATURES = [
     description: "영상에서 구간을 골라 움직이는 GIF로 만듭니다. 폭·초당 장수·화질을 고릅니다.",
   },
   {
+    path: "screen-record/",
+    icon: "⏺️",
+    title: "화면 녹화",
+    description: "창이나 화면을 골라 녹화해 영상 파일(MP4·WebM)로 저장합니다. PC의 크롬·엣지에서 됩니다.",
+  },
+  {
     path: "photo-saver/",
     icon: "📥",
     title: "페이지 도우미",
