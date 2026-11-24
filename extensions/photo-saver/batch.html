@@ -44,9 +44,12 @@
       <p class="preview" id="preview"></p>
       <p class="hint" id="filters"></p>
       <label class="option"><input type="checkbox" id="closeTabs"> <span>다 받은 탭은 닫기</span></label>
-      <label class="option" title="화면에 보여야 진짜 사진을 넣는 사이트가 있습니다. 뒤쪽에 열려 한 번도 보이지 않은 탭에서는 임시 그림(로딩 그림, 흐린 작은 그림)이 받아질 수 있어서, 받기 전에 탭을 잠깐 앞에 띄우고 끝까지 내려 봅니다. 받는 동안 탭이 차례로 앞에 뜹니다">
-        <input type="checkbox" id="showPages"> <span>받기 전에 탭을 앞에 띄워 끝까지 내려 보기 <small>(덜 뜬 사진이 받아질 때)</small></span>
-      </label>
+      <fieldset class="modes">
+        <legend title="화면에 보여야 진짜 사진을 넣는 사이트가 있습니다. 뒤쪽에 열려 한 번도 보이지 않은 탭에서는 임시 그림(로딩 그림, 흐린 작은 그림)이 받아질 수 있어서, 받기 전에 탭을 잠깐 앞에 띄우고 내려 봅니다. 받는 동안 탭이 차례로 앞에 뜹니다">받기 전에 내려 보기</legend>
+        <label title="한 화면씩(Page Down처럼) 빠르게 맨 아래까지 내린 뒤 사진을 찾습니다. 지켜보는 시간도 짧아서, 다 뜬 뒤 한참 있다가 생기는 사진은 놓칠 수 있습니다"><input type="radio" name="showPage" value="fast"> 빠르게 맨 아래까지</label>
+        <label title="조금씩 끝까지 내렸다가 맨 위로 돌아옵니다. 내릴수록 길어지는 페이지(끝없이 이어지는 목록)도 따라갑니다. 오래 걸립니다"><input type="radio" name="showPage" value="slow"> 천천히 끝까지 <small>길어지는 페이지</small></label>
+        <label><input type="radio" name="showPage" value="off"> 안 함</label>
+      </fieldset>
     </section>
 
     <section class="box" id="addBox">

@@ -221,7 +221,7 @@ function refresh() {
   $("tidyFind").disabled = running || tidying;
   if (running) $("tidyRun").hidden = true;
   setsUi?.setDisabled(running);
-  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], #jpgQuality, #splitMode, #closeTabs, #showPages")) {
+  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], input[name=showPage], #jpgQuality, #splitMode, #closeTabs")) {
     input.disabled = running;
   }
 }
@@ -270,13 +270,12 @@ function readOptions() {
   settings = loadSettings();
   rules = loadRules();
   extOff = loadExts();
-  for (const name of ["mode", "fileNames", "stitchFormat", "tooLong"]) {
+  for (const name of ["mode", "fileNames", "stitchFormat", "tooLong", "showPage"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) radio.checked = radio.value === settings[name];
   }
   $("jpgQuality").value = String(settings.jpgQuality);
   $("splitMode").value = settings.splitMode;
   $("closeTabs").checked = settings.closeTabs;
-  $("showPages").checked = settings.showPages;
   setsUi?.refresh(); // 확장 프로그램 창에서 세트를 바꾸거나 만들었을 수 있다
   showOptions();
 }
@@ -388,13 +387,34 @@ async function scrollThrough() {
   await wait(WAIT);
 }
 
-// 탭을 앞에 띄우고 끝까지 내려 본다 (1.27.0, 사용자 제보: 링크로 더해 받으면 덜 뜬 이상한 그림이 받아지는 사이트가 있다).
+// 페이지를 한 화면씩(Page Down처럼) 빠르게 맨 아래까지 내리고 거기서 멈춘다 (1.29.0, 탭에 넣는 함수라 함수 밖의 이름을 쓰면 안 된다).
+// 걸음마다 화면을 두 번 그릴 동안만 기다린다(보일 때 사진을 넣는 스크립트가 돌 틈). 걸음 수는 시작할 때의 길이로 정해,
+// 내리는 동안 길어지는 페이지(끝없이 이어지는 목록)는 따라가지 않는다. 맨 위로 돌아가지 않는다
+async function jumpDown() {
+  const MAX_STEPS = 300;
+  const root = document.scrollingElement;
+  if (!root) return;
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+  const drawn = () => Promise.race([frame().then(frame), new Promise((resolve) => setTimeout(resolve, 100))]);
+  const page = Math.max(200, window.innerHeight);
+  const steps = Math.min(MAX_STEPS, Math.ceil(root.scrollHeight / page));
+  for (let step = 0; step < steps; step++) {
+    window.scrollBy(0, page);
+    await drawn();
+    if (root.scrollTop + window.innerHeight >= root.scrollHeight - 2) break;
+  }
+  window.scrollTo(0, root.scrollHeight);
+  await drawn();
+}
+
+// 탭을 앞에 띄우고 내려 본다 (1.27.0, 사용자 제보: 링크로 더해 받으면 덜 뜬 이상한 그림이 받아지는 사이트가 있다).
 // 한 번도 화면에 보이지 않은 탭은 크롬이 그리지 않아서, 보일 때 진짜 사진을 넣는 스크립트(IntersectionObserver 등)가 돌지 않는다.
-// 틀 안의 글(네이버 블로그 본문 등)도 내려 본다. 못 하면(크롬이 막는 페이지 등) 그냥 넘어간다
-async function showPage(tabId) {
+// 틀 안의 글(네이버 블로그 본문 등)도 내려 본다. 못 하면(크롬이 막는 페이지 등) 그냥 넘어간다.
+// how: fast 한 화면씩 빠르게 맨 아래까지 · slow 천천히 끝까지 내렸다가 맨 위로 (길어지는 페이지도 따라간다)
+async function showPage(tabId, how) {
   await chrome.tabs.update(tabId, { active: true }).catch(() => {});
-  await sleep(300);
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: scrollThrough }).catch(() => {});
+  await sleep(how === "fast" ? 100 : 300);
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: how === "fast" ? jumpDown : scrollThrough }).catch(() => {});
 }
 
 const send = (message) => chrome.runtime.sendMessage(message).catch((err) => ({ error: err.message }));
@@ -499,12 +519,13 @@ async function runTab(row) {
     const loaded = await ensureLoaded(row.tabId);
     setState(row, "사진 찾는 중", "now");
     const recent = Date.now() - (loadedAt.get(row.tabId) ?? 0) < RECENT_MS;
-    if (settings.showPages) {
+    if (settings.showPage !== "off") {
       setState(row, "페이지를 내려 보는 중", "now");
-      await showPage(row.tabId);
+      await showPage(row.tabId, settings.showPage);
       setState(row, "사진 찾는 중", "now");
     }
-    const page = await findSettled(row.tabId, opened || loaded.fresh || recent);
+    // 빠르게 내려 봤으면 방금 연 페이지도 짧게(두 번 같으면) 지켜본다 (사용자 결정, 2026-11-24: 받기 전 시간을 줄이려고)
+    const page = await findSettled(row.tabId, settings.showPage !== "fast" && (opened || loaded.fresh || recent));
     // 주소로 더한 줄은 연 페이지의 제목을 보인다
     if (row.added && page.title) {
       row.title = page.title;
@@ -705,7 +726,7 @@ async function runAll() {
   }
   for (const row of list.slice(handled)) setState(row, "받지 않음");
   // 탭들을 앞에 띄웠으면 이 화면으로 돌아온다
-  if (settings.showPages) {
+  if (settings.showPage !== "off") {
     const self = await chrome.tabs.getCurrent().catch(() => null);
     if (self?.id != null) await chrome.tabs.update(self.id, { active: true }).catch(() => {});
   }
@@ -765,7 +786,7 @@ async function init() {
     saveSettings(settings);
     showOptions();
   });
-  for (const name of ["mode", "fileNames", "stitchFormat", "tooLong"]) {
+  for (const name of ["mode", "fileNames", "stitchFormat", "tooLong", "showPage"]) {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) {
       radio.checked = radio.value === settings[name];
       radio.addEventListener("change", () => {
@@ -778,11 +799,6 @@ async function init() {
   $("closeTabs").checked = settings.closeTabs;
   $("closeTabs").addEventListener("change", () => {
     settings.closeTabs = $("closeTabs").checked;
-    saveSettings(settings);
-  });
-  $("showPages").checked = settings.showPages;
-  $("showPages").addEventListener("change", () => {
-    settings.showPages = $("showPages").checked;
     saveSettings(settings);
   });
   $("toggleAll").addEventListener("click", () => {
