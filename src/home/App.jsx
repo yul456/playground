@@ -38,6 +38,12 @@ const FEATURES = [
     description: "컴퓨터가 정한 서로 다른 숫자 3~4개를 스트라이크·볼 힌트로 9회 안에 맞힙니다.",
   },
   {
+    path: "sudoku/",
+    icon: "🔢",
+    title: "스도쿠",
+    description: "가로줄·세로줄·상자마다 1~9를 한 번씩 넣습니다. 난이도 넷, 메모, 힌트, 최고 기록이 있고 문제는 매번 새로 만듭니다.",
+  },
+  {
     path: "golf/scorecard/",
     icon: "⛳",
     title: "골프 스코어카드",

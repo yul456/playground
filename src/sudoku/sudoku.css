@@ -1,0 +1,112 @@
+button:disabled { opacity: 0.5; cursor: default; }
+.container { max-width: 860px; }
+
+/* 난이도와 시간 */
+.sd-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.sd-levels { display: inline-flex; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.sd-levels button { padding: 7px 14px; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.9rem; }
+.sd-levels button.active { background: var(--accent); color: #fff; }
+.sd-clock { color: var(--muted); font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 넓은 화면에서는 판(왼쪽)과 숫자판(오른쪽)을 나란히 둔다 */
+.sd-play { display: grid; grid-template-columns: minmax(0, 468px) minmax(200px, 1fr); gap: 24px; align-items: start; }
+
+/* 판: 9×9. 굵은 선은 상자 경계 */
+.sd-board {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  width: 100%;
+  max-width: 468px;
+  border: 2px solid var(--text);
+  border-radius: 6px;
+  overflow: hidden;
+  container-type: inline-size;
+}
+.sd-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--card);
+  color: var(--accent);
+  font-size: 5.6cqw;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.sd-cell:nth-child(9n) { border-right: 0; }
+.sd-cell:nth-child(n + 73) { border-bottom: 0; }
+.sd-cell.edge-r { border-right: 2px solid var(--text); }
+.sd-cell.edge-b { border-bottom: 2px solid var(--text); }
+.sd-cell.given { color: var(--text); font-weight: 800; }
+.sd-cell.peer { background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+.sd-cell.same { background: color-mix(in srgb, var(--accent) 24%, var(--card)); }
+.sd-cell.selected { background: color-mix(in srgb, var(--accent) 38%, var(--card)); }
+.sd-cell.wrong { color: #dc2626; background: color-mix(in srgb, #dc2626 14%, var(--card)); }
+.sd-cell.wrong.selected { background: color-mix(in srgb, #dc2626 28%, var(--card)); }
+.sd-cell.tip { box-shadow: inset 0 0 0 3px #16a34a; }
+.sd-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* 메모: 칸 안에 3×3으로 작게 */
+.sd-notes {
+  position: absolute;
+  inset: 4%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  color: var(--muted);
+  font-size: 2.5cqw;
+  font-weight: 600;
+}
+.sd-notes span { display: grid; place-items: center; }
+
+/* 결과 칸은 높이를 미리 잡아 두어 글이 바뀔 때 아래 숫자판이 밀리지 않게 한다 */
+.sd-status { min-height: 4.5rem; margin: 0 0 10px; color: var(--muted); word-break: keep-all; }
+.sd-status strong { color: var(--text); }
+.sd-link { padding: 0; background: transparent; color: var(--accent); font-weight: 700; text-decoration: underline; }
+
+/* 숫자판: 숫자 아래에 남은 개수 */
+.sd-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sd-key {
+  display: grid;
+  place-items: center;
+  gap: 0;
+  padding: 8px 0 6px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--card));
+  color: var(--text);
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.sd-key small { color: var(--muted); font-size: 0.7rem; font-weight: 600; }
+.sd-key:disabled { opacity: 0.3; }
+
+.sd-tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+.sd-tools button { padding: 9px 6px; font-size: 0.9rem; font-weight: 700; }
+.sd-on { background: #16a34a; color: #fff; border: 1px solid #16a34a; }
+.sd-option { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--muted); font-size: 0.9rem; }
+.sd-new { width: 100%; margin-top: 12px; font-weight: 700; }
+
+.sd-best { margin: 16px 0 0; color: var(--muted); font-size: 0.85rem; text-align: center; }
+.sd-hint { margin: 10px 0 0; color: var(--muted); font-size: 0.8rem; }
+
+/* 좁은 화면에서는 판 아래에 숫자판을 두고, 숫자를 한 줄로 늘어놓는다 */
+@media (max-width: 720px) {
+  .sd-play { grid-template-columns: minmax(0, 1fr); gap: 14px; justify-items: center; }
+  .sd-side { width: 100%; max-width: 468px; }
+  .sd-status { min-height: 3rem; }
+  .sd-keypad { grid-template-columns: repeat(9, 1fr); gap: 4px; }
+  .sd-key { padding: 8px 0 4px; font-size: 1.2rem; }
+  .sd-tools { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .sd-tools button { padding: 9px 2px; font-size: 0.8rem; }
+}
+@media (max-width: 480px) {
+  .sd-card { padding: 12px; }
+  .sd-levels button { padding: 7px 9px; font-size: 0.85rem; }
+}
