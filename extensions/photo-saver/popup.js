@@ -13,6 +13,7 @@ import { mountSearch } from "./search.js";
 import { mountUnlock } from "./unlock.js";
 import { applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
 import { mountSets } from "./sets.js";
+import { mountAreas } from "./areas.js";
 
 const STITCH_URL = "https://yul456.github.io/playground/stitch/";
 // 확장자 체크박스를 놓는 순서
@@ -563,12 +564,17 @@ async function setOpenIn(value) {
 // 사이드바로 열기 (팝업에서). 사이드바는 누른 그때만 열 수 있어서(사용자 동작) 다른 일을 기다리지 않고 먼저 열고,
 // 열린 뒤에 기억하고 팝업을 닫는다
 function openPanel() {
+  // 팝업이 먼저 닫혀도 남게, 기억하는 일은 서비스 워커에도 맡긴다 (background.js의 open-in)
+  chrome.runtime.sendMessage({ type: "open-in", value: "panel" }).catch(() => {});
   chrome.sidePanel.open({ windowId }).then(
     async () => {
       await setOpenIn("panel").catch(() => {});
       window.close();
     },
-    (err) => showMessage("사이드바를 열지 못했습니다. 크롬 116 이상에서 됩니다.", err.message),
+    (err) => {
+      setOpenIn("popup").catch(() => {});
+      showMessage("사이드바를 열지 못했습니다. 크롬 116 이상에서 됩니다.", err.message);
+    },
   );
 }
 
@@ -582,6 +588,16 @@ async function backToPopup() {
 }
 
 async function init() {
+  // 새로 열면 맨 위에서 시작한다 (사용자 요청, 2026-11-25). 내용이 늦게 채워지며 자리가 밀리지 않게,
+  // 처음 그리기가 끝날 때까지 사용자가 직접 움직이지 않았으면 맨 위에 둔다
+  mountAreas();
+  history.scrollRestoration = "manual";
+  window.scrollTo(0, 0);
+  let moved = false;
+  for (const type of ["wheel", "keydown", "pointerdown", "touchstart"]) addEventListener(type, () => (moved = true), { once: true, capture: true, passive: true });
+  const toTop = () => moved || window.scrollTo(0, 0);
+  setTimeout(toTop, 300);
+  setTimeout(toTop, 1200);
   if (inPanel) document.documentElement.classList.add("panel");
   $("base").textContent = BASE_FOLDER;
   // 설정 세트를 바꾸거나 지우면 옵션, 꺼 둔 확장자, 빼 둔 이름이 한꺼번에 바뀐다. 창을 다시 읽어 새 값으로 처음부터 그린다
@@ -654,9 +670,10 @@ async function init() {
   $("openPanel").addEventListener("click", openPanel);
   $("openPopup").addEventListener("click", backToPopup);
   // 서비스 워커가 브라우저를 켤 때 맞추지만, 그 전에 열렸을 수도 있어 창이 열릴 때도 기억해 둔 대로 맞춘다
-  loadOpenIn()
-    .then(applyOpenIn)
-    .catch(() => {});
+  // 사이드바로 열렸으면 사이드바로 기억한다. 팝업의 "사이드바로 열기"는 사이드바가 열린 뒤에 기억하는데,
+  // 사이드바가 열리면 크롬이 팝업을 닫아서 기억하기 전에 끊길 수 있다. 그러면 사이드바를 닫은 뒤
+  // 아이콘이 다시 팝업을 열었다 (2026-11-25 사용자 제보, 1.30.0)
+  (inPanel ? setOpenIn("panel") : loadOpenIn().then(applyOpenIn)).catch(() => {});
   links = mountLinks({ inPanel, openPanel });
   videos = mountVideos({ getFolder: jobFolder, onStarted: showJob });
   unlock = mountUnlock();

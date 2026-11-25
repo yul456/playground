@@ -121,9 +121,24 @@ export function mountLinks({ inPanel, openPanel }) {
     $("linksNote").classList.toggle("warn", warn);
   }
 
+  // 창을 "링크" 줄이 맨 위에 오게 내린다. 링크 목록은 안에서 따로 스크롤되어(이중 스크롤),
+  // 창을 내리지 않으면 목록 아래의 넣기 단추가 창 밖에 있었다 (1.30.0, 2026-11-25 사용자 요청)
+  function revealLinks() {
+    requestAnimationFrame(() => {
+      const bar = $("showLinks").closest(".links-bar");
+      const groups = $("linkGroups");
+      // 링크 줄부터 넣기 단추까지가 창(아래에 붙은 받기 줄 위)에 다 들어오게 목록의 높이를 맞춘다
+      const other = $("links").getBoundingClientRect().bottom - bar.getBoundingClientRect().top - groups.clientHeight;
+      const room = window.innerHeight - (document.querySelector("footer")?.offsetHeight ?? 0) - other - 12;
+      groups.style.maxHeight = `${Math.max(100, Math.round(room))}px`;
+      bar.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }
+
   async function showLinks() {
     const run = ++viewRun;
     $("links").hidden = false;
+    revealLinks();
     $("linkGroups").replaceChildren();
     $("linksTitle").textContent = "이 페이지 링크";
     linksNote("링크를 찾는 중…");
@@ -151,6 +166,7 @@ export function mountLinks({ inPanel, openPanel }) {
     };
     linksNote(!suggested ? "" : extra.length ? `글 목록으로 보이는 가장 큰 묶음과, 주소 모양은 다르지만 목록에서 같은 자리에 있는 링크 ${extra.length}개를 골라 두었습니다.` : "글 목록으로 보이는 가장 큰 묶음을 골라 두었습니다.");
     renderView();
+    revealLinks();
   }
 
   // 묶음과 링크를 그린다. 거르기 칸에 맞는 링크만 보이고, 묶음 체크박스는 보이는 링크를 한꺼번에 켜고 끈다

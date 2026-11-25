@@ -8,7 +8,7 @@ import { parseUrl } from "./addresses.js";
 import { linkTextOf, showToast } from "./collect.js";
 import { HIDE_KEY, HIDE_SITE_MAX, HIDE_SITES_MAX, loadHideRules, rulesOf, syncHideScripts, validRule, validSite } from "./hide-sites.js";
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase, videoBase, videoExtFromMime, videoExtFromName, videoExtFromUrl, videoMime } from "./names.js";
-import { applyOpenIn, loadOpenIn } from "./opener.js";
+import { OPEN_IN, applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
 import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
 import { SEARCH_KEY, cleanSelection, loadMarks, loadWords, searchUrl } from "./search-words.js";
 import { URL_KEY, fillTemplate, loadTemplates, templateLabel } from "./url-templates.js";
@@ -554,7 +554,20 @@ function queueToggle(page) {
   });
 }
 
+// 순서를 바꾼다 (열린 탭 받기 화면에서 끌어 옮기거나 뒤집었을 때). urls의 순서대로 놓고, 거기 없는 주소는 뒤에 원래 순서대로 둔다
+function queueReorder(urls) {
+  return queued(async () => {
+    const list = await readQueue();
+    const at = new Map(urls.map((url, index) => [url, index]));
+    const moved = list.filter((page) => at.has(page.url)).sort((a, b) => at.get(a.url) - at.get(b.url));
+    const pages = [...moved, ...list.filter((page) => !at.has(page.url))];
+    await writeQueue(pages);
+    return { pages };
+  });
+}
+
 const QUEUE_OPS = {
+  "queue-reorder": (message) => queueReorder(Array.isArray(message.urls) ? message.urls.map(String) : []),
   "queue-add": (message) => queueAdd(message.pages ?? []),
   "queue-remove": (message) => queueRemove(message.urls ?? []),
   "queue-toggle": (message) => queueToggle(message.page),
@@ -935,6 +948,13 @@ async function textOpen(id, text, tab, clear) {
 globalThis.photoSaverMenu = { click: onMenuClick, items: () => menuItems, built: () => menuBuild };
 
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  // 아이콘이 무엇을 열지 기억한다 (팝업의 "사이드바로 열기". 팝업은 사이드바가 열리면 닫혀서 스스로 끝까지 하지 못할 수 있다)
+  if (message?.type === "open-in" && OPEN_IN.includes(message.value)) {
+    saveOpenIn(message.value)
+      .then(() => applyOpenIn(message.value))
+      .catch(() => {});
+    return false;
+  }
   if (message?.target === "background") {
     onStitchMessage(message);
     return false;

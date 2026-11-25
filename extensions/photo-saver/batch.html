@@ -44,10 +44,10 @@
       <p class="preview" id="preview"></p>
       <p class="hint" id="filters"></p>
       <label class="option"><input type="checkbox" id="closeTabs"> <span>다 받은 탭은 닫기</span></label>
+      <label class="option" title="다 받으면 짧은 소리를 냅니다. 소리와 상관없이, 이 탭의 제목에 결과를 적고 다른 프로그램을 보고 있으면 작업 표시줄의 크롬을 깜빡입니다"><input type="checkbox" id="doneSound"> <span>끝나면 소리로 알리기</span></label>
       <fieldset class="modes">
         <legend title="화면에 보여야 진짜 사진을 넣는 사이트가 있습니다. 뒤쪽에 열려 한 번도 보이지 않은 탭에서는 임시 그림(로딩 그림, 흐린 작은 그림)이 받아질 수 있어서, 받기 전에 탭을 잠깐 앞에 띄우고 내려 봅니다. 받는 동안 탭이 차례로 앞에 뜹니다">받기 전에 내려 보기</legend>
-        <label title="한 화면씩(Page Down처럼) 빠르게 맨 아래까지 내린 뒤 사진을 찾습니다."><input type="radio" name="showPage" value="fast"> 빠르게 맨 아래까지</label>
-        <label title="조금씩 끝까지 내렸다가 맨 위로 돌아옵니다. 내릴수록 길어지는 페이지(끝없이 이어지는 목록)도 따라갑니다. 오래 걸립니다"><input type="radio" name="showPage" value="slow"> 천천히 끝까지 <small>길어지는 페이지</small></label>
+        <label title="한 화면씩(Page Down처럼) 빠르게 맨 아래까지 내립니다. 그사이 페이지가 길어졌으면(끝없이 이어지는 목록) 다시 맨 아래까지 내리고, 더 길어지지 않으면 사진을 찾습니다"><input type="radio" name="showPage" value="on"> 맨 아래까지 내려 보기</label>
         <label><input type="radio" name="showPage" value="off"> 안 함</label>
       </fieldset>
     </section>
@@ -55,7 +55,7 @@
     <section class="box" id="addBox">
       <h2>주소로 더하기</h2>
       <p class="hint">
-        넣은 주소는 아래 목록 끝에 들어가고, 받을 차례가 되면 탭으로 열어 받습니다. 여러 개를 넣을 때는 위의 "다 받은 탭은
+        넣은 주소는 아래 목록 끝에 들어가고, 받는 동안 5개까지 미리 탭으로 열어 두었다가 차례대로 받습니다. 여러 개를 넣을 때는 위의 "다 받은 탭은
         닫기"를 켜 두면 받은 페이지를 닫아 탭이 쌓이지 않습니다. 확장 프로그램 창의 "링크" 줄(이 페이지 링크, 고르기)이나
         링크 오른쪽 클릭으로도 넣을 수 있고, 넣은 주소는 이 화면을 닫아도 남습니다. 받은 주소는 목록에서 빠집니다.
       </p>
@@ -77,6 +77,7 @@
       <div class="toolbar">
         <span class="count" id="count"></span>
         <button type="button" class="link" id="toggleAll">모두 끄기</button>
+        <button type="button" class="link" id="reverseAdded" title="체크한 더한 주소끼리 순서를 거꾸로 뒤집습니다(체크하지 않은 줄은 제자리). 목록의 최신 글이 맨 위인 사이트와 맨 아래인 사이트가 있어서, 받는 순서를 맞출 때 씁니다. 한 줄씩 옮기려면 줄을 끌어서 놓으세요" hidden>체크한 주소 순서 뒤집기</button>
         <button type="button" class="link" id="clearAdded" hidden>더한 주소 빼기</button>
         <button type="button" class="link" id="reload">탭 다시 읽기</button>
       </div>
@@ -93,6 +94,7 @@
       <button type="button" class="secondary" id="openFolder" hidden>폴더 열기</button>
       <span class="status" id="status"></span>
     </div>
+    <p class="review" id="review" hidden></p>
 
     <section class="box tidy">
       <h2>크롬 다운로드 목록 정리</h2>

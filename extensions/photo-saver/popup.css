@@ -54,7 +54,18 @@ h1 { margin: 0; font-size: 15px; }
 .quick-list button:hover { border-color: var(--accent); }
 
 /* 기능별 영역(페이지 손보기 · 구글 검색 · 사진·영상 받기) 사이의 선 */
-.area + .area { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border); }
+.area + .area { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
+/* 바로 열기는 보일 것이 없으면 영역째 보이지 않고, 그때는 다음 영역이 첫 영역이라 선을 긋지 않는다 */
+.area:has(#quick[hidden]) { display: none; }
+.area:has(#quick[hidden]) + .area { margin-top: 0; padding-top: 0; border-top: 0; }
+/* 받기 줄은 사진·영상 받기 영역의 것이라 그 영역을 접으면 함께 숨긴다 (영역 안에 넣으면 영역이 화면에 들어와야만 아래에 붙는다) */
+main:has(.area[data-area="photos"] > .area-body[hidden]) > footer { display: none; }
+/* 영역 제목 (areas.js). 누르면 그 영역을 접는다 */
+.area-head { display: flex; align-items: center; gap: 6px; width: 100%; margin: 0 0 6px; padding: 2px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; }
+.area-head::before { content: "▾"; width: 1em; }
+.area-head[aria-expanded="false"] { margin-bottom: 2px; }
+.area-head[aria-expanded="false"]::before { content: "▸"; }
+.area-head:hover { color: var(--text); }
 
 /* 링크 줄: 고르기, 이 페이지 링크, 열린 탭 받기 목록의 수 (links.js) */
 .links-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 8px; }

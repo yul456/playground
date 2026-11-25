@@ -18,6 +18,8 @@ export async function loadQueue() {
 export const queueAdd = (pages) => chrome.runtime.sendMessage({ type: "queue-add", pages });
 export const queueRemove = (urls) => chrome.runtime.sendMessage({ type: "queue-remove", urls });
 export const queueToggle = (page) => chrome.runtime.sendMessage({ type: "queue-toggle", page });
+// 목록의 순서를 바꾼다: urls의 순서대로 놓고, urls에 없는 주소는 그 뒤에 원래 순서대로 둔다
+export const queueReorder = (urls) => chrome.runtime.sendMessage({ type: "queue-reorder", urls });
 
 // 목록이 바뀌면 onChange(pages)를 부른다
 export function watchQueue(onChange) {

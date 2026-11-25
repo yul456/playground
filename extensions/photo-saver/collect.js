@@ -17,7 +17,9 @@ export function collectImages() {
   ];
   const LAZY_SRCSET = ["data-srcset", "data-lazy-srcset"];
   const images = [];
-  const seen = new Set();
+  // 주소 → 그 주소의 항목. count는 그 주소를 쓰는 곳의 수다. 진짜 사진을 넣기 전의 임시 그림은 대개 한 주소를 여러 번 쓴다.
+  // 열린 탭 받기가 이 수가 줄어드는 것을 보고 사진이 아직 바뀌는 중인지 안다 (1.30.0)
+  const seen = new Map();
 
   const toUrl = (value) => {
     if (typeof value !== "string" || !value.trim()) return null;
@@ -62,9 +64,15 @@ export function collectImages() {
   };
 
   const add = (url, info) => {
-    if (!url || seen.has(url)) return;
-    seen.add(url);
-    images.push({ url, width: 0, height: 0, ...info });
+    if (!url) return;
+    const had = seen.get(url);
+    if (had) {
+      had.count++;
+      return;
+    }
+    const entry = { url, width: 0, height: 0, count: 1, ...info };
+    seen.set(url, entry);
+    images.push(entry);
   };
 
   const visitImage = (img) => {

@@ -23,7 +23,7 @@ export const STITCH_FORMATS = ["jpg", "png"];
 // 나누는 방법(splitMode)은 imageInfo.js의 SPLIT_MODES(균등하게 · 최대 + 나머지)다. 사진 세로로 붙이기와 같은 옵션이다
 export const TOO_LONG = ["split", "png"];
 // 열린 탭 받기에서 받기 전에 탭을 앞에 띄워 내려 보는 방법 (기본이 맨 앞)
-export const SHOW_PAGE = ["fast", "slow", "off"];
+export const SHOW_PAGE = ["on", "off"];
 // JPG 품질과 기본값. 사이트의 src/shared/jpgQuality.js와 같은 값이다 (바꾸면 함께 바꾼다. 기본 95를 고른 까닭도 거기 있다).
 // 선택지는 100부터 85까지 5씩이다 (사용자 요청, 1.18.0. 그 전에는 100·95·90·80이었다). 저장해 둔 값이 선택지에 없으면 기본값으로 돌아간다
 export const JPG_QUALITIES = [100, 95, 90, 85];
@@ -45,8 +45,9 @@ export function loadSettings() {
   // stitchFormat: 이어 붙인 그림의 형식 (jpg · png), jpgQuality: JPG 품질
   // tooLong: JPG 한 장에 담기에 너무 길 때 (split 여러 장으로 · png PNG 한 장), splitMode: 나누는 방법 (even 균등하게 · max 최대 + 나머지)
   // closeTabs: 열린 탭 받기에서 다 받은 탭을 닫을지
-  // showPage: 열린 탭 받기에서 받기 전에 탭을 앞에 띄워 내려 볼지 (off 안 함 · fast 빠르게 맨 아래까지 · slow 천천히 끝까지).
-  // 1.27.0~1.28.0은 showPages(켬·끔, 기본 켬)였고 켠 것이 지금의 slow다. 끈 것만 off로 옮기고 나머지는 fast로 시작한다
+  // showPage: 열린 탭 받기에서 받기 전에 탭을 앞에 띄워 내려 볼지 (on 내려 보기 · off 안 함).
+  // 1.27.0~1.28.0은 showPages(켬·끔, 기본 켬)였고 켠 것이 지금의 slow다. 1.29.x는 fast(빠르게)·slow(천천히)·off였다.
+  // 1.30.0에서 fast와 slow를 하나(on)로 합쳤다. 끈 것(showPages false, off)만 off이고 나머지는 모두 on으로 옮긴다
   const fallback = {
     hideDecor: true,
     mode: "files",
@@ -59,6 +60,8 @@ export function loadSettings() {
     splitMode: SPLIT_MODES[0],
     closeTabs: false,
     showPage: SHOW_PAGE[0],
+    // 열린 탭 받기가 끝나면 소리로 알릴지 (1.30.0)
+    doneSound: true,
   };
   try {
     const saved = { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
@@ -71,6 +74,7 @@ export function loadSettings() {
     if (!TOO_LONG.includes(saved.tooLong)) saved.tooLong = fallback.tooLong;
     if (!SPLIT_MODES.includes(saved.splitMode)) saved.splitMode = fallback.splitMode;
     saved.closeTabs = Boolean(saved.closeTabs);
+    saved.doneSound = saved.doneSound !== false;
     if (saved.showPages === false) saved.showPage = "off";
     else if (!SHOW_PAGE.includes(saved.showPage)) saved.showPage = fallback.showPage;
     delete saved.showPages;

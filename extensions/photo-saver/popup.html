@@ -18,12 +18,15 @@
     </div>
     <p class="page" id="page">&nbsp;</p>
     <!-- 바로 열기: 고른 글이나 복사한 글로 완성한 구글 검색·주소 열기 (quick.js) -->
-    <section class="quick" id="quick" aria-label="바로 열기" hidden>
-      <p class="quick-source" id="quickSource"></p>
-      <div class="quick-list" id="quickList"></div>
+    <!-- 다른 영역처럼 제목을 눌러 접는다. 보일 것이 없으면(#quick이 hidden) 영역째 보이지 않는다 -->
+    <section class="area" data-area="quick" aria-label="바로 열기">
+      <div class="quick" id="quick" hidden>
+        <p class="quick-source" id="quickSource"></p>
+        <div class="quick-list" id="quickList"></div>
+      </div>
     </section>
     <!-- 기능별 영역: 페이지 손보기(오른쪽 클릭 막기 풀기, 숨기기) · 고른 글자로 찾기·열기(구글 검색, 주소 열기) · 사진·영상 받기. 영역 사이에 선을 긋는다 (사용자 요청, 2026-11-19) -->
-    <section class="area" aria-label="페이지 손보기">
+    <section class="area" data-area="page" aria-label="페이지 손보기">
       <!-- 오른쪽 클릭·글자 고르기 막기 풀기 (unlock.js) -->
       <div class="links-bar">
         <span class="links-label">오른쪽 클릭</span>
@@ -49,7 +52,7 @@
         <button type="button" class="link" id="hideClearRules">모두 다시 보이기</button>
       </details>
     </section>
-    <section class="area" aria-label="고른 글자로 찾기·열기">
+    <section class="area" data-area="text" aria-label="고른 글자로 찾기·열기">
       <!-- 고른 글자에 붙일 말을 더해 구글 검색 (search.js. 오른쪽 클릭 메뉴는 background.js) -->
       <div class="links-bar">
         <span class="links-label" title="페이지에서 글자를 드래그하거나 두 번 눌러 고른 뒤 오른쪽 클릭하면, 페이지 도우미 아래에 붙일 말마다 한 줄씩 나옵니다. 누르면 고른 글 바로 뒤에 그 말을 붙여 새 탭에서 구글로 찾습니다. 띄어 쓰려면 붙일 말 앞에 빈칸을 넣으세요. 복사해 둔 글로 찾으려면 글자를 고르지 않고 빈 곳을 오른쪽 클릭하세요">구글 검색</span>
@@ -85,7 +88,7 @@
         <span>글자를 고르면 옆에 단추 보이기 <small>(누르면 위 목록이 고른 글로 완성되어 나옵니다)</small></span>
       </label>
     </section>
-    <section class="area" aria-label="사진·영상 받기">
+    <section class="area" data-area="photos" aria-label="사진·영상 받기">
       <!-- 링크를 열린 탭 받기 목록에 넣기 (links.js) -->
       <div class="links-bar">
         <span class="links-label">링크</span>
@@ -196,6 +199,7 @@
       </div>
     </section>
 
+    <!-- 받기 줄: 늘 창 아래에 붙는다. 사진·영상 받기 영역을 접으면 함께 숨긴다 (popup.css) -->
     <footer>
       <div class="row">
         <button type="button" id="start" disabled>받기</button>

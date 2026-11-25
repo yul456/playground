@@ -1,12 +1,12 @@
 // 열린 탭 받기. 이 창에 열려 있는 탭을 하나씩, 그 페이지에서 확장 프로그램 창을 열어 받기를 누른 것과 똑같이 받는다.
 // 확장 프로그램 창(popup)은 다른 곳을 누르면 닫혀서, 여러 탭을 받는 긴 일은 따로 연 이 탭이 맡는다.
 // 탭마다: 사진 찾기(core.js) → 크기 재기 → 꾸밈 그림·꺼 둔 확장자·빼 둔 이름 빼기 → 받기 맡기기(background.js) → 끝나기를 기다림.
-// 주소로 더한 페이지(addresses.js)는 목록에만 넣어 두고, 받을 차례가 되면 그때 탭으로 연다(사용자 결정: 차례가 오면 열기).
-// 한꺼번에 열면 PC가 느려지고 사이트에 한꺼번에 접속하게 된다.
+// 주소로 더한 페이지(addresses.js)는 목록에만 넣어 두고, 받는 동안 PRELOAD개까지만 미리 탭으로 연다.
+// 한꺼번에 모두 열면 PC가 느려지고 사이트에 한꺼번에 접속하게 된다 (1.29.1까지는 차례가 오면 하나씩 열었다).
 // 더한 주소는 확장 프로그램 저장소(queue.js)에 두어 사이드바(링크 고르기·이 페이지 링크)와 오른쪽 클릭 메뉴로도 넣고,
 // 이 화면을 닫았다 열어도 남는다. 받기를 마친 주소는 저장소에서 빼고 이 화면에는 결과와 함께 남긴다
 import { describeUrls, listUrls, rangeUrls, showUrl } from "./addresses.js";
-import { QUEUE_MAX, loadQueue, queueAdd, queueRemove, watchQueue } from "./queue.js";
+import { QUEUE_MAX, loadQueue, queueAdd, queueRemove, queueReorder, watchQueue } from "./queue.js";
 import { JPG_QUALITIES, extKey, findImages, isDecor, isSmall, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
 import { eraseRecords, findTidy } from "./history.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
@@ -26,6 +26,19 @@ const SCAN_GAP = 700;
 const FRESH_SCANS = 4;
 const STEADY_SCANS = 2;
 const SETTLE_MAX = 10000;
+// 임시 그림이 진짜 사진으로 바뀌는 중이면 더 기다린다 (1.30.0, 2026-11-25 사용자와 정함).
+// 보이지 않는 탭은 크롬이 타이머를 늦춰서 사진이 천천히 바뀌고, SETTLE_MAX에서 끊으면 덜 바뀐 임시 그림을 받았다.
+// 같은 주소를 여러 번 쓰는 그림이 줄면 "바뀌는 중"으로 보고, PROGRESS_QUIET 동안 그런 일이 없으면 끝낸다.
+// 그래도 SETTLE_LONG까지만 기다린다
+const SETTLE_LONG = 30000;
+const PROGRESS_QUIET = 3000;
+// 같은 주소를 여러 번 쓰는 그림이 있으면(임시 그림일 수 있다) 찾은 것이 이만큼 잇달아 같아야 한다.
+// 바뀌는 것을 본 페이지와 방금 뜬 페이지는 BUSY_SCANS번(2.8초), 전부터 떠 있던 페이지는 REPEAT_SCANS번(1.4초: 늦춰진 타이머 1초보다 길게)
+const BUSY_SCANS = 5;
+const REPEAT_SCANS = 3;
+// 주소로 더한 페이지를 이만큼 미리 열어 둔다 (지금 받는 것 포함. 2026-11-25 사용자 제안).
+// 직접 열어 둔 탭은 받을 때까지 시간이 지나 사진이 다 바뀌어 있었다. 앞 페이지를 받는 동안 뒤 페이지가 그 시간을 번다
+const PRELOAD = 5;
 // 다 뜬 지 이만큼이 안 된 탭도 방금 뜬 페이지로 친다 (탭을 열자마자 받기를 누른 경우)
 const RECENT_MS = 5000;
 
@@ -127,6 +140,7 @@ function makeRow(row) {
     remove.title = "목록에서 빼기";
     remove.addEventListener("click", () => removeRows([row]));
     li.append(remove);
+    makeDraggable(row, li);
   }
   row.cell = { li, box, name: title, state, remove };
   if (row.stateText != null) setState(row, row.stateText, row.stateKind, row.stateDetail);
@@ -152,6 +166,58 @@ function removeRows(list) {
   if (urls.length) queueRemove(urls).catch(() => {});
   showEmpty();
   refresh();
+}
+
+// 더한 주소의 순서를 바꾼다 (1.30.0, 2026-11-25 사용자 요청: 순서 바꾸기와 전체 뒤집기.
+// 글 목록의 최신 글이 맨 위인 사이트도 있고 맨 아래인 사이트도 있다). 탭 줄은 그대로 앞에 두고, 더한 줄만 added의 순서로 놓는다.
+// 저장소의 목록도 같은 순서로 맞춘다 (이 화면을 닫았다 열어도 남게)
+function orderAdded(added) {
+  rows = [...rows.filter((row) => !row.added), ...added];
+  $("tabs").append(...rows.map((row) => row.cell.li));
+  queueReorder(added.filter((row) => !row.done).map((row) => row.url)).catch(() => {});
+}
+
+// 체크한 더한 줄끼리만 순서를 뒤집는다 (사용자 요청). 체크하지 않은 줄은 제자리에 둔다
+function reverseChecked() {
+  const added = rows.filter((row) => row.added);
+  const picked = added.filter((row) => row.checked).reverse();
+  orderAdded(added.map((row) => (row.checked ? picked.shift() : row)));
+}
+
+// 더한 줄을 끌어서 다른 더한 줄의 위나 아래에 놓는다
+let dragRow = null;
+function clearDropMarks() {
+  for (const li of document.querySelectorAll("#tabs li.drop-before, #tabs li.drop-after")) li.classList.remove("drop-before", "drop-after");
+}
+function makeDraggable(row, li) {
+  const after = (event) => event.clientY > li.getBoundingClientRect().top + li.offsetHeight / 2;
+  li.draggable = !running;
+  li.addEventListener("dragstart", (event) => {
+    if (running) return event.preventDefault();
+    dragRow = row;
+    li.classList.add("dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", row.url);
+  });
+  li.addEventListener("dragend", () => {
+    dragRow = null;
+    li.classList.remove("dragging");
+    clearDropMarks();
+  });
+  li.addEventListener("dragover", (event) => {
+    if (!dragRow || dragRow === row) return;
+    event.preventDefault();
+    clearDropMarks();
+    li.classList.add(after(event) ? "drop-after" : "drop-before");
+  });
+  li.addEventListener("drop", (event) => {
+    if (!dragRow || dragRow === row || running) return;
+    event.preventDefault();
+    const added = rows.filter((item) => item.added && item !== dragRow);
+    added.splice(added.indexOf(row) + (after(event) ? 1 : 0), 0, dragRow);
+    clearDropMarks();
+    orderAdded(added);
+  });
 }
 
 function newAddedRow(page) {
@@ -208,6 +274,9 @@ function refresh() {
   $("count").textContent = `${chosen}개 고름 · 탭 ${rows.length - added}개${added ? ` · 더한 주소 ${added}개` : ""}`;
   $("clearAdded").hidden = !added;
   $("clearAdded").disabled = running;
+  $("reverseAdded").hidden = rows.filter((row) => row.added && row.checked).length < 2;
+  $("reverseAdded").disabled = running;
+  for (const row of rows) if (row.added && row.cell) row.cell.li.draggable = !running;
   updateAddButtons();
   $("toggleAll").textContent = rows.length && chosen === rows.length ? "모두 끄기" : "모두 고르기";
   $("toggleAll").disabled = running;
@@ -221,7 +290,7 @@ function refresh() {
   $("tidyFind").disabled = running || tidying;
   if (running) $("tidyRun").hidden = true;
   setsUi?.setDisabled(running);
-  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], input[name=showPage], #jpgQuality, #splitMode, #closeTabs")) {
+  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], input[name=showPage], #jpgQuality, #splitMode, #closeTabs, #doneSound")) {
     input.disabled = running;
   }
 }
@@ -276,6 +345,7 @@ function readOptions() {
   $("jpgQuality").value = String(settings.jpgQuality);
   $("splitMode").value = settings.splitMode;
   $("closeTabs").checked = settings.closeTabs;
+  $("doneSound").checked = settings.doneSound;
   setsUi?.refresh(); // 확장 프로그램 창에서 세트를 바꾸거나 만들었을 수 있다
   showOptions();
 }
@@ -349,16 +419,32 @@ async function scan(tabId) {
   }
 }
 
+// 같은 주소를 여러 번 쓰는 그림: 주소 → 쓰는 곳의 수 (둘 이상만). 임시 그림은 대개 이렇다
+const repeatsOf = (page) => new Map(page.images.filter((image) => image.count > 1).map((image) => [image.url, image.count]));
+const sum = (map) => [...map.values()].reduce((a, b) => a + b, 0);
+
 // 탭의 페이지에서 사진을 찾는다. 다 뜬 뒤에도 스크립트가 사진을 더 그릴 수 있어서, 찾은 것이 잇달아 같을 때까지 다시 찾는다.
-// fresh: 방금 열었거나 다시 불러온 페이지인가. 오류 페이지(404 등)는 더 그릴 것이 없으니 전부터 떠 있던 페이지처럼 짧게 본다
+// fresh: 방금 열었거나 다시 불러온 페이지인가. 오류 페이지(404 등)는 더 그릴 것이 없으니 전부터 떠 있던 페이지처럼 짧게 본다.
+// 임시 그림이 진짜 사진으로 바뀌는 중이면(여러 번 쓰는 주소를 쓰는 곳이 줄면) SETTLE_MAX를 넘겨도 기다린다.
+// 결과의 leftover: 지켜보는 동안 줄던 주소(임시 그림)를 아직 쓰고 있는 곳의 수
 async function findSettled(tabId, fresh) {
-  const deadline = Date.now() + SETTLE_MAX;
+  const started = Date.now();
   let page = await scan(tabId);
   let last = signature(page);
   let same = 1;
+  let repeats = repeatsOf(page);
+  let progressAt = 0; // 바뀌는 것을 마지막으로 본 때
+  const dummies = new Set(); // 줄어드는 것을 본 주소
+  const done = () => {
+    page.leftover = sum(new Map([...repeatsOf(page)].filter(([url]) => dummies.has(url))));
+    return page;
+  };
   for (;;) {
-    const need = fresh && !(page.status >= 400) ? FRESH_SCANS : STEADY_SCANS;
-    if (same >= need || Date.now() >= deadline) return page;
+    let need = fresh && !(page.status >= 400) ? FRESH_SCANS : STEADY_SCANS;
+    if (repeats.size && !(page.status >= 400)) need = fresh || progressAt ? BUSY_SCANS : REPEAT_SCANS;
+    const waited = Date.now() - started;
+    const busy = progressAt && Date.now() - progressAt < PROGRESS_QUIET;
+    if (same >= need || waited >= SETTLE_LONG || (waited >= SETTLE_MAX && !busy)) return done();
     await sleep(SCAN_GAP);
     // 그사이 다른 주소로 넘어갔으면 다 뜨기를 기다리고 방금 뜬 페이지로 친다
     if ((await ensureLoaded(tabId)).fresh) fresh = true;
@@ -366,55 +452,57 @@ async function findSettled(tabId, fresh) {
     const now = signature(page);
     same = now === last ? same + 1 : 1;
     last = now;
+    const nowRepeats = repeatsOf(page);
+    for (const [url, count] of repeats) {
+      if ((nowRepeats.get(url) ?? 0) < count) {
+        dummies.add(url);
+        progressAt = Date.now();
+      }
+    }
+    repeats = nowRepeats;
   }
 }
 
-// 페이지를 위에서 아래로 한 화면씩 내려 보고 맨 위로 돌아온다 (탭에 넣는 함수라 함수 밖의 이름을 쓰면 안 된다).
-// 내리는 동안 페이지가 길어지면(끝없이 이어지는 목록) 따라가되 MAX_STEPS까지만 한다
-async function scrollThrough() {
-  const MAX_STEPS = 60;
-  const WAIT = 120;
-  const root = document.scrollingElement;
-  if (!root) return;
-  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  for (let step = 0; step < MAX_STEPS; step++) {
-    const before = root.scrollTop;
-    window.scrollBy(0, Math.max(200, Math.floor(window.innerHeight * 0.8)));
-    await wait(WAIT);
-    if (root.scrollTop === before && root.scrollTop + window.innerHeight >= root.scrollHeight - 2) break;
-  }
-  window.scrollTo(0, 0);
-  await wait(WAIT);
-}
-
-// 페이지를 한 화면씩(Page Down처럼) 빠르게 맨 아래까지 내리고 거기서 멈춘다 (1.29.0, 탭에 넣는 함수라 함수 밖의 이름을 쓰면 안 된다).
-// 걸음마다 화면을 두 번 그릴 동안만 기다린다(보일 때 사진을 넣는 스크립트가 돌 틈). 걸음 수는 시작할 때의 길이로 정해,
-// 내리는 동안 길어지는 페이지(끝없이 이어지는 목록)는 따라가지 않는다. 맨 위로 돌아가지 않는다
+// 페이지를 한 화면씩(Page Down처럼) 빠르게 맨 아래까지 내리고, 그사이 페이지가 길어졌으면(끝없이 이어지는 목록) 다시 맨 아래까지 내린다.
+// 더 길어지지 않으면 거기서 멈춘다 (맨 위로 돌아가지 않는다). 탭에 넣는 함수라 함수 밖의 이름을 쓰면 안 된다.
+// 걸음마다 화면을 두 번 그릴 동안만 기다린다(보일 때 사진을 넣는 스크립트가 돌 틈).
+// 맨 아래에서는 GROW_WAIT 동안 길어지는지 보고, 길어지면 바로 이어서 내린다. ROUNDS번까지만 따라간다.
+// 1.29.x까지는 "빠르게"(길어져도 따라가지 않음)와 "천천히"(처음부터 조금씩 0.12초마다, 60걸음까지)가 따로 있었다.
+// 사용자가 둘을 합쳐 이 방식으로 하자고 했다 (1.30.0, 2026-11-25)
 async function jumpDown() {
   const MAX_STEPS = 300;
+  const ROUNDS = 20;
+  const GROW_WAIT = 700;
   const root = document.scrollingElement;
   if (!root) return;
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-  const drawn = () => Promise.race([frame().then(frame), new Promise((resolve) => setTimeout(resolve, 100))]);
-  const page = Math.max(200, window.innerHeight);
-  const steps = Math.min(MAX_STEPS, Math.ceil(root.scrollHeight / page));
-  for (let step = 0; step < steps; step++) {
-    window.scrollBy(0, page);
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const drawn = () => Promise.race([frame().then(frame), pause(100)]);
+  const atBottom = () => root.scrollTop + window.innerHeight >= root.scrollHeight - 2;
+  for (let round = 0; round < ROUNDS; round++) {
+    const page = Math.max(200, window.innerHeight);
+    const steps = Math.min(MAX_STEPS, Math.ceil((root.scrollHeight - root.scrollTop) / page));
+    for (let step = 0; step < steps && !atBottom(); step++) {
+      window.scrollBy(0, page);
+      await drawn();
+    }
+    window.scrollTo(0, root.scrollHeight);
     await drawn();
-    if (root.scrollTop + window.innerHeight >= root.scrollHeight - 2) break;
+    // 맨 아래에서 페이지가 길어지는지 본다
+    const height = root.scrollHeight;
+    const until = Date.now() + GROW_WAIT;
+    while (root.scrollHeight <= height && Date.now() < until) await pause(50);
+    if (root.scrollHeight <= height) break;
   }
-  window.scrollTo(0, root.scrollHeight);
-  await drawn();
 }
 
 // 탭을 앞에 띄우고 내려 본다 (1.27.0, 사용자 제보: 링크로 더해 받으면 덜 뜬 이상한 그림이 받아지는 사이트가 있다).
 // 한 번도 화면에 보이지 않은 탭은 크롬이 그리지 않아서, 보일 때 진짜 사진을 넣는 스크립트(IntersectionObserver 등)가 돌지 않는다.
-// 틀 안의 글(네이버 블로그 본문 등)도 내려 본다. 못 하면(크롬이 막는 페이지 등) 그냥 넘어간다.
-// how: fast 한 화면씩 빠르게 맨 아래까지 · slow 천천히 끝까지 내렸다가 맨 위로 (길어지는 페이지도 따라간다)
-async function showPage(tabId, how) {
+// 틀 안의 글(네이버 블로그 본문 등)도 내려 본다. 못 하면(크롬이 막는 페이지 등) 그냥 넘어간다
+async function showPage(tabId) {
   await chrome.tabs.update(tabId, { active: true }).catch(() => {});
-  await sleep(how === "fast" ? 100 : 300);
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: how === "fast" ? jumpDown : scrollThrough }).catch(() => {});
+  await sleep(100);
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: jumpDown }).catch(() => {});
 }
 
 const send = (message) => chrome.runtime.sendMessage(message).catch((err) => ({ error: err.message }));
@@ -438,13 +526,17 @@ async function startJob(message) {
 function waitJob(id, onUpdate) {
   return new Promise((resolve) => {
     let timer = null;
+    let finished = false;
     const finish = (job) => {
+      finished = true;
       chrome.runtime.onMessage.removeListener(onMessage);
       clearInterval(timer);
       resolve(job);
     };
+    // 끝난 뒤에 온 소식은 버린다. 1초마다 묻는 물음의 대답이 "끝났다"는 소식보다 늦게 오면(물을 때는 아직 받는 중이었다)
+    // 다 받은 줄의 결과 글을 "이어 붙이는 중" 같은 진행 글로 덮어썼다 (2026-11-25 사용자 제보, 1.30.0)
     const see = (job) => {
-      if (!job || job.id !== id) return;
+      if (finished || !job || job.id !== id) return;
       onUpdate(job);
       if (!job.running) finish(job);
     };
@@ -511,6 +603,23 @@ async function openAdded(row) {
   return true;
 }
 
+// 주소로 더한 줄을 미리 열어 둔다: list의 from번째부터 PRELOAD개(지금 받을 것 포함)까지. 연 줄은 opened에 넣는다.
+// 열지 못한 것은 넘어간다 (차례가 오면 openAdded가 다시 연다)
+async function preload(list, from, opened) {
+  const ahead = list.slice(from).filter((row) => row.added).slice(0, PRELOAD);
+  for (const row of ahead) {
+    if (row.tabId != null && (await chrome.tabs.get(row.tabId).catch(() => null))) continue;
+    try {
+      const tab = await chrome.tabs.create({ ...(windowId ? { windowId } : {}), url: row.url, active: false });
+      row.tabId = tab.id;
+      opened.add(row);
+      if (row !== list[from]) setState(row, "미리 열어 둠");
+    } catch {
+      // 창이 닫혔거나 주소를 열 수 없다
+    }
+  }
+}
+
 // 탭 하나를 받는다. 받은 것이 있으면 "got", 받을 사진이 없으면 "none", 못 받았으면 "failed"
 async function runTab(row) {
   try {
@@ -521,7 +630,7 @@ async function runTab(row) {
     const recent = Date.now() - (loadedAt.get(row.tabId) ?? 0) < RECENT_MS;
     if (settings.showPage !== "off") {
       setState(row, "페이지를 내려 보는 중", "now");
-      await showPage(row.tabId, settings.showPage);
+      await showPage(row.tabId);
       setState(row, "사진 찾는 중", "now");
     }
     const page = await findSettled(row.tabId, opened || loaded.fresh || recent);
@@ -555,10 +664,16 @@ async function runTab(row) {
     setState(row, progressText(job), "now");
     const done = await waitJob(job.id, (now) => setState(row, progressText(now), "now"));
     const result = resultOf(done);
+    // 끝까지 진짜 사진으로 바뀌지 않은 임시 그림이 있었으면 알리고, 탭을 닫지 않는다 (다시 받아 볼 수 있게)
+    if (page.leftover) {
+      row.review = true;
+      result.text += ` · 임시 그림 ${page.leftover}장이 덜 바뀌었을 수 있음`;
+      result.kind = "warn";
+    }
     setState(row, result.text, result.kind, `찾은 사진 ${items.length}장 · 받는 것 ${urls.length}장${skipped.length ? ` · 뺀 것: ${skipped.join(", ")}` : ""}`);
     lastDownload = done.stitch?.id ?? done.files?.shownId ?? lastDownload;
     if (!result.got) return "failed";
-    if (settings.closeTabs) await chrome.tabs.remove(row.tabId).catch(() => {});
+    if (settings.closeTabs && !page.leftover) await chrome.tabs.remove(row.tabId).catch(() => {});
     return "got";
   } catch (err) {
     const text = String(err?.message ?? err);
@@ -695,6 +810,67 @@ async function addList() {
   note("listNote", message);
 }
 
+// 다 받은 것을 알린다 (1.30.0, 2026-11-25 사용자와 정함). 받는 동안 다른 창이나 다른 프로그램을 보고 있어도 알게 하려는 것이다.
+// 윈도우 알림은 권한이 하나 늘어서 쓰지 않고, 탭 제목 · 작업 표시줄 깜빡임(창에 초점이 없을 때) · 소리(옵션)로 알린다
+const TITLE = document.title;
+// 결과를 적은 제목은 이 화면을 다시 볼 때까지 둔다 (3초 본 뒤 원래 제목으로)
+window.addEventListener("focus", () => setTimeout(() => running || (document.title = TITLE), 3000));
+let audio = null;
+function beep() {
+  try {
+    audio ??= new AudioContext();
+    audio.resume?.();
+    const now = audio.currentTime;
+    // 짧은 소리 둘 (낮은 음, 높은 음)
+    for (const [at, pitch] of [[0, 660], [0.18, 880]]) {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.frequency.value = pitch;
+      gain.gain.setValueAtTime(0.0001, now + at);
+      gain.gain.exponentialRampToValueAtTime(0.2, now + at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.15);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(now + at);
+      osc.stop(now + at + 0.16);
+    }
+  } catch {
+    // 소리를 낼 수 없는 환경
+  }
+}
+
+async function announce(count, review) {
+  document.title = `${review ? "⚠" : "✓"} ${count.got}개 받음${review ? ` · 다시 볼 것 ${review}` : ""} · 열린 탭 받기`;
+  if (settings.doneSound) beep();
+  if (!document.hasFocus()) {
+    const self = await chrome.tabs.getCurrent().catch(() => null);
+    if (self?.windowId != null) await chrome.windows.update(self.windowId, { drawAttention: true }).catch(() => {});
+  }
+}
+
+// 다시 볼 줄(받지 못한 것, 임시 그림이 덜 바뀐 것)을 받기 단추 아래에 모아 보이고, 누르면 그 줄로 간다
+function showReview(list) {
+  const box = $("review");
+  box.replaceChildren();
+  box.hidden = !list.length;
+  if (!list.length) return;
+  box.append(`다시 볼 페이지 ${list.length}개`);
+  for (const row of list.slice(0, 12)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = row.title;
+    button.title = `${row.title} · ${row.stateText ?? ""}`;
+    button.addEventListener("click", () => {
+      const li = row.cell?.li;
+      if (!li?.isConnected) return;
+      li.scrollIntoView({ block: "center", behavior: "smooth" });
+      li.classList.add("flash");
+      setTimeout(() => li.classList.remove("flash"), 1500);
+    });
+    box.append(button);
+  }
+  if (list.length > 12) box.append(`외 ${list.length - 12}개`);
+}
+
 async function runAll() {
   const list = rows.filter((row) => row.checked);
   if (!list.length || running) return;
@@ -703,14 +879,22 @@ async function runAll() {
   stopping = false;
   lastDownload = null;
   $("openFolder").hidden = true;
-  for (const row of list) setState(row, "기다리는 중");
+  for (const row of list) {
+    row.review = false;
+    setState(row, "기다리는 중");
+  }
+  showReview([]);
   refresh();
   const count = { got: 0, none: 0, failed: 0 };
   let handled = 0;
+  const preloaded = new Set(); // 미리 연 줄
   for (const row of list) {
     if (stopping) break;
+    await preload(list, handled, preloaded);
     $("status").textContent = `${handled + 1}/${list.length}번째 탭을 받는 중`;
+    document.title = `받는 중 ${handled + 1}/${list.length} · 열린 탭 받기`;
     const result = await runTab(row);
+    if (result === "failed") row.review = true;
     count[result]++;
     handled++;
     // 주소로 더한 줄은 끝나면 체크를 끄고 저장소의 목록에서 뺀다(결과와 함께 이 화면에는 남는다).
@@ -723,7 +907,14 @@ async function runAll() {
       await queueRemove([row.url]).catch(() => {});
     }
   }
-  for (const row of list.slice(handled)) setState(row, "받지 않음");
+  // 멈춰서 받지 않은 줄 가운데 미리 열어 둔 탭은 닫는다
+  for (const row of list.slice(handled)) {
+    if (preloaded.has(row) && row.tabId != null) {
+      await chrome.tabs.remove(row.tabId).catch(() => {});
+      row.tabId = null;
+    }
+    setState(row, "받지 않음");
+  }
   // 탭들을 앞에 띄웠으면 이 화면으로 돌아온다
   if (settings.showPage !== "off") {
     const self = await chrome.tabs.getCurrent().catch(() => null);
@@ -737,6 +928,9 @@ async function runAll() {
   $("status").textContent = parts.join(" · ");
   $("openFolder").hidden = lastDownload == null;
   stopping = false;
+  const review = list.filter((row) => row.review);
+  showReview(review);
+  await announce(count, review.length);
   // 받는 동안 다른 곳에서 넣고 뺀 주소와 열고 닫은 탭을 목록에 맞춘다 (결과 글은 남는다)
   syncQueue(await loadQueue());
   await readTabs();
@@ -800,6 +994,11 @@ async function init() {
     settings.closeTabs = $("closeTabs").checked;
     saveSettings(settings);
   });
+  $("doneSound").checked = settings.doneSound;
+  $("doneSound").addEventListener("change", () => {
+    settings.doneSound = $("doneSound").checked;
+    saveSettings(settings);
+  });
   $("toggleAll").addEventListener("click", () => {
     const all = rows.every((row) => row.checked);
     for (const row of rows) row.checked = !all;
@@ -807,6 +1006,7 @@ async function init() {
   });
   $("reload").addEventListener("click", readTabs);
   $("clearAdded").addEventListener("click", () => removeRows(rows.filter((row) => row.added)));
+  $("reverseAdded").addEventListener("click", () => running || reverseChecked());
   for (const id of ["rangePrefix", "rangeFrom", "rangeTo", "rangeSuffix"]) {
     $(id).addEventListener("input", previewRange);
     $(id).addEventListener("keydown", (event) => {
