@@ -44,6 +44,12 @@ const FEATURES = [
     description: "가로줄·세로줄·상자마다 1~9를 한 번씩 넣습니다. 난이도 넷, 메모, 힌트, 최고 기록이 있고 문제는 매번 새로 만듭니다.",
   },
   {
+    path: "reversi/",
+    icon: "⚫",
+    title: "리버시",
+    description: "상대 돌을 사이에 끼워 뒤집는 판 놀이입니다. 컴퓨터(쉬움·보통·어려움)와 두거나 둘이서 둡니다.",
+  },
+  {
     path: "golf/scorecard/",
     icon: "⛳",
     title: "골프 스코어카드",

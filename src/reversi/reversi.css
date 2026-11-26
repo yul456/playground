@@ -1,0 +1,111 @@
+.card h2 { margin: 0 0 8px; font-size: 1rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+.container { max-width: 860px; }
+
+/* 상대와 내 돌 고르기 */
+.rv-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.rv-seg { display: inline-flex; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+.rv-seg button { padding: 7px 14px; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.9rem; }
+.rv-seg button.active { background: var(--accent); color: #fff; }
+
+/* 넓은 화면에서는 판(왼쪽)과 점수·단추(오른쪽)를 나란히 둔다 */
+.rv-play { display: grid; grid-template-columns: minmax(0, 480px) minmax(200px, 1fr); gap: 24px; align-items: start; }
+
+/* 판: 8×8 */
+.rv-board {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 2px;
+  width: 100%;
+  max-width: 480px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #14532d;
+  container-type: inline-size;
+}
+.rv-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 2px;
+  background: #2f8f57;
+  cursor: default;
+}
+.rv-cell.can { cursor: pointer; }
+.rv-cell.can:hover { background: #3aa468; }
+.rv-cell.last::after {
+  content: "";
+  position: absolute;
+  width: 14%;
+  height: 14%;
+  border-radius: 50%;
+  background: #ef4444;
+}
+.rv-cell:focus-visible { outline: 3px solid #fde047; outline-offset: -3px; }
+
+/* 돌 */
+.rv-disc { display: block; width: 80%; height: 80%; border-radius: 50%; box-shadow: 0 1px 3px rgb(0 0 0 / 45%); }
+.rv-disc.black { background: #16181c; }
+.rv-disc.white { background: #f6f7f9; }
+.rv-disc.placed { animation: rv-pop 0.2s ease-out; }
+.rv-disc.flip.black { animation: rv-to-black 0.45s ease-in-out; }
+.rv-disc.flip.white { animation: rv-to-white 0.45s ease-in-out; }
+@keyframes rv-pop { from { transform: scale(0.4); } }
+/* 옆으로 눕혔다가 다른 색으로 세운다 */
+@keyframes rv-to-black {
+  0% { background: #f6f7f9; transform: scaleX(1); }
+  49% { background: #f6f7f9; transform: scaleX(0.05); }
+  50% { background: #16181c; transform: scaleX(0.05); }
+  100% { transform: scaleX(1); }
+}
+@keyframes rv-to-white {
+  0% { background: #16181c; transform: scaleX(1); }
+  49% { background: #16181c; transform: scaleX(0.05); }
+  50% { background: #f6f7f9; transform: scaleX(0.05); }
+  100% { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv-disc { animation: none !important; }
+}
+
+/* 둘 수 있는 곳 */
+.rv-dot { width: 22%; height: 22%; border-radius: 50%; opacity: 0.45; }
+.rv-dot.black { background: #16181c; }
+.rv-dot.white { background: #f6f7f9; }
+
+/* 점수: 차례인 쪽에 테두리 */
+.rv-score { display: flex; gap: 10px; }
+.rv-score span {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.rv-score span.turn { border-color: var(--accent); }
+.rv-score .rv-disc { width: 28px; height: 28px; border: 1px solid var(--border); }
+
+/* 결과 칸은 높이를 미리 잡아 두어 글이 바뀔 때 아래 단추가 밀리지 않게 한다 */
+.rv-status { min-height: 4.5rem; margin: 12px 0 10px; color: var(--muted); word-break: keep-all; }
+.rv-status strong { color: var(--text); }
+.rv-actions { display: flex; gap: 8px; }
+.rv-actions button { flex: 1; }
+.rv-check { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 0.9rem; }
+.rv-record { margin: 10px 0 0; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+
+.rv-notes ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 0.9rem; }
+.rv-notes li { margin: 4px 0; word-break: keep-all; }
+
+@media (max-width: 720px) {
+  .rv-play { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .rv-board { margin: 0 auto; }
+  .rv-status { min-height: 3rem; }
+}

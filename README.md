@@ -10,6 +10,7 @@
 - 지뢰찾기: https://yul456.github.io/playground/mines/
 - 숫자 야구: https://yul456.github.io/playground/baseball/
 - 스도쿠: https://yul456.github.io/playground/sudoku/
+- 리버시: https://yul456.github.io/playground/reversi/
 - 골프 스코어카드: https://yul456.github.io/playground/golf/scorecard/
 - 골프 라운드 날씨: https://yul456.github.io/playground/golf/weather/
 - 골프 3D 코스: https://yul456.github.io/playground/golf/3d/
@@ -51,6 +52,7 @@ ball/index.html         구슬 레이스 입구
 mines/index.html        지뢰찾기 입구
 baseball/index.html     숫자 야구 입구
 sudoku/index.html       스도쿠 입구
+reversi/index.html      리버시 입구
 golf/index.html         예전 골프 주소. 날씨 공유 링크(?lat=…)는 golf/weather/로, 나머지는 golf/scorecard/로 넘긴다
 golf/scorecard/        골프 스코어카드 입구 (index.html)
 golf/weather/          골프 라운드 날씨 입구
@@ -84,6 +86,7 @@ src/
   mines/                지뢰찾기
   baseball/             숫자 야구
   sudoku/               스도쿠 (규칙·문제 만들기·풀이기는 sudoku.js)
+  reversi/              리버시 (규칙과 컴퓨터는 reversi.js)
   golf/                 골프 메뉴 세 페이지(스코어카드·라운드 날씨·3D 코스)가 함께 쓰는 폴더 (3D 코스 데이터는 golf/courses3d/)
   stitch/               사진 세로로 붙이기 (PNG를 줄 단위로 이어 쓰는 png.js, 백그라운드 작업 stitchWorker.js,
                         폴더로 붙이기 folders.js, 사진을 골라 붙이기 photos.js·PickedSection.jsx)
@@ -129,6 +132,7 @@ vite.config.js          기준 경로(/playground/), 포트, 기능 페이지 �
 | 지뢰찾기 | `src/mines/`, `mines/` | 없음 |
 | 숫자 야구 | `src/baseball/`, `baseball/` | 없음 |
 | 스도쿠 | `src/sudoku/`, `sudoku/` | 없음 |
+| 리버시 | `src/reversi/`, `reversi/` | 없음 |
 | 골프 (스코어카드·라운드 날씨·3D 코스) | `src/golf/`, `golf/` | `leaflet` (라운드 날씨 지도), `maplibre-gl` (3D 코스 지도). 사진 인식은 패키지 없이 숫자 모양 견본 `digitTemplates.js`와 비교하는 자체 코드 |
 | 사진 세로로 붙이기 | `src/stitch/`, `stitch/` | 없음 (PNG 압축은 브라우저 내장 CompressionStream, JPG는 브라우저 내장 인코더) |
 | 사진 형식 바꾸기 | `src/convert/`, `convert/` | 없음 (JPG는 브라우저 내장 인코더로 만든다) |

@@ -57,6 +57,7 @@ export default defineConfig({
         mines: resolve(import.meta.dirname, "mines/index.html"),
         baseball: resolve(import.meta.dirname, "baseball/index.html"),
         sudoku: resolve(import.meta.dirname, "sudoku/index.html"),
+        reversi: resolve(import.meta.dirname, "reversi/index.html"),
         stitch: resolve(import.meta.dirname, "stitch/index.html"),
         convert: resolve(import.meta.dirname, "convert/index.html"),
         photoCompare: resolve(import.meta.dirname, "photo-compare/index.html"),
