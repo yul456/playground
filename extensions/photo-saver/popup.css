@@ -78,6 +78,14 @@ main:has(.area[data-area="photos"] > .area-body[hidden]) > footer { display: non
 .unlock-always { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
 .unlock-always input { margin: 0; accent-color: var(--accent); }
 .unlock-always:has(input:disabled) { opacity: 0.5; cursor: default; }
+/* 색 찍기 (color.js): 최근에 찍은 색은 그 색을 칠한 단추로 보인다 */
+.links-bar[hidden] { display: none; }
+.color-format { padding: 1px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; font-size: 12px; }
+.color-clear { margin-left: auto; font-size: 12px; }
+.rule-list.color-list { margin: -2px 0 8px; }
+.rule-list.color-list[hidden] { display: none; }
+.rule-list.color-list li { padding: 0; border: 0; }
+.rule-list.color-list .color-chip { padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums; line-height: 1.4; }
 .rules.unlock-sites[hidden] { display: none; }
 /* 늘 숨기는 곳: 이름이 길어 한 줄에 하나씩 */
 .rules.hide-rules[hidden] { display: none; }

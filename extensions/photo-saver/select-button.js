@@ -13,7 +13,7 @@
   if (self.__photoSaverSelect) return;
   self.__photoSaverSelect = true;
   const UI = "photo-saver-ui";
-  const KEYS = ["searchWords", "urlTemplates", "selectButton", "trimChars"];
+  const KEYS = ["searchWords", "searchPlain", "urlTemplates", "selectButton", "trimChars"];
   const TRIM_DEFAULT = "-";
   let host = null;
   let root = null;
@@ -146,7 +146,11 @@
     if (state.selectButton === false) return;
     const marks = new Set(typeof state.trimChars === "string" ? state.trimChars : TRIM_DEFAULT);
     if (![...raw].some((ch) => !/\s/.test(ch) && !marks.has(ch))) return;
-    const count = (Array.isArray(state.searchWords) ? state.searchWords.length : 0) + (Array.isArray(state.urlTemplates) ? state.urlTemplates.length : 0);
+    // 붙일 말 없이 찾기(searchPlain, 처음엔 켬)도 한 줄로 센다
+    const count =
+      (state.searchPlain !== false ? 1 : 0) +
+      (Array.isArray(state.searchWords) ? state.searchWords.length : 0) +
+      (Array.isArray(state.urlTemplates) ? state.urlTemplates.length : 0);
     if (!count) return;
     const now = getSelection();
     if (!now || now.isCollapsed || now.toString() !== raw) return;

@@ -3,7 +3,7 @@
 // 여기서 붙일 말을 더하고 빼면, 서비스 워커가 오른쪽 클릭 메뉴("구글 검색: 고른 글 가격")를 다시 만든다 (search-words.js, background.js).
 // 더한 순서대로 메뉴에 나온다. 바꾸는 즉시 저장한다. 쓰는 법은 줄 이름에 마우스를 올리면 보인다 (늘 보이면 창이 길어진다).
 // 붙일 말은 적은 그대로 고른 글 바로 뒤에 붙는다 (띄어 쓰려면 앞에 빈칸). 앞의 빈칸이 눈에 보이게 목록에는 고른 글 자리를 "…"로 보인다 ("…가격", "… 가격")
-import { SEARCH_KEY, SEARCH_MAX, TRIM_KEY, cleanMarks, cleanWord, loadMarks, loadWords, saveWords } from "./search-words.js";
+import { PLAIN_KEY, SEARCH_KEY, SEARCH_MAX, TRIM_KEY, cleanMarks, cleanWord, loadMarks, loadPlain, loadWords, saveWords } from "./search-words.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -73,6 +73,16 @@ export function mountSearch() {
   loadWords().then((next) => {
     words = next;
     render();
+  });
+
+  // 붙일 말 없이도 찾기 (search-words.js의 loadSearchList. 서비스 워커가 바뀜을 듣고 메뉴를 다시 만든다). 처음엔 켬
+  const plain = $("searchPlain");
+  loadPlain().then((on) => {
+    plain.checked = on;
+  });
+  plain.addEventListener("change", () => chrome.storage.local.set({ [PLAIN_KEY]: plain.checked }).catch(() => {}));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[PLAIN_KEY]) plain.checked = changes[PLAIN_KEY].newValue !== false;
   });
 
   // 고른 글 옆 단추 (select-button.js가 글자를 고를 때마다 이 값을 읽는다). 처음엔 켬

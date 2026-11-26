@@ -6,6 +6,7 @@ import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountLinks } from "./links.js";
 import { mountVideos } from "./videos.js";
+import { mountColor } from "./color.js";
 import { mountHide } from "./hide.js";
 import { mountOpenUrls } from "./open-urls.js";
 import { mountQuick } from "./quick.js";
@@ -678,6 +679,7 @@ async function init() {
   videos = mountVideos({ getFolder: jobFolder, onStarted: showJob });
   unlock = mountUnlock();
   hider = mountHide({ inPanel });
+  mountColor();
   mountSearch();
   mountOpenUrls();
   quick = mountQuick({ inPanel });

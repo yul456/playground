@@ -89,6 +89,22 @@ export async function loadWords() {
   }
 }
 
+// 붙일 말 없이 고른 글·복사한 글 그대로 찾는 줄 (사용자 요청, 2026-11-26, 1.31.0). 창의 "붙일 말 없이도 찾기", 처음엔 켬.
+// 켜 두면 목록 맨 앞에 빈 붙일 말("")이 하나 있는 것처럼 다룬다: 메뉴·고른 글 옆 단추·창 맨 위 목록에 "구글 검색: 고른 글"이 나온다
+export const PLAIN_KEY = "searchPlain";
+export async function loadPlain() {
+  try {
+    return (await chrome.storage.local.get(PLAIN_KEY))[PLAIN_KEY] !== false;
+  } catch {
+    return true;
+  }
+}
+// 구글 검색 줄들: 붙일 말 없이 찾기(켜 두었으면 "")와 붙일 말들
+export async function loadSearchList() {
+  const [plain, words] = await Promise.all([loadPlain(), loadWords()]);
+  return plain ? ["", ...words] : words;
+}
+
 export const saveWords = (list) => chrome.storage.local.set({ [SEARCH_KEY]: list.slice(0, SEARCH_MAX) });
 
 // 고른 글 바로 뒤에 붙일 말을 붙인 구글 검색 주소. 고른 글은 부르는 쪽이 cleanSelection으로 다듬어 넘긴다 (여기서는 기호를 떼지 않는다)

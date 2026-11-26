@@ -10,7 +10,7 @@ import { HIDE_KEY, HIDE_SITE_MAX, HIDE_SITES_MAX, loadHideRules, rulesOf, syncHi
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase, videoBase, videoExtFromMime, videoExtFromName, videoExtFromUrl, videoMime } from "./names.js";
 import { OPEN_IN, applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
 import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
-import { SEARCH_KEY, cleanSelection, loadMarks, loadWords, searchUrl } from "./search-words.js";
+import { PLAIN_KEY, SEARCH_KEY, cleanSelection, loadMarks, loadSearchList, searchUrl } from "./search-words.js";
 import { URL_KEY, fillTemplate, loadTemplates, templateLabel } from "./url-templates.js";
 import { UNLOCK_CSS, UNLOCK_KEY, syncUnlockScripts } from "./unlock-sites.js";
 
@@ -793,7 +793,7 @@ function searchMenus(words, templates) {
 function buildMenus() {
   menuBuild = menuBuild
     .then(async () => {
-      const [words, templates] = await Promise.all([loadWords(), loadTemplates()]);
+      const [words, templates] = await Promise.all([loadSearchList(), loadTemplates()]);
       // 웹 페이지에서만 (크롬 설정 같은 페이지에서는 숨길 수 없다)
       const documentUrlPatterns = ["http://*/*", "https://*/*"];
       const items = [
@@ -818,7 +818,7 @@ function buildMenus() {
 }
 chrome.runtime.onInstalled.addListener(buildMenus);
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes[SEARCH_KEY] || changes[URL_KEY])) buildMenus();
+  if (area === "local" && (changes[SEARCH_KEY] || changes[PLAIN_KEY] || changes[URL_KEY])) buildMenus();
 });
 
 // 지금 탭 바로 뒤에 새 탭으로 연다 (그 탭을 닫으면 원래 탭으로 돌아간다)
@@ -928,7 +928,7 @@ function shownUrl(url) {
 async function textActions(text) {
   const clean = await usable(text);
   if (!clean) return [];
-  const [words, templates] = await Promise.all([loadWords(), loadTemplates()]);
+  const [words, templates] = await Promise.all([loadSearchList(), loadTemplates()]);
   return [
     ...words.map((word) => ({ id: `${SEARCH_PREFIX}${word}`, label: `구글 검색: ${clean}${word}` })),
     ...templates.map((template) => ({ id: `${OPEN_PREFIX}${template}`, label: `열기: ${shownUrl(fillTemplate(template, clean))}` })),

@@ -6,7 +6,7 @@
 // - 누르면 지금 탭 바로 뒤에 새 탭으로 연다 (text-open). 고른 글로 열었으면 그 페이지의 고름을 풀어 준다
 // 구글 검색 붙일 말이나 주소가 하나도 없으면 아무것도 읽지 않고 보이지 않는다. 사이드바는 탭을 바꾸거나 사이드바를 다시 누를 때(focus) 다시 읽는다.
 // 창의 "기호 떼기"에 적어 둔 기호(처음엔 "-", 1.26.0)는 앞뒤에서 뗀 글을 보이고 쓴다 ("399-"를 복사했으면 "복사한 글: 399")
-import { SEARCH_KEY, TRIM_KEY, cleanSelection, loadMarks, loadWords } from "./search-words.js";
+import { PLAIN_KEY, SEARCH_KEY, TRIM_KEY, cleanSelection, loadMarks, loadSearchList } from "./search-words.js";
 import { URL_KEY, loadTemplates } from "./url-templates.js";
 
 const $ = (id) => document.getElementById(id);
@@ -48,7 +48,7 @@ export function mountQuick({ inPanel }) {
 
   async function refresh() {
     const id = ++run;
-    const [words, templates, marks] = await Promise.all([loadWords(), loadTemplates(), loadMarks()]);
+    const [words, templates, marks] = await Promise.all([loadSearchList(), loadTemplates(), loadMarks()]);
     if (id !== run) return;
     if (!words.length && !templates.length) {
       box.hidden = true;
@@ -90,7 +90,7 @@ export function mountQuick({ inPanel }) {
 
   // 목록을 고치거나 뗄 기호를 바꾸면(이 창이나 다른 창에서) 다시 만든다
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes[SEARCH_KEY] || changes[URL_KEY] || changes[TRIM_KEY])) refresh();
+    if (area === "local" && (changes[SEARCH_KEY] || changes[PLAIN_KEY] || changes[URL_KEY] || changes[TRIM_KEY])) refresh();
   });
   // 사이드바는 열어 둔 채 다른 프로그램에서 복사하고 돌아와 누르므로, 창에 초점이 올 때 다시 읽는다
   if (inPanel) addEventListener("focus", () => refresh());
