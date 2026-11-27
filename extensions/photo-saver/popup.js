@@ -1,7 +1,7 @@
 // 확장 프로그램 버튼을 누르면 뜨는 창. 지금 탭의 사진을 찾아 보여 주고, 고른 사진을 받게 맡긴다(background.js).
 // 같은 화면을 크롬 사이드바(사이드 패널)에도 연다 (manifest의 side_panel). 사이드바는 다른 곳을 눌러도 닫히지 않고,
 // 탭을 바꾸거나 다른 페이지로 넘어가도 열려 있어서 그때마다 지금 탭의 사진을 다시 찾는다(follow)
-import { JPG_QUALITIES, NO_EXT, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, newItem, saveExts, saveRules, saveSettings, typeOf } from "./core.js";
+import { JPG_QUALITIES, NO_EXT, extKey, findImages, isDecor, loadExts, loadRules, loadSettings, newItem, saveExts, saveRules, typeOf, updateSettings } from "./core.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountLinks } from "./links.js";
@@ -603,6 +603,22 @@ function openPanel() {
   );
 }
 
+// 저장소의 옵션을 새로 읽어 화면에 맞춘다 (다른 화면에서 바꿨을 때, 1.36.0). 적고 있는 그림 이름 칸은 건드리지 않는다
+function applySettings() {
+  Object.assign(settings, loadSettings());
+  $("hideDecor").checked = settings.hideDecor;
+  for (const name of ["mode", "fileNames", "stitchName", "stitchFormat", "tooLong"]) {
+    for (const radio of document.querySelectorAll(`input[name=${name}]`)) radio.checked = radio.value === settings[name];
+  }
+  $("jpgQuality").value = String(settings.jpgQuality);
+  $("splitMode").value = settings.splitMode;
+  if (document.activeElement !== $("customName")) $("customName").value = settings.customName;
+  showOptions();
+  updateStart();
+  updatePreview();
+  refresh();
+}
+
 // 팝업으로 돌아가기 (사이드바에서): 기억을 팝업으로 바꾸고, 팝업을 바로 열고(크롬 127부터. 못 열면 아이콘을 누르면 된다),
 // 사이드바를 닫는다 (sidePanel.close는 크롬 141부터, 그 전에는 window.close)
 async function backToPopup() {
@@ -626,11 +642,25 @@ async function init() {
   if (inPanel) document.documentElement.classList.add("panel");
   $("base").textContent = BASE_FOLDER;
   // 설정 세트를 바꾸거나 지우면 옵션, 꺼 둔 확장자, 빼 둔 이름이 한꺼번에 바뀐다. 창을 다시 읽어 새 값으로 처음부터 그린다
-  mountSets($("sets"), () => location.reload());
+  const setsUi = mountSets($("sets"), () => location.reload());
+  // 다른 화면(열린 탭 받기, 다른 창)에서 옵션이나 세트를 바꾸면 맞춘다 (1.36.0). 사이드바는 계속 열려 있어서, 안 그러면 옛 옵션을 보이고
+  // 옛 옵션으로 받았다. 고른 세트가 바뀌었으면 처음부터 다시 그린다 (꺼 둔 확장자·빼 둔 이름도 세트마다 다르다)
+  addEventListener("storage", (event) => {
+    if (event.key === "sets") {
+      const active = (text) => {
+        try {
+          return JSON.parse(text ?? "null")?.active ?? null;
+        } catch {
+          return null;
+        }
+      };
+      if (active(event.oldValue) !== active(event.newValue)) location.reload();
+      else setsUi.refresh();
+    } else if (event.key === null || event.key === "settings") applySettings();
+  });
   $("hideDecor").checked = settings.hideDecor;
   $("hideDecor").addEventListener("change", () => {
-    settings.hideDecor = $("hideDecor").checked;
-    saveSettings(settings);
+    updateSettings(settings, { hideDecor: $("hideDecor").checked });
     refresh();
   });
   // 받는 방식, 사진 이름, 이어 붙인 그림 이름과 형식, 너무 길 때: 고르면 바로 기억한다
@@ -638,8 +668,7 @@ async function init() {
     for (const radio of document.querySelectorAll(`input[name=${name}]`)) {
       radio.checked = radio.value === settings[name];
       radio.addEventListener("change", () => {
-        settings[name] = radio.value;
-        saveSettings(settings);
+        updateSettings(settings, { [name]: radio.value });
         showOptions();
         updateStart();
         updatePreview();
@@ -650,20 +679,17 @@ async function init() {
   $("jpgQuality").replaceChildren(...JPG_QUALITIES.map((value) => new Option(String(value), String(value))));
   $("jpgQuality").value = String(settings.jpgQuality);
   $("jpgQuality").addEventListener("change", () => {
-    settings.jpgQuality = Number($("jpgQuality").value);
-    saveSettings(settings);
+    updateSettings(settings, { jpgQuality: Number($("jpgQuality").value) });
   });
   $("splitMode").replaceChildren(...SPLIT_MODES.map((mode) => new Option(SPLIT_LABELS[mode], mode)));
   $("splitMode").value = settings.splitMode;
   $("splitMode").addEventListener("change", () => {
-    settings.splitMode = $("splitMode").value;
-    saveSettings(settings);
+    updateSettings(settings, { splitMode: $("splitMode").value });
     updatePreview();
   });
   $("customName").value = settings.customName;
   $("customName").addEventListener("input", () => {
-    settings.customName = $("customName").value;
-    saveSettings(settings);
+    updateSettings(settings, { customName: $("customName").value });
     updatePreview();
   });
   showOptions();

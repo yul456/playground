@@ -75,6 +75,8 @@ export function loadSettings() {
     // 탭을 여러 개 열 때 탭 사이의 간격(초)과, 연 지 이만큼 지난 뒤에 받기(초) (1.35.0. OPEN_GAPS·OPEN_WAITS)
     openGap: DEFAULT_OPEN_GAP,
     openWait: 0,
+    // 열린 탭 받기에서 받지 못한 페이지를 끝에 한 번 더 받아 볼지 (1.36.0)
+    retryFailed: true,
   };
   try {
     const saved = { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
@@ -90,6 +92,7 @@ export function loadSettings() {
     saved.doneSound = saved.doneSound !== false;
     if (!OPEN_GAPS.includes(saved.openGap)) saved.openGap = fallback.openGap;
     if (!OPEN_WAITS.includes(saved.openWait)) saved.openWait = fallback.openWait;
+    saved.retryFailed = saved.retryFailed !== false;
     if (saved.showPages === false) saved.showPage = "off";
     else if (!SHOW_PAGE.includes(saved.showPage)) saved.showPage = fallback.showPage;
     delete saved.showPages;
@@ -108,6 +111,15 @@ function store(key, value) {
 }
 
 export const saveSettings = (settings) => store(SETTINGS_KEY, settings);
+
+// 옵션 일부만 바꿔 저장한다 (1.36.0): 저장소의 지금 옵션을 새로 읽어 바꿀 것(patch)만 넣고 저장한 뒤, 그 화면이 들고 있는 옵션(into)도 그 값으로 맞춘다.
+// 전에는 화면마다 연 때 읽은 옵션을 들고 있다가 통째로 저장해서, 계속 열려 있는 사이드바가 열린 탭 받기에서 바꾼 옵션을 옛 값으로 되돌렸다.
+// into는 다른 모듈도 같은 객체를 쥐고 있을 수 있어(창의 links.js) 바꿔 끼우지 않고 고쳐 넣는다
+export function updateSettings(into, patch) {
+  const fresh = { ...loadSettings(), ...patch };
+  saveSettings(fresh);
+  return Object.assign(into, fresh);
+}
 
 export function loadRules() {
   try {

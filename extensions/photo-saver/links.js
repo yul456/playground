@@ -4,7 +4,7 @@
 // - 이 페이지 링크: 페이지의 링크를 주소 모양으로 묶어(linkGroups.js) 체크박스로 보이고, 고른 것을 목록에 넣는다.
 //   가장 큰 묶음(글 목록으로 보이는 것)을 처음에 골라 둔다
 import { wrapWindowOpen } from "./collect.js";
-import { OPEN_GAPS, OPEN_MAX, findLinks, loadSettings, saveSettings } from "./core.js";
+import { OPEN_GAPS, OPEN_MAX, findLinks, loadSettings, updateSettings } from "./core.js";
 import { alike, groupLinks, matchesFilter, shapeLabel } from "./linkGroups.js";
 import { QUEUE_MAX, loadQueue, queueAdd, queueToggle, watchQueue } from "./queue.js";
 
@@ -267,8 +267,8 @@ export function mountLinks({ inPanel, openPanel, settings }) {
     if (!urls.length) return;
     const now = urls.slice(0, OPEN_MAX);
     $("openLinks").disabled = true;
-    // 탭 사이에 간격을 두면(1.35.0) 다 열리기까지 시간이 걸린다
-    const gap = settings.openGap;
+    // 탭 사이에 간격을 두면(1.35.0) 다 열리기까지 시간이 걸린다. 간격은 열린 탭 받기에서도 바꾸므로 누를 때 새로 읽는다
+    const gap = loadSettings().openGap;
     if (gap && now.length > 1) linksNote(`${now.length}개를 ${gap}초 간격으로 여는 중입니다 (${Math.ceil(gap * (now.length - 1))}초쯤 걸립니다).`);
     const result = await chrome.runtime.sendMessage({ type: "open-tabs", urls: now, tabId: view.tabId, gap }).catch((err) => ({ error: err.message }));
     if (!result || result.error) {
@@ -348,15 +348,12 @@ export function mountLinks({ inPanel, openPanel, settings }) {
   $("openLinks").addEventListener("click", openChosen);
   $("autoLinks").addEventListener("click", autoChosen);
   // 탭 사이 간격 (1.35.0). 창의 옵션(설정 세트에 들어간다)이라 열린 탭 받기 화면과 같은 값이다.
-  // 저장소의 다른 옵션을 이 창이 들고 있던 옛 값으로 덮어쓰지 않게, 저장할 때는 새로 읽은 옵션에 간격만 바꿔 넣는다
+  // 저장할 때는 간격만 바꿔 넣고(updateSettings), 열린 탭 받기에서 바꾸면 이 칸도 맞춘다 (1.36.0)
   $("openGap").replaceChildren(...OPEN_GAPS.map((gap) => new Option(`${gap}초`, String(gap))));
   $("openGap").value = String(settings.openGap);
-  $("openGap").addEventListener("change", () => {
-    const gap = Number($("openGap").value);
-    settings.openGap = gap;
-    const fresh = loadSettings();
-    fresh.openGap = gap;
-    saveSettings(fresh);
+  $("openGap").addEventListener("change", () => updateSettings(settings, { openGap: Number($("openGap").value) }));
+  addEventListener("storage", (event) => {
+    if (event.key === null || event.key === "settings") $("openGap").value = String(loadSettings().openGap);
   });
   // 거꾸로 열기는 고르는 즉시 기억한다 (설정 세트와 따로)
   chrome.storage.local
