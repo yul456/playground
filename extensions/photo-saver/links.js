@@ -10,6 +10,9 @@ import { QUEUE_MAX, loadQueue, queueAdd, queueToggle, watchQueue } from "./queue
 
 const PORT_NAME = "photo-saver-picker";
 const PICK_FLAG = "pickOnOpen";
+// 탭으로 열기는 한 번에 이만큼까지 (한꺼번에 너무 많이 열어 크롬과 그 사이트가 버거워지지 않게)
+const OPEN_MAX = 30;
+const REVERSE_KEY = "openLinksReverse";
 
 const $ = (id) => document.getElementById(id);
 
@@ -143,6 +146,7 @@ export function mountLinks({ inPanel, openPanel }) {
     $("linksTitle").textContent = "이 페이지 링크";
     linksNote("링크를 찾는 중…");
     $("addLinks").disabled = true;
+    $("openLinks").disabled = true;
     let page;
     try {
       page = await findLinks(tabId);
@@ -159,6 +163,7 @@ export function mountLinks({ inPanel, openPanel }) {
     const picked = suggested ? [...suggested.links, ...extra] : [];
     const have = inQueue();
     view = {
+      tabId,
       page,
       groups,
       chosen: new Set(picked.map((link) => link.url).filter((url) => !have.has(url))),
@@ -238,6 +243,34 @@ export function mountLinks({ inPanel, openPanel }) {
     const count = [...view.chosen].filter((url) => !have.has(url)).length;
     $("addLinks").disabled = !count;
     $("addLinks").textContent = count ? `${count}개를 열린 탭 받기 목록에 넣기` : "열린 탭 받기 목록에 넣기";
+    $("openLinks").disabled = !count;
+    const back = $("openReverse").checked ? "거꾸로 " : "";
+    $("openLinks").textContent = count ? `${count}개를 ${back}탭으로 열기` : `${back}탭으로 열기`;
+  }
+
+  // 고른 링크를 지금 탭 뒤에 탭으로 한꺼번에 연다 (사용자 요청, 2026-11-27, 1.32.0).
+  // 임시 그림이 늦게 바뀌는 사이트는 주소로 더해 받으면 덜 바뀐 그림이 받아지고, 탭을 직접 열어 두고 받으면 잘 됐다고 해서 넣었다.
+  // 탭 만들기는 서비스 워커가 한다 (팝업이 도중에 닫혀도 끝까지 열리게). 한 번에 OPEN_MAX개까지
+  async function openChosen() {
+    if (!view) return;
+    const have = inQueue();
+    // 페이지에 나온 순서대로 연다. "거꾸로"(사용자 요청, 2026-11-27)를 켜면 맨 아래 링크부터 (최신 글이 위에 있는 목록을 오래된 글부터)
+    const urls = view.page.links.map((link) => link.url).filter((url) => view.chosen.has(url) && !have.has(url));
+    if (!urls.length) return;
+    if ($("openReverse").checked) urls.reverse();
+    const now = urls.slice(0, OPEN_MAX);
+    $("openLinks").disabled = true;
+    const result = await chrome.runtime.sendMessage({ type: "open-tabs", urls: now, tabId: view.tabId }).catch((err) => ({ error: err.message }));
+    if (!result || result.error) {
+      linksNote(`열지 못했습니다${result?.error ? `: ${result.error}` : ""}`, true);
+      renderView();
+      return;
+    }
+    for (const url of now) view.chosen.delete(url);
+    let text = `${result.opened}개를 탭으로 열었습니다. 다 뜨면 열린 탭 받기에서 받으세요.`;
+    if (urls.length > now.length) text += ` 한 번에 ${OPEN_MAX}개까지 열어서 ${urls.length - now.length}개가 남았습니다. 한 번 더 누르세요.`;
+    linksNote(text, urls.length > now.length);
+    renderView();
   }
 
   async function addChosen() {
@@ -271,6 +304,19 @@ export function mountLinks({ inPanel, openPanel }) {
   });
   $("linkFilter").addEventListener("input", renderView);
   $("addLinks").addEventListener("click", addChosen);
+  $("openLinks").addEventListener("click", openChosen);
+  // 거꾸로 열기는 고르는 즉시 기억한다 (설정 세트와 따로)
+  chrome.storage.local
+    .get(REVERSE_KEY)
+    .then((got) => {
+      $("openReverse").checked = got[REVERSE_KEY] === true;
+      renderView();
+    })
+    .catch(() => {});
+  $("openReverse").addEventListener("change", () => {
+    chrome.storage.local.set({ [REVERSE_KEY]: $("openReverse").checked }).catch(() => {});
+    renderView();
+  });
 
   // 목록 ---------------------------------------------------------------------
 
