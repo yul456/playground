@@ -4,10 +4,27 @@
 // 주소로 더한 페이지(addresses.js)는 목록에만 넣어 두고, 받는 동안 PRELOAD개까지만 미리 탭으로 연다.
 // 한꺼번에 모두 열면 PC가 느려지고 사이트에 한꺼번에 접속하게 된다 (1.29.1까지는 차례가 오면 하나씩 열었다).
 // 더한 주소는 확장 프로그램 저장소(queue.js)에 두어 사이드바(링크 고르기·이 페이지 링크)와 오른쪽 클릭 메뉴로도 넣고,
-// 이 화면을 닫았다 열어도 남는다. 받기를 마친 주소는 저장소에서 빼고 이 화면에는 결과와 함께 남긴다
+// 이 화면을 닫았다 열어도 남는다. 받기를 마친 주소는 저장소에서 빼고 이 화면에는 결과와 함께 남긴다.
+// 1.35.0: 확장 프로그램 창의 "열고 바로 받기"로 시작하면 넘겨받은 주소만 받고(takeAutoRun) OPEN_MAX개까지 미리 연다.
+// 탭 사이 간격(openGap)과 연 뒤 기다리기(openWait), 사이트별 고르기(renderSites), 못 받은 사진만 다시 받기(retryRow)
 import { describeUrls, listUrls, rangeUrls, showUrl } from "./addresses.js";
-import { QUEUE_MAX, loadQueue, queueAdd, queueRemove, queueReorder, watchQueue } from "./queue.js";
-import { JPG_QUALITIES, extKey, findImages, isDecor, isSmall, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
+import { AUTO_RUN_KEY, OPENED_KEY, OPENING_KEY, QUEUE_MAX, loadQueue, queueAdd, queueRemove, queueReorder, watchQueue } from "./queue.js";
+import {
+  JPG_QUALITIES,
+  OPEN_GAPS,
+  OPEN_MAX,
+  OPEN_WAITS,
+  extKey,
+  findImages,
+  isDecor,
+  isSmall,
+  loadExts,
+  loadRules,
+  loadSettings,
+  measure,
+  newItem,
+  saveSettings,
+} from "./core.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
@@ -41,6 +58,9 @@ let rules = loadRules();
 let extOff = loadExts();
 // 이 화면을 연 창. 그 창의 탭만 받는다 (주소 없이 열었으면 이 화면이 있는 창, init에서 정한다)
 let windowId = Number(new URLSearchParams(location.search).get("window")) || null;
+// "열고 바로 받기"로 새로 연 화면이면 주소의 auto 값. 이 화면의 탭 번호 (init에서 안다). 받을 화면인지 알아보는 데 쓴다
+const autoToken = new URLSearchParams(location.search).get("auto");
+let selfTabId = null;
 
 // 목록의 줄. 탭: { tabId, title, host, checked }, 주소로 더한 것: { added: true, url, tabId(연 뒤에), title, host, checked, done(받기를 마침) }.
 // 둘 다 cell: { li, box, name, state, remove }, 결과 글 stateText·stateKind·stateDetail(다시 그려도 남게)
@@ -59,6 +79,16 @@ let lastDownload = null; // "폴더 열기"가 보여 줄 다운로드
 let setsUi = null; // 설정 세트 고르는 줄 (sets.js)
 // 탭이 다 뜬 때 (이 화면이 열려 있는 동안 본 것만 안다). 탭 번호 → 시각
 const loadedAt = new Map();
+// 탭을 연 때 (탭 번호 → 시각): 이 화면이 연 탭과, 이 화면이 열려 있는 동안 이 창에 새로 열린 탭.
+// 확장 프로그램 창의 "탭으로 열기"가 연 탭은 서비스 워커가 세션 저장소(OPENED_KEY)에 적어 둔다. "연 뒤 기다리기"(1.35.0)가 쓴다
+const createdAt = new Map();
+// 이 화면이 마지막으로 탭을 연 때 (탭 사이 간격을 지키려고)
+let lastOpenAt = 0;
+// 받기 한 번(일시정지를 사이에 둔 것까지)의 방식. auto: 확장 프로그램 창의 "열고 바로 받기"로 시작했다 (1.35.0).
+// 그때는 주소로 더한 페이지를 OPEN_MAX개까지 미리 열고, 이 화면이 연 탭은 받고 나면(받을 사진이 없었어도) 닫는다
+let runPlan = { auto: false };
+// 확장 프로그램 창의 "탭으로 열기"가 이 창에 탭을 여는 중이면 { now, total } (받기 단추에 보인다)
+let opening = null;
 
 function showMessage(text) {
   $("message").textContent = text;
@@ -94,6 +124,15 @@ async function readTabs() {
       .filter((tab) => /^https?:/i.test(urlOf(tab)) && !owned.has(tab.id))
       .map((tab) => {
         const row = before.get(tab.id) ?? { tabId: tab.id, checked: true };
+        // 받은 탭이 다른 페이지로 넘어갔으면 새로 연 탭처럼 다시 받을 것으로 둔다 (# 뒤만 바뀐 것은 같은 페이지로 본다)
+        const url = urlOf(tab);
+        if (row.finished && row.pageUrl && row.pageUrl.split("#")[0] !== url.split("#")[0]) {
+          row.finished = false;
+          row.checked = true;
+          row.stateText = null;
+          row.job = null;
+        }
+        row.pageUrl = url;
         row.title = tab.title || urlOf(tab);
         row.host = hostOf(urlOf(tab));
         row.loading = tab.status !== "complete";
@@ -139,9 +178,10 @@ function makeRow(row) {
     li.append(remove);
     makeDraggable(row, li);
   }
-  row.cell = { li, box, name: title, state, remove };
+  row.cell = { li, box, name: title, state, remove, retry: null };
   if (row.stateText != null) setState(row, row.stateText, row.stateKind, row.stateDetail);
   else if (row.loading) state.textContent = "페이지 뜨는 중";
+  showRetry(row);
   return li;
 }
 
@@ -256,9 +296,12 @@ function syncQueue(pages) {
       setState(created, "열기 전");
     } else if (row.done && !running) {
       row.done = false;
+      row.finished = false;
       row.checked = true;
       row.tabId = null;
+      row.job = null;
       setState(row, "열기 전");
+      showRetry(row);
     }
   }
   showEmpty();
@@ -284,17 +327,62 @@ function refresh() {
   $("toggleAll").textContent = rows.length && chosen === rows.length ? "모두 끄기" : "모두 고르기";
   $("toggleAll").disabled = running;
   $("reload").disabled = running;
-  $("start").disabled = running || !chosen;
-  $("start").textContent = paused ? (chosen ? `${chosen}개 탭 이어 받기` : "이어 받기") : chosen ? `${chosen}개 탭 받기` : "받기";
+  // 확장 프로그램 창의 "탭으로 열기"가 이 창에 탭을 여는 동안은 받기를 누르지 못한다 (그때 있는 탭만 받게 되어서)
+  $("start").disabled = running || !chosen || Boolean(opening);
+  if (opening && !running) $("start").textContent = `탭 여는 중 ${opening.now}/${opening.total}`;
+  else $("start").textContent = paused ? (chosen ? `${chosen}개 탭 이어 받기` : "이어 받기") : chosen ? `${chosen}개 탭 받기` : "받기";
   $("start").hidden = running;
   $("stop").hidden = !running;
   $("stop").disabled = stopping;
   $("stop").textContent = stopping ? "지금 탭까지 받고 멈춥니다" : "일시정지";
   $("quit").hidden = running || !paused;
   setsUi?.setDisabled(running);
-  for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], input[name=showPage], #jpgQuality, #splitMode, #closeTabs, #doneSound")) {
+  for (const input of document.querySelectorAll(
+    "input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], input[name=showPage], #jpgQuality, #splitMode, #closeTabs, #doneSound, #openGap, #openWait",
+  )) {
     input.disabled = running;
   }
+  for (const row of rows) if (row.cell?.retry) row.cell.retry.disabled = running || Boolean(row.retrying);
+  renderSites();
+}
+
+// 아직 받지 않은 줄 (받은 줄과 받을 사진이 없던 줄은 빼고)
+const pending = (row) => !row.done && !row.finished;
+const siteOf = (row) => String(row.host ?? "").replace(/^www\./, "");
+
+// 이 사이트 탭만 고르기 (사용자 요청, 2026-11-27, 1.35.0): 아직 받지 않은 줄의 사이트마다 단추를 두고,
+// 누르면 그 사이트의 줄만 체크한다. 사이트가 둘 이상일 때만 보인다. 받은 줄은 체크하지 않는다
+const SITES_SHOWN = 12;
+function renderSites() {
+  const box = $("sites");
+  const counts = new Map();
+  for (const row of rows) {
+    const site = siteOf(row);
+    if (site && pending(row)) counts.set(site, (counts.get(site) ?? 0) + 1);
+  }
+  box.hidden = counts.size < 2;
+  if (box.hidden) {
+    box.replaceChildren();
+    return;
+  }
+  const checked = new Set(rows.filter((row) => row.checked));
+  const sorted = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const buttons = sorted.slice(0, SITES_SHOWN).map(([site, count]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `${site} ${count}`;
+    button.title = `${site}의 아직 받지 않은 줄만 체크합니다`;
+    button.disabled = running;
+    const mine = rows.filter((row) => pending(row) && siteOf(row) === site);
+    button.setAttribute("aria-pressed", String(mine.length === checked.size && mine.every((row) => checked.has(row))));
+    button.addEventListener("click", () => {
+      if (running) return;
+      for (const row of rows) row.checked = pending(row) && siteOf(row) === site;
+      refresh();
+    });
+    return button;
+  });
+  box.replaceChildren("이 사이트만:", ...buttons, sorted.length > SITES_SHOWN ? ` 외 ${sorted.length - SITES_SHOWN}곳` : "");
 }
 
 // 저장될 자리와, 받지 않는 것을 알려 준다
@@ -348,6 +436,8 @@ function readOptions() {
   $("splitMode").value = settings.splitMode;
   $("closeTabs").checked = settings.closeTabs;
   $("doneSound").checked = settings.doneSound;
+  $("openGap").value = String(settings.openGap);
+  $("openWait").value = String(settings.openWait);
   setsUi?.refresh(); // 확장 프로그램 창에서 세트를 바꾸거나 만들었을 수 있다
   showOptions();
 }
@@ -573,30 +663,53 @@ function resultOf(job) {
   return { text: parts.join(" · "), kind: warn ? "warn" : "ok", got };
 }
 
+// 탭을 하나 연다 (이 창, 뒤쪽에). 탭 사이 간격(옵션 openGap, 1.35.0)을 지킨다
+async function createTab(url) {
+  const gap = (settings.openGap ?? 0) * 1000;
+  const left = lastOpenAt + gap - Date.now();
+  if (gap && left > 0) await sleep(left);
+  const tab = await chrome.tabs.create({ ...(windowId ? { windowId } : {}), url, active: false });
+  lastOpenAt = Date.now();
+  createdAt.set(tab.id, lastOpenAt);
+  return tab;
+}
+
 // 주소로 더한 줄의 페이지를 탭으로 연다(이 창, 뒤쪽에). 전에 열어 둔 탭이 아직 있으면 그 탭을 쓴다. 새로 열었으면 true
 async function openAdded(row) {
   if (row.tabId != null && (await chrome.tabs.get(row.tabId).catch(() => null))) return false;
   setState(row, "페이지 여는 중", "now");
-  const tab = await chrome.tabs.create({ ...(windowId ? { windowId } : {}), url: row.url, active: false });
+  const tab = await createTab(row.url);
   row.tabId = tab.id;
   return true;
 }
 
-// 주소로 더한 줄을 미리 열어 둔다: list의 from번째부터 PRELOAD개(지금 받을 것 포함)까지. 연 줄은 opened에 넣는다.
+// 주소로 더한 줄을 미리 열어 둔다: list의 from번째부터 count개(지금 받을 것 포함)까지. 연 줄은 opened에 넣는다.
 // 열지 못한 것은 넘어간다 (차례가 오면 openAdded가 다시 연다)
-async function preload(list, from, opened) {
-  const ahead = list.slice(from).filter((row) => row.added).slice(0, PRELOAD);
-  for (const row of ahead) {
-    if (row.tabId != null && (await chrome.tabs.get(row.tabId).catch(() => null))) continue;
+async function preload(list, from, opened, count) {
+  const ahead = list.slice(from).filter((row) => row.added).slice(0, count);
+  const closed = [];
+  for (const row of ahead) if (!(row.tabId != null && (await chrome.tabs.get(row.tabId).catch(() => null)))) closed.push(row);
+  let done = 0;
+  for (const row of closed) {
+    // 한꺼번에 여럿을 열 때는(처음, 열고 바로 받기) 어디까지 열었는지 보인다
+    if (closed.length > 1) $("status").textContent = `미리 탭을 여는 중 ${done + 1}/${closed.length}`;
     try {
-      const tab = await chrome.tabs.create({ ...(windowId ? { windowId } : {}), url: row.url, active: false });
+      const tab = await createTab(row.url);
       row.tabId = tab.id;
       opened.add(row);
       if (row !== list[from]) setState(row, "미리 열어 둠");
     } catch {
       // 창이 닫혔거나 주소를 열 수 없다
     }
+    done++;
   }
+}
+
+// 탭을 연 때. 모르면(이 화면을 열기 전에 사용자가 연 탭) null
+async function openedAt(tabId) {
+  if (createdAt.has(tabId)) return createdAt.get(tabId);
+  const map = (await chrome.storage.session.get(OPENED_KEY).catch(() => ({})))[OPENED_KEY] ?? {};
+  return map[tabId] ?? null;
 }
 
 // 탭 하나를 받는다. 받은 것이 있으면 "got", 받을 사진이 없으면 "none", 못 받았으면 "failed"
@@ -605,6 +718,13 @@ async function runTab(row) {
     const opened = row.added ? await openAdded(row) : false;
     if (!opened) setState(row, "사진 찾는 중", "now");
     const loaded = await ensureLoaded(row.tabId);
+    // 연 뒤 기다리기 (옵션 openWait, 1.35.0): 탭을 연 지 이만큼 지나야 받는다. 임시 그림을 시간이 지나야 진짜 사진으로 바꾸는 사이트가 있다
+    const wait = (settings.openWait ?? 0) * 1000;
+    const at = wait ? await openedAt(row.tabId) : null;
+    if (at && at + wait > Date.now()) {
+      setState(row, `연 지 ${settings.openWait}초가 지나기를 기다리는 중`, "now");
+      await sleep(at + wait - Date.now());
+    }
     setState(row, "사진 찾는 중", "now");
     const recent = Date.now() - (loadedAt.get(row.tabId) ?? 0) < RECENT_MS;
     if (settings.showPage !== "off") {
@@ -626,6 +746,8 @@ async function runTab(row) {
     if (!urls.length) {
       const why = whyNone(page, items.length, skipped, loaded.slow);
       setState(row, why.text, why.result === "failed" ? "warn" : "");
+      // 열고 바로 받기에서는 이 화면이 연 탭을 받을 사진이 없었어도 닫는다 (탭이 쌓이지 않게. 받지 못한 탭은 열어 둔다)
+      if (runPlan.auto && row.added && why.result === "none") await chrome.tabs.remove(row.tabId).catch(() => {});
       return why.result;
     }
     const job = await startJob({
@@ -645,8 +767,14 @@ async function runTab(row) {
     const result = resultOf(done);
     setState(row, result.text, result.kind, `찾은 사진 ${items.length}장 · 받는 것 ${urls.length}장${skipped.length ? ` · 뺀 것: ${skipped.join(", ")}` : ""}`);
     lastDownload = done.stitch?.id ?? done.files?.shownId ?? lastDownload;
+    // 못 받은 사진이 있으면 그 줄에 "다시 받기" 단추를 둔다
+    row.job = done;
+    showRetry(row);
     if (!result.got) return "failed";
-    if (settings.closeTabs) await chrome.tabs.remove(row.tabId).catch(() => {});
+    // 열고 바로 받기에서는 이 화면이 연 탭을 받고 나면 늘 닫는다 (탭이 쌓이지 않게).
+    // 열려 있던 탭(탭 줄)은 못 받은 사진이 있으면 닫지 않는다: 탭이 닫히면 줄이 목록에서 빠져 다시 받기 단추도 없어진다
+    const missed = (done.files?.retry?.length ?? 0) > 0;
+    if ((settings.closeTabs && (row.added || !missed)) || (runPlan.auto && row.added)) await chrome.tabs.remove(row.tabId).catch(() => {});
     return "got";
   } catch (err) {
     const text = String(err?.message ?? err);
@@ -813,7 +941,8 @@ function summary(skipped = 0) {
   return parts.join(" · ");
 }
 
-async function runAll() {
+// options.auto: 확장 프로그램 창의 "열고 바로 받기"로 시작했다 (takeAutoRun). 일시정지에서 이어 받으면 처음의 방식을 이어 간다
+async function runAll(options = {}) {
   const list = rows.filter((row) => row.checked);
   if (!list.length || running) return;
   readOptions();
@@ -823,6 +952,7 @@ async function runAll() {
   running = true;
   stopping = false;
   if (!resumed) {
+    runPlan = { auto: Boolean(options.auto) };
     tally = { got: 0, none: 0, failed: 0 };
     lastDownload = null;
     $("openFolder").hidden = true;
@@ -839,7 +969,7 @@ async function runAll() {
   let handled = 0;
   for (const row of list) {
     if (stopping) break;
-    await preload(list, handled, preloaded);
+    await preload(list, handled, preloaded, runPlan.auto ? OPEN_MAX : PRELOAD);
     $("status").textContent = `${handled + 1}/${list.length}번째 탭을 받는 중`;
     document.title = `받는 중 ${handled + 1}/${list.length} · 열린 탭 받기`;
     const result = await runTab(row);
@@ -851,6 +981,7 @@ async function runAll() {
     // 탭 줄도 끈다 (1.34.0): 전에는 체크가 남아서, 멈췄다가 다시 받으면 앞에서 받은 탭까지 또 받았다
     if (result !== "failed") {
       row.checked = false;
+      row.finished = true;
       if (row.added) {
         // 주소로 더한 줄은 저장소의 목록에서도 뺀다(결과와 함께 이 화면에는 남는다).
         // 저장소에서 빠질 때까지 기다린다. 기다리지 않으면 마지막 줄은 아래에서 목록을 맞출 때 아직 저장소에 남아 있어,
@@ -892,6 +1023,100 @@ async function runAll() {
   await readTabs();
 }
 
+// 못 받은 사진만 다시 받기 (사용자 요청, 2026-11-27, 1.35.0) ------------------------------------------
+// 사진을 따로 받은 탭에서 몇 장이 받아지지 않았으면 그 줄에 단추를 두고, 누르면 그 사진들만 같은 폴더에 같은 이름으로 받는다
+// (background.js의 startJob, retryDir·names). 이어 붙인 그림은 다시 만들지 않는다
+
+function showRetry(row) {
+  const missed = row.job?.files?.retry ?? [];
+  const want = missed.length > 0 && !row.retrying;
+  if (!want) {
+    row.cell?.retry?.remove();
+    if (row.cell) row.cell.retry = null;
+    return;
+  }
+  if (!row.cell) return;
+  if (!row.cell.retry) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "retry";
+    button.addEventListener("click", () => retryRow(row));
+    row.cell.state.after(button);
+    row.cell.retry = button;
+  }
+  row.cell.retry.textContent = `못 받은 ${missed.length}장 다시 받기`;
+  row.cell.retry.title = "받지 못한 사진만 같은 폴더에 같은 이름으로 다시 받습니다";
+  row.cell.retry.disabled = running;
+}
+
+async function retryRow(row) {
+  const done = row.job;
+  const missed = done?.files?.retry ?? [];
+  if (running || row.retrying || !missed.length) return;
+  row.retrying = true;
+  showRetry(row);
+  const before = { text: row.stateText, kind: row.stateKind, detail: row.stateDetail };
+  setState(row, `못 받은 사진 ${missed.length}장 다시 받는 중`, "now", before.detail);
+  try {
+    const job = await startJob({ type: "start", folder: done.dir, retryDir: done.dir, urls: missed.map((miss) => miss.url), names: missed.map((miss) => miss.name), mode: "files" });
+    const again = await waitJob(job.id, (now) => setState(row, `못 받은 사진 다시 받는 중 ${now.files.done + now.files.failed}/${now.files.total}`, "now", before.detail));
+    // 받은 수를 더하고, 여전히 못 받은 것만 남긴다
+    done.files = { ...done.files, done: done.files.done + again.files.done, failed: again.files.failed, reason: again.files.reason, retry: again.files.retry };
+    const result = resultOf(done);
+    setState(row, result.text, result.kind, before.detail);
+    lastDownload ??= again.files.shownId;
+    $("openFolder").hidden = lastDownload == null;
+  } catch (err) {
+    setState(row, `${before.text} · 다시 받지 못함: ${err?.message ?? err}`, "warn", before.detail);
+  }
+  row.retrying = false;
+  showRetry(row);
+  refresh();
+}
+
+// 열고 바로 받기 (사용자 요청, 2026-11-27, 1.35.0) ------------------------------------------
+// 확장 프로그램 창이 고른 링크를 목록에 넣고, 서비스 워커가 받을 화면 하나를 정해 저장소에 표시(AUTO_RUN_KEY)를 남긴 뒤 그 화면을 띄운다.
+// 그 화면(탭 번호나 주소의 auto 값이 맞는 화면)만 표시를 지우고, 그 주소들만 체크해 받기를 시작한다. 받는 중이거나 멈춰 있으면 목록에 넣기만 한다
+const AUTO_RUN_FRESH = 2 * 60 * 1000;
+let autoTaking = false;
+async function takeAutoRun() {
+  if (autoTaking) return;
+  autoTaking = true;
+  try {
+    const flag = (await chrome.storage.local.get(AUTO_RUN_KEY).catch(() => ({})))[AUTO_RUN_KEY];
+    const forMe = Boolean(flag) && ((flag.tabId != null && flag.tabId === selfTabId) || (Boolean(flag.token) && flag.token === autoToken));
+    if (!forMe) return;
+    await chrome.storage.local.remove(AUTO_RUN_KEY);
+    // 주소의 auto 값은 지운다 (이 화면을 새로 고쳐도 다시 받지 않게)
+    if (autoToken) history.replaceState(null, "", `${location.pathname}?window=${windowId ?? ""}`);
+    if (!(Date.now() - flag.at < AUTO_RUN_FRESH) || !Array.isArray(flag.urls)) return;
+    syncQueue(await loadQueue());
+    const urls = new Set(flag.urls);
+    const mine = rows.filter((row) => row.added && !row.done && urls.has(row.url));
+    if (!mine.length) return;
+    if (running || paused) {
+      for (const row of mine) row.checked = true;
+      refresh();
+      $("status").textContent = running
+        ? `받는 중이라 ${mine.length}개를 목록에 넣기만 했습니다. 지금 받기가 끝난 뒤 받기를 누르세요.`
+        : `멈춰 있어서 ${mine.length}개를 목록에 넣고 체크해 두었습니다. 이어 받기를 누르면 함께 받습니다.`;
+      return;
+    }
+    for (const row of rows) row.checked = mine.includes(row);
+    refresh();
+    runAll({ auto: true });
+  } finally {
+    autoTaking = false;
+  }
+}
+
+// 확장 프로그램 창의 "탭으로 열기"가 이 창에 탭을 여는 중인지 (서비스 워커가 세션 저장소에 적는다). 오래된 표시는 버린다
+const OPENING_FRESH = 10 * 60 * 1000;
+function seeOpening(value) {
+  opening = value && value.windowId === windowId && Date.now() - value.at < OPENING_FRESH ? { now: value.now, total: value.total } : null;
+  refresh();
+}
+
 // 일시정지에서 그만둔다: 남은 줄은 받지 않고, 미리 열어 둔 탭은 닫는다
 async function quitPaused() {
   if (!paused || running) return;
@@ -919,9 +1144,14 @@ function scheduleReread() {
 
 function watchTabs() {
   const mine = (id) => id === windowId;
-  chrome.tabs.onCreated.addListener((tab) => mine(tab.windowId) && scheduleReread());
+  chrome.tabs.onCreated.addListener((tab) => {
+    if (!mine(tab.windowId)) return;
+    if (!createdAt.has(tab.id)) createdAt.set(tab.id, Date.now());
+    scheduleReread();
+  });
   chrome.tabs.onRemoved.addListener((tabId, info) => {
     loadedAt.delete(tabId);
+    createdAt.delete(tabId);
     if (mine(info.windowId)) scheduleReread();
   });
   chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
@@ -933,6 +1163,7 @@ function watchTabs() {
 
 async function init() {
   windowId ??= (await chrome.windows.getCurrent()).id;
+  selfTabId = (await chrome.tabs.getCurrent().catch(() => null))?.id ?? null;
   watchTabs();
   // 설정 세트를 바꾸거나 지우면 옵션을 다시 읽는다
   setsUi = mountSets($("sets"), readOptions);
@@ -970,6 +1201,19 @@ async function init() {
     settings.doneSound = $("doneSound").checked;
     saveSettings(settings);
   });
+  // 탭 열기 (1.35.0): 탭 사이 간격과 연 뒤 기다리기
+  $("openGap").replaceChildren(...OPEN_GAPS.map((gap) => new Option(`${gap}초`, String(gap))));
+  $("openGap").value = String(settings.openGap);
+  $("openGap").addEventListener("change", () => {
+    settings.openGap = Number($("openGap").value);
+    saveSettings(settings);
+  });
+  $("openWait").replaceChildren(...OPEN_WAITS.map((wait) => new Option(wait ? `${wait}초` : "안 함", String(wait))));
+  $("openWait").value = String(settings.openWait);
+  $("openWait").addEventListener("change", () => {
+    settings.openWait = Number($("openWait").value);
+    saveSettings(settings);
+  });
   $("toggleAll").addEventListener("click", () => {
     const all = rows.every((row) => row.checked);
     for (const row of rows) row.checked = !all;
@@ -987,7 +1231,7 @@ async function init() {
   $("urlList").addEventListener("input", previewList);
   $("addRange").addEventListener("click", addRange);
   $("addList").addEventListener("click", addList);
-  $("start").addEventListener("click", runAll);
+  $("start").addEventListener("click", () => runAll());
   $("stop").addEventListener("click", () => {
     stopping = true;
     refresh();
@@ -1008,8 +1252,15 @@ async function init() {
   showOptions();
   // 더한 주소는 저장소에 있다. 다른 곳(사이드바, 오른쪽 클릭 메뉴)에서 넣거나 빼면 바로 맞춘다
   watchQueue(syncQueue);
+  // 확장 프로그램 창의 "열고 바로 받기"와 "탭으로 열기"가 남기는 표시를 듣는다 (목록을 읽기 전에 들어야 그사이 온 표시를 놓치지 않는다)
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[AUTO_RUN_KEY]?.newValue) takeAutoRun();
+    if (area === "session" && changes[OPENING_KEY]) seeOpening(changes[OPENING_KEY].newValue);
+  });
   await readTabs();
   syncQueue(await loadQueue());
+  seeOpening((await chrome.storage.session.get(OPENING_KEY).catch(() => ({})))[OPENING_KEY]);
+  await takeAutoRun();
 }
 
 init();

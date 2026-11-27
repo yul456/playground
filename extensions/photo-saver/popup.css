@@ -81,6 +81,8 @@ main:has(.area[data-area="photos"] > .area-body[hidden]) > footer { display: non
 /* 색 찍기 (color.js): 최근에 찍은 색은 그 색을 칠한 단추로 보인다 */
 .links-bar[hidden] { display: none; }
 .color-format { padding: 1px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; font-size: 12px; }
+/* 링크 줄의 탭 사이 간격 (1.35.0) */
+.open-gap { padding: 1px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; font-size: 12px; }
 .color-clear { margin-left: auto; font-size: 12px; }
 .rule-list.color-list { margin: -2px 0 8px; }
 .rule-list.color-list[hidden] { display: none; }

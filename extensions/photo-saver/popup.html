@@ -124,7 +124,9 @@
         <div class="links-actions">
           <button type="button" id="addLinks" disabled>열린 탭 받기 목록에 넣기</button>
           <button type="button" class="secondary" id="openLinks" title="고른 링크를 지금 탭 뒤에 탭으로 한꺼번에 엽니다 (뒤쪽에 열어 지금 페이지는 그대로). 임시 그림이 늦게 바뀌는 사이트는 이렇게 열어 둔 뒤 열린 탭 받기로 받으면 잘 받아집니다" disabled>탭으로 열기</button>
+          <button type="button" class="secondary" id="autoLinks" title="고른 링크를 열린 탭 받기에서 차례로 받습니다. 50개까지 미리 탭으로 열어 두고, 하나를 받아 닫을 때마다 다음 것을 엽니다. 받는 방식과 옵션은 열린 탭 받기 화면의 것을 씁니다" disabled>열고 바로 받기</button>
           <label class="unlock-always" title="켜면 목록의 맨 아래 링크부터 엽니다 (맨 아래 링크가 첫 탭). 최신 글이 위에 있는 목록을 오래된 글부터 받을 때 씁니다"><input type="checkbox" id="openReverse"> 거꾸로</label>
+          <label class="unlock-always" title="탭을 여러 개 열 때 탭 사이에 둘 간격입니다. 한꺼번에 열면 사이트가 막거나 PC가 버거울 수 있습니다. 탭으로 열기와 열고 바로 받기에 쓰고, 열린 탭 받기 화면에서도 바꿀 수 있습니다">간격 <select id="openGap" class="open-gap" aria-label="탭 사이 간격"></select></label>
           <span class="links-note" id="linksNote"></span>
         </div>
       </section>

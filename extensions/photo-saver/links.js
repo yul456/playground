@@ -4,14 +4,12 @@
 // - 이 페이지 링크: 페이지의 링크를 주소 모양으로 묶어(linkGroups.js) 체크박스로 보이고, 고른 것을 목록에 넣는다.
 //   가장 큰 묶음(글 목록으로 보이는 것)을 처음에 골라 둔다
 import { wrapWindowOpen } from "./collect.js";
-import { findLinks } from "./core.js";
+import { OPEN_GAPS, OPEN_MAX, findLinks, loadSettings, saveSettings } from "./core.js";
 import { alike, groupLinks, matchesFilter, shapeLabel } from "./linkGroups.js";
 import { QUEUE_MAX, loadQueue, queueAdd, queueToggle, watchQueue } from "./queue.js";
 
 const PORT_NAME = "photo-saver-picker";
 const PICK_FLAG = "pickOnOpen";
-// 탭으로 열기는 한 번에 이만큼까지 (한꺼번에 너무 많이 열어 크롬과 그 사이트가 버거워지지 않게)
-const OPEN_MAX = 50;
 const REVERSE_KEY = "openLinksReverse";
 
 const $ = (id) => document.getElementById(id);
@@ -22,8 +20,9 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-// inPanel: 사이드바인지, openPanel(): 팝업에서 사이드바를 여는 함수(popup.js, 누른 그때 불러야 한다)
-export function mountLinks({ inPanel, openPanel }) {
+// inPanel: 사이드바인지, openPanel(): 팝업에서 사이드바를 여는 함수(popup.js, 누른 그때 불러야 한다),
+// settings: 창의 옵션(popup.js가 들고 있는 것. 탭 사이 간격 openGap을 여기서 고친다)
+export function mountLinks({ inPanel, openPanel, settings }) {
   let tabId = null;
   let queue = []; // 목록의 주소들 [{ url, title }]
   let picking = false;
@@ -246,6 +245,17 @@ export function mountLinks({ inPanel, openPanel }) {
     $("openLinks").disabled = !count;
     const back = $("openReverse").checked ? "거꾸로 " : "";
     $("openLinks").textContent = count ? `${count}개를 ${back}탭으로 열기` : `${back}탭으로 열기`;
+    $("autoLinks").disabled = !count;
+    $("autoLinks").textContent = count ? `${count}개를 ${back}열고 바로 받기` : `${back}열고 바로 받기`;
+  }
+
+  // 고른 링크(목록에 이미 있는 것은 빼고)를 페이지에 나온 순서대로. "거꾸로"(사용자 요청, 2026-11-27)를 켜면 맨 아래 링크부터
+  // (최신 글이 위에 있는 목록을 오래된 글부터)
+  function orderedChosen() {
+    const have = inQueue();
+    const urls = view.page.links.map((link) => link.url).filter((url) => view.chosen.has(url) && !have.has(url));
+    if ($("openReverse").checked) urls.reverse();
+    return urls;
   }
 
   // 고른 링크를 지금 탭 뒤에 탭으로 한꺼번에 연다 (사용자 요청, 2026-11-27, 1.32.0).
@@ -253,14 +263,14 @@ export function mountLinks({ inPanel, openPanel }) {
   // 탭 만들기는 서비스 워커가 한다 (팝업이 도중에 닫혀도 끝까지 열리게). 한 번에 OPEN_MAX개까지
   async function openChosen() {
     if (!view) return;
-    const have = inQueue();
-    // 페이지에 나온 순서대로 연다. "거꾸로"(사용자 요청, 2026-11-27)를 켜면 맨 아래 링크부터 (최신 글이 위에 있는 목록을 오래된 글부터)
-    const urls = view.page.links.map((link) => link.url).filter((url) => view.chosen.has(url) && !have.has(url));
+    const urls = orderedChosen();
     if (!urls.length) return;
-    if ($("openReverse").checked) urls.reverse();
     const now = urls.slice(0, OPEN_MAX);
     $("openLinks").disabled = true;
-    const result = await chrome.runtime.sendMessage({ type: "open-tabs", urls: now, tabId: view.tabId }).catch((err) => ({ error: err.message }));
+    // 탭 사이에 간격을 두면(1.35.0) 다 열리기까지 시간이 걸린다
+    const gap = settings.openGap;
+    if (gap && now.length > 1) linksNote(`${now.length}개를 ${gap}초 간격으로 여는 중입니다 (${Math.ceil(gap * (now.length - 1))}초쯤 걸립니다).`);
+    const result = await chrome.runtime.sendMessage({ type: "open-tabs", urls: now, tabId: view.tabId, gap }).catch((err) => ({ error: err.message }));
     if (!result || result.error) {
       linksNote(`열지 못했습니다${result?.error ? `: ${result.error}` : ""}`, true);
       renderView();
@@ -271,6 +281,37 @@ export function mountLinks({ inPanel, openPanel }) {
     if (urls.length > now.length) text += ` 한 번에 ${OPEN_MAX}개까지 열어서 ${urls.length - now.length}개가 남았습니다. 한 번 더 누르세요.`;
     linksNote(text, urls.length > now.length);
     renderView();
+  }
+
+  // 고른 링크를 열린 탭 받기 목록에 넣고, 열린 탭 받기 화면을 띄워 그것들만 바로 받는다 (사용자 요청, 2026-11-27, 1.35.0).
+  // 전에는 50개씩 탭으로 열고 → 열린 탭 받기에서 받고 → 돌아와 남은 것을 여는 일을 손으로 되풀이했다.
+  // 화면은 OPEN_MAX개까지 미리 열어 두고 하나를 받아 닫을 때마다 다음 것을 연다 (batch.js의 takeAutoRun)
+  async function autoChosen() {
+    if (!view) return;
+    const urls = orderedChosen();
+    if (!urls.length) return;
+    const byUrl = new Map(view.page.links.map((link) => [link.url, link]));
+    $("autoLinks").disabled = true;
+    const result = await queueAdd(urls.map((url) => ({ url, title: byUrl.get(url)?.text ?? "" }))).catch((err) => ({ error: err.message }));
+    if (!result || result.error) {
+      linksNote(`넣지 못했습니다${result?.error ? `: ${result.error}` : ""}`, true);
+      renderView();
+      return;
+    }
+    queue = result.pages;
+    showCount();
+    const listed = new Set(queue.map((page) => page.url));
+    const picked = urls.filter((url) => listed.has(url));
+    for (const url of urls) view.chosen.delete(url);
+    const tab = await chrome.tabs.get(view.tabId).catch(() => null);
+    const windowId = tab?.windowId ?? null;
+    let text = `${picked.length}개를 열린 탭 받기에서 받습니다.`;
+    if (result.full) text += ` 목록이 가득 차 ${result.full}개는 넣지 못했습니다.`;
+    linksNote(text, Boolean(result.full));
+    renderView();
+    port?.postMessage({ type: "marks", urls: queue.map((page) => page.url) });
+    // 받을 화면을 정해 띄우는 일은 서비스 워커가 한다 (팝업은 다른 탭이 앞에 오면 닫힌다)
+    chrome.runtime.sendMessage({ type: "auto-run", windowId, urls: picked }).catch(() => {});
   }
 
   async function addChosen() {
@@ -305,6 +346,18 @@ export function mountLinks({ inPanel, openPanel }) {
   $("linkFilter").addEventListener("input", renderView);
   $("addLinks").addEventListener("click", addChosen);
   $("openLinks").addEventListener("click", openChosen);
+  $("autoLinks").addEventListener("click", autoChosen);
+  // 탭 사이 간격 (1.35.0). 창의 옵션(설정 세트에 들어간다)이라 열린 탭 받기 화면과 같은 값이다.
+  // 저장소의 다른 옵션을 이 창이 들고 있던 옛 값으로 덮어쓰지 않게, 저장할 때는 새로 읽은 옵션에 간격만 바꿔 넣는다
+  $("openGap").replaceChildren(...OPEN_GAPS.map((gap) => new Option(`${gap}초`, String(gap))));
+  $("openGap").value = String(settings.openGap);
+  $("openGap").addEventListener("change", () => {
+    const gap = Number($("openGap").value);
+    settings.openGap = gap;
+    const fresh = loadSettings();
+    fresh.openGap = gap;
+    saveSettings(fresh);
+  });
   // 거꾸로 열기는 고르는 즉시 기억한다 (설정 세트와 따로)
   chrome.storage.local
     .get(REVERSE_KEY)

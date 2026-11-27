@@ -50,6 +50,11 @@
         <label title="한 화면씩(Page Down처럼) 빠르게 맨 아래까지 내립니다. 그사이 페이지가 길어졌으면(끝없이 이어지는 목록) 다시 맨 아래까지 내리고, 더 길어지지 않으면 사진을 찾습니다"><input type="radio" name="showPage" value="on"> 맨 아래까지 내려 보기</label>
         <label><input type="radio" name="showPage" value="off"> 안 함</label>
       </fieldset>
+      <fieldset class="modes">
+        <legend title="주소로 더한 페이지를 미리 열 때와 확장 프로그램 창의 탭으로 열기·열고 바로 받기에 씁니다">탭 열기</legend>
+        <label title="탭을 여러 개 열 때 탭 사이에 둘 간격입니다. 한꺼번에 열면 사이트가 막거나 PC가 버거울 수 있습니다">간격 <select id="openGap" aria-label="탭 사이 간격"></select></label>
+        <label title="탭을 연 지 이만큼 지난 뒤에 받습니다. 임시 그림을 먼저 보이고 나중에 진짜 사진으로 바꾸는 사이트에 씁니다. 이 확장 프로그램이 연 탭과, 이 화면을 연 뒤에 열린 탭에 적용합니다">연 뒤 기다리기 <select id="openWait" aria-label="연 뒤 기다리기"></select></label>
+      </fieldset>
     </section>
 
     <section class="box" id="addBox">
@@ -81,6 +86,7 @@
         <button type="button" class="link" id="clearAdded" hidden>더한 주소 빼기</button>
         <button type="button" class="link" id="reload">탭 다시 읽기</button>
       </div>
+      <div class="sites" id="sites" hidden></div>
       <ol class="tabs" id="tabs"></ol>
       <p class="hint after">
         페이지가 다 뜬 뒤에도 사진이 더 생기는지 잠깐 지켜보고 받습니다. 받을 사진이 없으면 까닭을 줄에 적고, 받은 줄은 결과 글에

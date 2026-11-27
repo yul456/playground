@@ -28,6 +28,16 @@ export const SHOW_PAGE = ["on", "off"];
 // 선택지는 100부터 85까지 5씩이다 (사용자 요청, 1.18.0. 그 전에는 100·95·90·80이었다). 저장해 둔 값이 선택지에 없으면 기본값으로 돌아간다
 export const JPG_QUALITIES = [100, 95, 90, 85];
 export const DEFAULT_JPG_QUALITY = 95;
+// 고른 링크를 탭으로 열 때 한 번에 열어 두는 탭 수. "탭으로 열기"는 한 번 누를 때 이만큼까지 열고(1.32.0은 30, 1.34.0부터 50. 사용자 요청),
+// "열고 바로 받기"(1.35.0)는 이만큼까지 미리 열어 두고 하나를 받아 닫을 때마다 다음 것을 연다
+export const OPEN_MAX = 50;
+// 탭을 여러 개 열 때 탭 사이의 간격(초). "탭으로 열기"·"열고 바로 받기"와 열린 탭 받기가 주소로 더한 페이지를 미리 열 때 쓴다 (1.35.0, 2026-11-27).
+// 사용자가 처음엔 기본 0으로 두고 필요할 때 넣자고 했다가 기본값은 나에게 맡겼다. 0.5초로 정했다(내 판단): 50개를 열면 25초 걸리지만,
+// 한 사이트에 수십 개를 한꺼번에 요청해 막히거나 PC가 버거워지는 것을 줄이고, 열고 바로 받기에서는 먼저 연 탭이 사진이 바뀔 시간도 번다
+export const OPEN_GAPS = [0, 0.3, 0.5, 1, 2];
+export const DEFAULT_OPEN_GAP = 0.5;
+// 열린 탭 받기에서 탭을 연 지 이만큼(초) 지난 뒤에 받는다 (1.35.0. 임시 그림을 나중에 진짜 사진으로 바꾸는 사이트에 쓴다). 0이면 기다리지 않는다
+export const OPEN_WAITS = [0, 3, 5, 10, 20, 30];
 
 const SETTINGS_KEY = "settings";
 // 빼 둔 파일 이름. 받기를 누를 때 직접 끈 사진의 이름을 넣고, 다시 켜고 받으면 뺀다. 넣은 차례대로 두고 오래된 것부터 버린다
@@ -62,6 +72,9 @@ export function loadSettings() {
     showPage: SHOW_PAGE[0],
     // 열린 탭 받기가 끝나면 소리로 알릴지 (1.30.0)
     doneSound: true,
+    // 탭을 여러 개 열 때 탭 사이의 간격(초)과, 연 지 이만큼 지난 뒤에 받기(초) (1.35.0. OPEN_GAPS·OPEN_WAITS)
+    openGap: DEFAULT_OPEN_GAP,
+    openWait: 0,
   };
   try {
     const saved = { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
@@ -75,6 +88,8 @@ export function loadSettings() {
     if (!SPLIT_MODES.includes(saved.splitMode)) saved.splitMode = fallback.splitMode;
     saved.closeTabs = Boolean(saved.closeTabs);
     saved.doneSound = saved.doneSound !== false;
+    if (!OPEN_GAPS.includes(saved.openGap)) saved.openGap = fallback.openGap;
+    if (!OPEN_WAITS.includes(saved.openWait)) saved.openWait = fallback.openWait;
     if (saved.showPages === false) saved.showPage = "off";
     else if (!SHOW_PAGE.includes(saved.showPage)) saved.showPage = fallback.showPage;
     delete saved.showPages;

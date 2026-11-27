@@ -6,10 +6,11 @@
 //   JPG 한 장에 담기에 너무 길면 여러 장으로 나뉘어 와서 "제목_1.jpg", "제목_2.jpg" …로 받는다
 import { parseUrl } from "./addresses.js";
 import { linkTextOf, showToast } from "./collect.js";
+import { OPEN_GAPS, OPEN_MAX } from "./core.js";
 import { HIDE_KEY, HIDE_SITE_MAX, HIDE_SITES_MAX, loadHideRules, rulesOf, syncHideScripts, validRule, validSite } from "./hide-sites.js";
 import { BASE_FOLDER, extFromMime, extFromName, extFromUrl, originalBase, videoBase, videoExtFromMime, videoExtFromName, videoExtFromUrl, videoMime } from "./names.js";
 import { OPEN_IN, applyOpenIn, loadOpenIn, saveOpenIn } from "./opener.js";
-import { QUEUE_KEY, QUEUE_MAX } from "./queue.js";
+import { AUTO_RUN_KEY, OPENED_KEY, OPENING_KEY, QUEUE_KEY, QUEUE_MAX } from "./queue.js";
 import { PLAIN_KEY, SEARCH_KEY, cleanSelection, loadMarks, loadSearchList, searchUrl } from "./search-words.js";
 import { URL_KEY, fillTemplate, loadTemplates, templateLabel } from "./url-templates.js";
 import { UNLOCK_CSS, UNLOCK_KEY, syncUnlockScripts } from "./unlock-sites.js";
@@ -101,7 +102,19 @@ function publicJob(job) {
     dir: job.dir,
     running: job.running,
     // percent: 영상을 받는 동안 지금 받고 있는 것들이 몇 %까지 왔는지 (모르면 null)
-    files: files && { total: files.total, done: files.done, failed: files.failed, canceled: files.canceled, shownId: files.shownId, reason, percent: files.percent ?? null },
+    // retry: 받지 못한 것 [{ url, name }] (열린 탭 받기와 확장 프로그램 창의 "못 받은 N장 다시 받기", 1.35.0).
+    // 까닭과 상관없이 모두 넣는다. 서버가 오류(503 등)를 돌려줘도 크롬이 그 응답으로 이름 정하기를 먼저 불러서
+    // 여기서는 "그림이 아님"으로 세어진다 (probe-errors.mjs로 확인). 그림이 아닌 것만 빼면 잠깐의 사이트 오류도 다시 받지 못한다
+    files: files && {
+      total: files.total,
+      done: files.done,
+      failed: files.failed,
+      canceled: files.canceled,
+      shownId: files.shownId,
+      reason,
+      percent: files.percent ?? null,
+      retry: files.missed.map(({ url, name }) => ({ url, name })),
+    },
     stitch: stitch && { ...stitch },
   };
 }
@@ -254,6 +267,8 @@ function end(plan, error) {
     if (canceled) job.files.canceled++;
     const reason = REASONS[plan.reason ?? error] ?? "기타";
     job.files.reasons[reason] = (job.files.reasons[reason] ?? 0) + 1;
+    // 다시 받기(1.35.0)에 쓴다: 같은 폴더에 같은 이름으로 다시 받는다
+    job.files.missed.push({ url: plan.url, name: plan.name });
   } else {
     job.files.done++;
     // 크롬 다운로드 목록에는 폴더마다 기록 하나만 남긴다 (2026-11-16 사용자와 정함, 옵션 없이 늘 한다).
@@ -392,6 +407,10 @@ function watchBytes(job) {
   }, 1000);
 }
 
+// 다시 받기에서 넘겨받은 폴더·파일 이름 (이 워커가 전에 정해 열린 탭 받기·확장 프로그램 창에 알려 준 것이다).
+// 다른 폴더로 가는 글자(/ \)나 파일 이름에 못 쓰는 글자가 든 것은 쓰지 않는다 (빈 글을 돌려준다)
+const cleanGiven = (text) => (typeof text === "string" && text.trim() && text.length <= 240 && !/[\\/:*?"<>|]/.test(text) && !/^\.+$/.test(text.trim()) ? text : "");
+
 // kind: photo(사진, 기본) · video(영상. 확장 프로그램 창의 "영상" 목록에서 고른 것을 파일 그대로 받는다. 이어 붙이지 않는다)
 // pageUrl: 받는 페이지의 주소. 같은 페이지에서 방금 다른 종류(사진 ↔ 영상)를 받았으면 그 폴더에 함께 넣는다
 // mode: files(사진 따로) · stitch(이어 붙인 한 장) · both(둘 다)
@@ -401,6 +420,8 @@ function watchBytes(job) {
 // stitchFormat: 이어 붙인 그림의 형식(jpg · png). jpg여도 폭이 너무 넓으면 png로 받는다. jpgQuality: JPG 품질(1~100).
 // tooLong: JPG 한 장에 담기에 너무 길 때 split(여러 장으로 나눠 받기) · png(PNG 한 장으로 받기),
 // splitMode: 나누는 방법(even 균등하게 · max 최대 + 나머지)
+// retryDir·names: 못 받은 사진 다시 받기(1.35.0). 받았던 폴더(retryDir)에 처음 정한 이름(names[i], 확장자 빼고)으로 사진만 따로 받는다.
+// 새 폴더("제목 (2)")를 만들지 않고, 이어 붙이지 않는다
 async function startJob({
   folder,
   urls,
@@ -413,21 +434,31 @@ async function startJob({
   jpgQuality = 95,
   tooLong = "split",
   splitMode = "even",
+  retryDir = "",
+  names = null,
 }) {
   if (current?.running) throw new Error("앞의 사진을 아직 받는 중입니다. 다 받은 뒤에 다시 누르세요.");
   if (!urls?.length) throw new Error("고른 사진이 없습니다.");
   const video = kind === "video";
-  const withFiles = video || mode !== "stitch";
-  const withStitch = !video && mode !== "files";
+  const retry = typeof retryDir === "string" && cleanGiven(retryDir) === retryDir && retryDir !== "";
+  const withFiles = video || retry || mode !== "stitch";
+  const withStitch = !video && !retry && mode !== "files";
   // 사진을 따로 받으면 폴더를 새로 만들므로 겹치지 않는 이름을 찾는다. 이어 붙인 그림만 받으면 같은 이름일 때 크롬이 "(1)"을 붙인다.
   // 같은 페이지에서 방금 받은 폴더에 아직 이 종류(사진·영상)를 받지 않았으면 그 폴더에 함께 넣는다
-  const last = withFiles && pageUrl ? await readLastFolder() : null;
+  const last = withFiles && pageUrl && !retry ? await readLastFolder() : null;
   const together = Boolean(last) && last.pageUrl === pageUrl && last.folder === folder && !last.kinds.includes(kind);
-  const dir = together ? last.dir : withFiles ? await freeFolder(folder) : folder;
-  if (withFiles && pageUrl) {
+  const dir = retry ? retryDir : together ? last.dir : withFiles ? await freeFolder(folder) : folder;
+  if (withFiles && pageUrl && !retry) {
     chrome.storage.session.set({ [LAST_FOLDER]: { pageUrl, folder, dir, kinds: [...(together ? last.kinds : []), kind] } }).catch(() => {});
   }
   const stitchBase = stitchName || dir;
+  // 다시 받기: 그 폴더에 남겨 둔 다운로드 기록이 있으면 그것을 보이고(폴더 열기), 새로 받은 사진의 기록은 모두 지운다 (폴더마다 기록 하나)
+  let shownId = null;
+  if (retry) {
+    const filenameRegex = `[\\\\/]${escapeRegex(BASE_FOLDER)}[\\\\/]${escapeRegex(dir)}[\\\\/][^\\\\/]+$`;
+    const [kept] = await chrome.downloads.search({ filenameRegex, exists: true, limit: 1 }).catch(() => []);
+    shownId = kept?.id ?? null;
+  }
   const job = {
     id: ++jobCount,
     kind: video ? "video" : "photo",
@@ -438,7 +469,7 @@ async function startJob({
     split: tooLong !== "png",
     splitMode: splitMode === "max" ? "max" : "even",
     running: true,
-    files: withFiles ? { total: urls.length, done: 0, failed: 0, canceled: 0, reasons: {}, shownId: null, percent: null } : null,
+    files: withFiles ? { total: urls.length, done: 0, failed: 0, canceled: 0, reasons: {}, missed: [], shownId, percent: null } : null,
     stitch: withStitch
       ? {
           state: "running",
@@ -477,14 +508,15 @@ async function startJob({
       const number = String(i + 1).padStart(digits, "0");
       // 원본 이름으로 받을 때: 주소에 파일 이름이 없는 사진은 번호를 쓰고, 같은 이름이 또 나오면 " (2)"를 붙인다.
       // 영상은 늘 주소에 적힌 이름으로 받고, 이름이 없으면 "영상 001"
-      const byName = video || naming === "original";
-      let name = video ? (videoBase(url) ?? `영상 ${number}`) : (naming === "original" && originalBase(url)) || number;
+      const given = retry ? cleanGiven(names?.[i]) : "";
+      const byName = video || naming === "original" || Boolean(given);
+      let name = given || (video ? (videoBase(url) ?? `영상 ${number}`) : (naming === "original" && originalBase(url)) || number);
       if (byName) {
         const first = name;
         for (let n = 2; used.has(`${name}.${guess}`.toLowerCase()); n++) name = `${first} (${n})`;
         used.add(`${name}.${guess}`.toLowerCase());
       }
-      return { job, kind: "file", video, url, base: `${BASE_FOLDER}/${dir}/${name}`, guess, id: null, named: false, ended: false };
+      return { job, kind: "file", video, url, name, base: `${BASE_FOLDER}/${dir}/${name}`, guess, id: null, named: false, ended: false };
     });
     let next = 0;
     const worker = async () => {
@@ -947,17 +979,80 @@ async function textOpen(id, text, tab, clear) {
   if (clear && tab?.id != null) await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: clearSelection }).catch(() => {});
 }
 // 창의 "이 페이지 링크"에서 고른 링크를 탭으로 연다 (links.js의 openChosen, 1.32.0).
-// 그 탭 바로 뒤에 고른 순서대로, 뒤쪽에 연다 (지금 보는 페이지와 창은 그대로). 웹 주소만 연다
-async function openTabs(urls, tabId) {
-  const list = (Array.isArray(urls) ? urls : []).filter((url) => typeof url === "string" && /^https?:\/\//i.test(url)).slice(0, 50);
+// 그 탭 바로 뒤에 고른 순서대로, 뒤쪽에 연다 (지금 보는 페이지와 창은 그대로). 웹 주소만 연다.
+// gap: 탭 사이의 간격(초, 1.35.0. core.js의 OPEN_GAPS). 여는 동안 어디까지 열었는지 세션 저장소(OPENING_KEY)에 적어 두면
+// 열린 탭 받기 화면이 받기 단추에 "탭 여는 중"을 보인다 (다 열리기 전에 받기를 누르면 그때 있는 탭만 받게 되어서)
+async function openTabs(urls, tabId, gap) {
+  const list = (Array.isArray(urls) ? urls : []).filter((url) => typeof url === "string" && /^https?:\/\//i.test(url)).slice(0, OPEN_MAX);
+  const pause = OPEN_GAPS.includes(gap) ? gap * 1000 : 0;
   const origin = tabId != null ? await chrome.tabs.get(tabId).catch(() => null) : null;
+  const token = Math.random();
+  const windowId = origin?.windowId ?? null;
+  // now: 지금 여는 탭이 몇째인지 (1부터)
+  const progress = (now) => chrome.storage.session.set({ [OPENING_KEY]: { token, windowId, now, total: list.length, at: Date.now() } }).catch(() => {});
   let opened = 0;
-  for (const url of list) {
-    const place = origin ? { windowId: origin.windowId, index: origin.index + 1 + opened, openerTabId: origin.id } : {};
-    await chrome.tabs.create({ url, active: false, ...place });
-    opened++;
+  try {
+    for (const url of list) {
+      if (opened && pause) await new Promise((resolve) => setTimeout(resolve, pause));
+      await progress(opened + 1);
+      const place = origin ? { windowId: origin.windowId, index: origin.index + 1 + opened, openerTabId: origin.id } : {};
+      const tab = await chrome.tabs.create({ url, active: false, ...place });
+      opened++;
+      await markOpened(tab.id);
+    }
+  } finally {
+    // 그사이 다른 "탭으로 열기"가 시작했으면 그쪽 표시는 지우지 않는다
+    const now = (await chrome.storage.session.get(OPENING_KEY).catch(() => ({})))[OPENING_KEY];
+    if (!now || now.token === token) await chrome.storage.session.remove(OPENING_KEY).catch(() => {});
   }
   return { opened };
+}
+
+// 탭을 연 때를 적어 둔다 (탭 번호 → 시각). 열린 탭 받기의 "연 뒤 기다리기"(1.35.0)가 이 확장 프로그램이 연 탭을 알아본다. 한 시간 지난 것은 버린다
+let markQueue = Promise.resolve();
+function markOpened(tabId) {
+  const mark = async () => {
+    const map = (await chrome.storage.session.get(OPENED_KEY).catch(() => ({})))[OPENED_KEY] ?? {};
+    const now = Date.now();
+    for (const [id, at] of Object.entries(map)) if (now - at > 60 * 60 * 1000) delete map[id];
+    map[tabId] = now;
+    await chrome.storage.session.set({ [OPENED_KEY]: map }).catch(() => {});
+  };
+  markQueue = markQueue.then(mark, mark);
+  return markQueue;
+}
+
+// 열고 바로 받기 (links.js의 autoChosen, 1.35.0): 목록에 넣은 주소들을 그 창의 열린 탭 받기 화면에 넘겨 받게 한다.
+// 그 창을 맡은 화면이 열려 있으면 가장 최근에 본 화면을 앞에 띄우고, 없으면 새로 연다. 받을 화면 하나를 정해 표시(AUTO_RUN_KEY)에 적는다:
+// 열려 있던 화면은 탭 번호(tabId), 새로 여는 화면은 주소에 붙인 auto 값(token). 화면이 둘 열려 있어도 둘이 함께 받지 않게 하려는 것이다.
+// 팝업은 다른 탭이 앞에 오면 닫혀서 끝까지 하지 못할 수 있어 여기서 한다
+async function autoRun(windowId, urls) {
+  const list = (Array.isArray(urls) ? urls : []).filter((url) => typeof url === "string");
+  const base = chrome.runtime.getURL("batch.html");
+  let contexts = [];
+  try {
+    contexts = (await chrome.runtime.getContexts({ contextTypes: ["TAB"] })) ?? [];
+  } catch {
+    contexts = [];
+  }
+  let target = null;
+  for (const context of contexts) {
+    if (!context.documentUrl?.startsWith(base) || !(context.tabId >= 0)) continue;
+    if ((Number(new URL(context.documentUrl).searchParams.get("window")) || context.windowId) !== windowId) continue;
+    const tab = await chrome.tabs.get(context.tabId).catch(() => null);
+    if (tab && (!target || (tab.lastAccessed ?? 0) >= (target.lastAccessed ?? 0))) target = tab;
+  }
+  const at = Date.now();
+  if (target) {
+    await chrome.storage.local.set({ [AUTO_RUN_KEY]: { urls: list, windowId, tabId: target.id, at } });
+    await chrome.tabs.update(target.id, { active: true });
+    await chrome.windows.update(target.windowId, { focused: true }).catch(() => {});
+    return { tabId: target.id, opened: false };
+  }
+  const token = String(Math.random()).slice(2);
+  await chrome.storage.local.set({ [AUTO_RUN_KEY]: { urls: list, windowId, token, at } });
+  const tab = await chrome.tabs.create({ ...(windowId != null ? { windowId } : {}), url: `${base}?window=${windowId ?? ""}&auto=${token}`, active: true });
+  return { tabId: tab.id, opened: true };
 }
 
 // 시험(local-tests)이 메뉴를 누른 것처럼 부르고, 만든 메뉴를 본다 (headless 크롬에서는 오른쪽 클릭 메뉴를 누를 수 없다)
@@ -980,7 +1075,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     return true;
   }
   if (message?.type === "open-tabs") {
-    openTabs(message.urls, message.tabId).then(reply, (err) => reply({ error: err.message }));
+    openTabs(message.urls, message.tabId, message.gap).then(reply, (err) => reply({ error: err.message }));
+    return true;
+  }
+  if (message?.type === "auto-run") {
+    autoRun(message.windowId ?? null, message.urls).then(reply, (err) => reply({ error: err.message }));
     return true;
   }
   if (message?.type === "text-actions") {

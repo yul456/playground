@@ -470,6 +470,20 @@ async function start() {
   showJob(reply.job);
 }
 
+// 받지 못한 사진만 다시 받는다: 받았던 폴더에 처음 정한 이름으로 (background.js의 startJob, retryDir·names)
+async function retryMissed(done) {
+  const list = done.files?.retry ?? [];
+  if (!list.length || job?.running) return;
+  const reply = await chrome.runtime
+    .sendMessage({ type: "start", folder: done.dir, retryDir: done.dir, urls: list.map((miss) => miss.url), names: list.map((miss) => miss.name), mode: "files" })
+    .catch((err) => ({ error: err.message }));
+  if (reply?.error) {
+    showMessage(reply.error);
+    return;
+  }
+  showJob(reply.job);
+}
+
 // 이어 붙이지 못하고 뺀 사진을 번호와 까닭으로 알린다. 번호는 고른 순서(사진 따로 받을 때의 파일 이름)다
 const WHY = { fetch: "받지 못함", decode: "열지 못하는 형식" };
 const MAX_LEFT_OUT = 8;
@@ -511,6 +525,16 @@ function showJob(next) {
     else {
       const failed = files.failed ? ` · 받지 못한 사진 ${files.failed}장${files.reason ? ` (${files.reason})` : ""}` : "";
       line(`사진 ${files.done}장을 받았습니다 · 다운로드 › ${job.folder} › ${job.dir}`, failed);
+      // 받지 못한 사진만 같은 폴더에 같은 이름으로 다시 받는다 (1.35.0)
+      if (!job.running && files.retry?.length) {
+        const again = document.createElement("button");
+        again.type = "button";
+        again.className = "link retry";
+        again.id = "retryMissed";
+        again.textContent = `못 받은 ${files.retry.length}장 다시 받기`;
+        again.addEventListener("click", () => retryMissed(job));
+        status.append(again);
+      }
     }
   }
   if (stitch) {
@@ -675,7 +699,7 @@ async function init() {
   // 사이드바가 열리면 크롬이 팝업을 닫아서 기억하기 전에 끊길 수 있다. 그러면 사이드바를 닫은 뒤
   // 아이콘이 다시 팝업을 열었다 (2026-11-25 사용자 제보, 1.30.0)
   (inPanel ? setOpenIn("panel") : loadOpenIn().then(applyOpenIn)).catch(() => {});
-  links = mountLinks({ inPanel, openPanel });
+  links = mountLinks({ inPanel, openPanel, settings });
   videos = mountVideos({ getFolder: jobFolder, onStarted: showJob });
   unlock = mountUnlock();
   hider = mountHide({ inPanel });

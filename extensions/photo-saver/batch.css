@@ -64,3 +64,12 @@ h1 { font-size: 20px; }
 .tabs li.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .tabs li.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 .tabs .remove { flex: none; padding: 0 4px; background: none; color: var(--muted); font-size: 16px; line-height: 1; }
+/* 못 받은 사진만 다시 받는 단추 (1.35.0) */
+.tabs .retry { flex: none; padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: none; color: var(--accent); font-size: 12px; white-space: nowrap; }
+
+/* 이 사이트 탭만 고르기 (1.35.0): 목록 위에 사이트마다 단추 */
+.sites { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.sites[hidden] { display: none; }
+.sites button { max-width: 240px; overflow: hidden; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: none; color: var(--text); font: inherit; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
+.sites button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.sites button:disabled { opacity: 0.5; cursor: default; }
