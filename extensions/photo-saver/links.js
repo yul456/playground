@@ -11,7 +11,7 @@ import { QUEUE_MAX, loadQueue, queueAdd, queueToggle, watchQueue } from "./queue
 const PORT_NAME = "photo-saver-picker";
 const PICK_FLAG = "pickOnOpen";
 // 탭으로 열기는 한 번에 이만큼까지 (한꺼번에 너무 많이 열어 크롬과 그 사이트가 버거워지지 않게)
-const OPEN_MAX = 30;
+const OPEN_MAX = 50;
 const REVERSE_KEY = "openLinksReverse";
 
 const $ = (id) => document.getElementById(id);

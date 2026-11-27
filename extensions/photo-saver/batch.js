@@ -47,6 +47,14 @@ let windowId = Number(new URLSearchParams(location.search).get("window")) || nul
 let rows = [];
 let running = false;
 let stopping = false;
+// 일시정지 (2026-11-27 사용자 요청, 1.34.0): 받는 중에 "일시정지"를 누르면 지금 탭까지 받고 멈춘다(paused).
+// 멈춘 동안은 받는 중이 아니라서 설정·체크·목록을 고칠 수 있고 새로 연 탭도 목록에 들어온다. "이어 받기"는 그때의 설정을
+// 다시 읽어 체크된 줄을 받고, "그만두기"는 남은 것을 받지 않고 끝낸다. 전에는 멈추면 그대로 끝난 것으로 쳤다(완료 소리, 미리 연 탭 닫기)
+let paused = false;
+// 일시정지를 사이에 둔 한 번의 받기에서 센 수
+let tally = { got: 0, none: 0, failed: 0 };
+// 미리 열어 두고 아직 받지 않은 줄 (멈춘 동안에도 열어 둔다)
+const preloaded = new Set();
 let lastDownload = null; // "폴더 열기"가 보여 줄 다운로드
 let setsUi = null; // 설정 세트 고르는 줄 (sets.js)
 // 탭이 다 뜬 때 (이 화면이 열려 있는 동안 본 것만 안다). 탭 번호 → 시각
@@ -151,6 +159,12 @@ function setState(row, text, kind = "", detail = "") {
 function removeRows(list) {
   rows = rows.filter((row) => !list.includes(row));
   for (const row of list) row.cell?.li.remove();
+  // 미리 열어 두고 받지 않은 줄을 빼면 그 탭도 닫는다 (일시정지 중에 뺀 것)
+  for (const row of list) {
+    if (!preloaded.delete(row) || row.done || row.tabId == null) continue;
+    chrome.tabs.remove(row.tabId).catch(() => {});
+    row.tabId = null;
+  }
   const urls = list.filter((row) => row.added && !row.done).map((row) => row.url);
   if (urls.length) queueRemove(urls).catch(() => {});
   showEmpty();
@@ -271,11 +285,12 @@ function refresh() {
   $("toggleAll").disabled = running;
   $("reload").disabled = running;
   $("start").disabled = running || !chosen;
-  $("start").textContent = chosen ? `${chosen}개 탭 받기` : "받기";
+  $("start").textContent = paused ? (chosen ? `${chosen}개 탭 이어 받기` : "이어 받기") : chosen ? `${chosen}개 탭 받기` : "받기";
   $("start").hidden = running;
   $("stop").hidden = !running;
   $("stop").disabled = stopping;
-  $("stop").textContent = stopping ? "지금 탭까지 받고 멈춥니다" : "멈추기";
+  $("stop").textContent = stopping ? "지금 탭까지 받고 멈춥니다" : "일시정지";
+  $("quit").hidden = running || !paused;
   setsUi?.setDisabled(running);
   for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], input[name=showPage], #jpgQuality, #splitMode, #closeTabs, #doneSound")) {
     input.disabled = running;
@@ -722,7 +737,7 @@ async function addList() {
 // 윈도우 알림은 권한이 하나 늘어서 쓰지 않고, 탭 제목 · 작업 표시줄 깜빡임(창에 초점이 없을 때) · 소리(옵션)로 알린다
 const TITLE = document.title;
 // 결과를 적은 제목은 이 화면을 다시 볼 때까지 둔다 (3초 본 뒤 원래 제목으로)
-window.addEventListener("focus", () => setTimeout(() => running || (document.title = TITLE), 3000));
+window.addEventListener("focus", () => setTimeout(() => running || paused || (document.title = TITLE), 3000));
 let audio = null;
 function beep() {
   try {
@@ -779,69 +794,117 @@ function showReview(list) {
   if (list.length > 12) box.append(`외 ${list.length - 12}개`);
 }
 
+// 미리 열어 두고 받지 않은 탭을 닫는다 (받기가 끝났거나 그만둘 때)
+async function closePreloaded() {
+  for (const row of preloaded) {
+    if (row.done || row.tabId == null) continue;
+    await chrome.tabs.remove(row.tabId).catch(() => {});
+    row.tabId = null;
+  }
+  preloaded.clear();
+}
+
+// 받은 수를 적은 결과 글. skipped: 멈춰서 받지 않은 수
+function summary(skipped = 0) {
+  const parts = [`${tally.got}개 탭을 받았습니다`];
+  if (tally.none) parts.push(`받을 사진이 없던 탭 ${tally.none}개`);
+  if (tally.failed) parts.push(`받지 못한 탭 ${tally.failed}개`);
+  if (skipped) parts.push(`멈춰서 받지 않은 탭 ${skipped}개`);
+  return parts.join(" · ");
+}
+
 async function runAll() {
   const list = rows.filter((row) => row.checked);
   if (!list.length || running) return;
   readOptions();
+  // 일시정지에서 이어 받는 것이면 센 수와 다시 볼 줄을 이어 간다
+  const resumed = paused;
+  paused = false;
   running = true;
   stopping = false;
-  lastDownload = null;
-  $("openFolder").hidden = true;
-  for (const row of list) {
-    row.review = false;
-    setState(row, "기다리는 중");
+  if (!resumed) {
+    tally = { got: 0, none: 0, failed: 0 };
+    lastDownload = null;
+    $("openFolder").hidden = true;
+    for (const row of rows) row.review = false;
+    showReview([]);
   }
-  showReview([]);
+  // 멈춘 동안 체크를 끈 줄은 받지 않는다
+  for (const row of rows) {
+    if (row.waiting && !row.checked) setState(row, "받지 않음");
+    row.waiting = false;
+  }
+  for (const row of list) setState(row, preloaded.has(row) && row.tabId != null ? "미리 열어 둠" : "기다리는 중");
   refresh();
-  const count = { got: 0, none: 0, failed: 0 };
   let handled = 0;
-  const preloaded = new Set(); // 미리 연 줄
   for (const row of list) {
     if (stopping) break;
     await preload(list, handled, preloaded);
     $("status").textContent = `${handled + 1}/${list.length}번째 탭을 받는 중`;
     document.title = `받는 중 ${handled + 1}/${list.length} · 열린 탭 받기`;
     const result = await runTab(row);
+    preloaded.delete(row);
     if (result === "failed") row.review = true;
-    count[result]++;
+    tally[result]++;
     handled++;
-    // 주소로 더한 줄은 끝나면 체크를 끄고 저장소의 목록에서 뺀다(결과와 함께 이 화면에는 남는다).
-    // 받지 못한 것만 체크된 채 목록에 남아, 다시 받기를 누르면 그것만 다시 해 본다
-    if (row.added && result !== "failed") {
+    // 끝난 줄은 체크를 끈다. 받지 못한 것만 체크된 채 남아, 다시 받기를 누르면 그것만 다시 해 본다.
+    // 탭 줄도 끈다 (1.34.0): 전에는 체크가 남아서, 멈췄다가 다시 받으면 앞에서 받은 탭까지 또 받았다
+    if (result !== "failed") {
       row.checked = false;
-      row.done = true;
-      // 저장소에서 빠질 때까지 기다린다. 기다리지 않으면 마지막 줄은 아래에서 목록을 맞출 때 아직 저장소에 남아 있어,
-      // "다시 넣은 주소"로 보고 받기 전으로 되돌렸다가 곧 저장소에서 빠진 것을 보고 줄을 지웠다 (받은 결과가 목록에서 사라졌다)
-      await queueRemove([row.url]).catch(() => {});
+      if (row.added) {
+        // 주소로 더한 줄은 저장소의 목록에서도 뺀다(결과와 함께 이 화면에는 남는다).
+        // 저장소에서 빠질 때까지 기다린다. 기다리지 않으면 마지막 줄은 아래에서 목록을 맞출 때 아직 저장소에 남아 있어,
+        // "다시 넣은 주소"로 보고 받기 전으로 되돌렸다가 곧 저장소에서 빠진 것을 보고 줄을 지웠다 (받은 결과가 목록에서 사라졌다)
+        row.done = true;
+        await queueRemove([row.url]).catch(() => {});
+      }
     }
   }
-  // 멈춰서 받지 않은 줄 가운데 미리 열어 둔 탭은 닫는다
-  for (const row of list.slice(handled)) {
-    if (preloaded.has(row) && row.tabId != null) {
-      await chrome.tabs.remove(row.tabId).catch(() => {});
-      row.tabId = null;
+  const left = list.slice(handled);
+  if (left.length) {
+    // 일시정지: 남은 줄은 체크된 채 기다리고, 미리 열어 둔 탭도 그대로 둔다
+    paused = true;
+    for (const row of left) {
+      row.waiting = true;
+      setState(row, preloaded.has(row) && row.tabId != null ? "미리 열어 둠 · 이어 받기를 기다림" : "이어 받기를 기다림");
     }
-    setState(row, "받지 않음");
-  }
+  } else await closePreloaded();
   // 탭들을 앞에 띄웠으면 이 화면으로 돌아온다
   if (settings.showPage !== "off") {
     const self = await chrome.tabs.getCurrent().catch(() => null);
     if (self?.id != null) await chrome.tabs.update(self.id, { active: true }).catch(() => {});
   }
   running = false;
-  const parts = [`${count.got}개 탭을 받았습니다`];
-  if (count.none) parts.push(`받을 사진이 없던 탭 ${count.none}개`);
-  if (count.failed) parts.push(`받지 못한 탭 ${count.failed}개`);
-  if (handled < list.length) parts.push(`멈춰서 받지 않은 탭 ${list.length - handled}개`);
-  $("status").textContent = parts.join(" · ");
-  $("openFolder").hidden = lastDownload == null;
   stopping = false;
-  const review = list.filter((row) => row.review);
+  $("openFolder").hidden = lastDownload == null;
+  const review = rows.filter((row) => row.review);
   showReview(review);
-  await announce(count, review.length);
+  if (paused) {
+    // 끝난 것이 아니라서 완료 소리는 내지 않는다
+    $("status").textContent = `잠깐 멈췄습니다 · ${summary()} · 남은 탭 ${left.length}개. 설정이나 목록을 고친 뒤 이어 받기를 누르세요.`;
+    document.title = `⏸ 멈춤 · 남은 ${left.length}개 · 열린 탭 받기`;
+  } else {
+    $("status").textContent = summary();
+    await announce(tally, review.length);
+  }
   // 받는 동안 다른 곳에서 넣고 뺀 주소와 열고 닫은 탭을 목록에 맞춘다 (결과 글은 남는다)
   syncQueue(await loadQueue());
   await readTabs();
+}
+
+// 일시정지에서 그만둔다: 남은 줄은 받지 않고, 미리 열어 둔 탭은 닫는다
+async function quitPaused() {
+  if (!paused || running) return;
+  paused = false;
+  const left = rows.filter((row) => row.waiting);
+  for (const row of left) {
+    row.waiting = false;
+    setState(row, "받지 않음");
+  }
+  await closePreloaded();
+  $("status").textContent = summary(left.length);
+  document.title = TITLE;
+  refresh();
 }
 
 // 이 창의 탭이 바뀌면(새 탭, 닫힘, 다른 주소로 감, 제목·로딩 상태가 바뀜) 목록을 다시 읽는다. 받는 중에는 받기가 끝난 뒤에 읽는다.
@@ -929,6 +992,7 @@ async function init() {
     stopping = true;
     refresh();
   });
+  $("quit").addEventListener("click", quitPaused);
   $("openFolder").addEventListener("click", () => {
     if (lastDownload != null) chrome.downloads.show(lastDownload);
   });

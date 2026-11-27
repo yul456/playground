@@ -949,7 +949,7 @@ async function textOpen(id, text, tab, clear) {
 // 창의 "이 페이지 링크"에서 고른 링크를 탭으로 연다 (links.js의 openChosen, 1.32.0).
 // 그 탭 바로 뒤에 고른 순서대로, 뒤쪽에 연다 (지금 보는 페이지와 창은 그대로). 웹 주소만 연다
 async function openTabs(urls, tabId) {
-  const list = (Array.isArray(urls) ? urls : []).filter((url) => typeof url === "string" && /^https?:\/\//i.test(url)).slice(0, 30);
+  const list = (Array.isArray(urls) ? urls : []).filter((url) => typeof url === "string" && /^https?:\/\//i.test(url)).slice(0, 50);
   const origin = tabId != null ? await chrome.tabs.get(tabId).catch(() => null) : null;
   let opened = 0;
   for (const url of list) {
