@@ -241,7 +241,7 @@ function end(plan, error) {
       const names = stitch.names.filter(Boolean);
       if (names.length) stitch.name = names.length > 1 ? `${names[0]} ~ ${names.at(-1)}` : names[0];
       stitch.id = stitch.ids.find((id) => id != null) ?? null;
-      // 여러 장으로 나눠 받았으면 첫 장의 기록만 남기고 나머지는 크롬 다운로드 목록에서 지운다 (history.js)
+      // 여러 장으로 나눠 받았으면 첫 장의 기록만 남기고 나머지는 크롬 다운로드 목록에서 지운다
       for (const id of stitch.ids) if (id != null && id !== stitch.id) chrome.downloads.erase({ id }).catch(() => {});
       if (!stitch.failedParts) stitch.state = "done";
       else {
@@ -256,8 +256,10 @@ function end(plan, error) {
     job.files.reasons[reason] = (job.files.reasons[reason] ?? 0) + 1;
   } else {
     job.files.done++;
-    // 크롬 다운로드 목록에는 폴더마다 기록 하나만 남긴다 (history.js에 까닭). 처음 다 받은 사진의 기록을 남기고
-    // ("폴더 열기"와 같은 이름 폴더가 있는지 아는 데 쓴다) 나머지는 받는 대로 목록에서 지운다. 받은 파일은 그대로다
+    // 크롬 다운로드 목록에는 폴더마다 기록 하나만 남긴다 (2026-11-16 사용자와 정함, 옵션 없이 늘 한다).
+    // 사진 한 장마다 기록이 하나 생기는데 크롬은 받은 기록을 스스로 지우지 않고 켤 때마다 모두 읽어서, 수만 개가 되면 크롬이 무거워진다.
+    // 하나를 남기는 까닭: 같은 이름 폴더에 받은 적이 있는지(freeFolder)와 "폴더 열기"가 기록을 쓴다. 기록만 지우고 파일은 그대로다.
+    // 처음 다 받은 사진의 기록을 남기고 나머지는 받는 대로 목록에서 지운다
     if (job.files.shownId == null) job.files.shownId = plan.id;
     else chrome.downloads.erase({ id: plan.id }).catch(() => {});
   }

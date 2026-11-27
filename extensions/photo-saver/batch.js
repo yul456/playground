@@ -8,7 +8,6 @@
 import { describeUrls, listUrls, rangeUrls, showUrl } from "./addresses.js";
 import { QUEUE_MAX, loadQueue, queueAdd, queueRemove, queueReorder, watchQueue } from "./queue.js";
 import { JPG_QUALITIES, extKey, findImages, isDecor, isSmall, loadExts, loadRules, loadSettings, measure, newItem, saveSettings } from "./core.js";
-import { eraseRecords, findTidy } from "./history.js";
 import { SPLIT_LABELS, SPLIT_MODES } from "./imageInfo.js";
 import { BASE_FOLDER, cleanFolderName } from "./names.js";
 import { mountSets } from "./sets.js";
@@ -26,16 +25,6 @@ const SCAN_GAP = 700;
 const FRESH_SCANS = 4;
 const STEADY_SCANS = 2;
 const SETTLE_MAX = 10000;
-// 임시 그림이 진짜 사진으로 바뀌는 중이면 더 기다린다 (1.30.0, 2026-11-25 사용자와 정함).
-// 보이지 않는 탭은 크롬이 타이머를 늦춰서 사진이 천천히 바뀌고, SETTLE_MAX에서 끊으면 덜 바뀐 임시 그림을 받았다.
-// 같은 주소를 여러 번 쓰는 그림이 줄면 "바뀌는 중"으로 보고, PROGRESS_QUIET 동안 그런 일이 없으면 끝낸다.
-// 그래도 SETTLE_LONG까지만 기다린다
-const SETTLE_LONG = 30000;
-const PROGRESS_QUIET = 3000;
-// 같은 주소를 여러 번 쓰는 그림이 있으면(임시 그림일 수 있다) 찾은 것이 이만큼 잇달아 같아야 한다.
-// 바뀌는 것을 본 페이지와 방금 뜬 페이지는 BUSY_SCANS번(2.8초), 전부터 떠 있던 페이지는 REPEAT_SCANS번(1.4초: 늦춰진 타이머 1초보다 길게)
-const BUSY_SCANS = 5;
-const REPEAT_SCANS = 3;
 // 주소로 더한 페이지를 이만큼 미리 열어 둔다 (지금 받는 것 포함. 2026-11-25 사용자 제안).
 // 직접 열어 둔 탭은 받을 때까지 시간이 지나 사진이 다 바뀌어 있었다. 앞 페이지를 받는 동안 뒤 페이지가 그 시간을 번다
 const PRELOAD = 5;
@@ -287,8 +276,6 @@ function refresh() {
   $("stop").hidden = !running;
   $("stop").disabled = stopping;
   $("stop").textContent = stopping ? "지금 탭까지 받고 멈춥니다" : "멈추기";
-  $("tidyFind").disabled = running || tidying;
-  if (running) $("tidyRun").hidden = true;
   setsUi?.setDisabled(running);
   for (const input of document.querySelectorAll("input[name=mode], input[name=fileNames], input[name=stitchFormat], input[name=tooLong], input[name=showPage], #jpgQuality, #splitMode, #closeTabs, #doneSound")) {
     input.disabled = running;
@@ -419,32 +406,17 @@ async function scan(tabId) {
   }
 }
 
-// 같은 주소를 여러 번 쓰는 그림: 주소 → 쓰는 곳의 수 (둘 이상만). 임시 그림은 대개 이렇다
-const repeatsOf = (page) => new Map(page.images.filter((image) => image.count > 1).map((image) => [image.url, image.count]));
-const sum = (map) => [...map.values()].reduce((a, b) => a + b, 0);
-
 // 탭의 페이지에서 사진을 찾는다. 다 뜬 뒤에도 스크립트가 사진을 더 그릴 수 있어서, 찾은 것이 잇달아 같을 때까지 다시 찾는다.
 // fresh: 방금 열었거나 다시 불러온 페이지인가. 오류 페이지(404 등)는 더 그릴 것이 없으니 전부터 떠 있던 페이지처럼 짧게 본다.
-// 임시 그림이 진짜 사진으로 바뀌는 중이면(여러 번 쓰는 주소를 쓰는 곳이 줄면) SETTLE_MAX를 넘겨도 기다린다.
-// 결과의 leftover: 지켜보는 동안 줄던 주소(임시 그림)를 아직 쓰고 있는 곳의 수
+// 1.30.0~1.32.0은 임시 그림(같은 주소를 여러 번 쓰는 그림)이 줄어드는 동안 30초까지 더 기다렸다. 사용자가 빼자고 했다 (1.33.0, 2026-11-27)
 async function findSettled(tabId, fresh) {
   const started = Date.now();
   let page = await scan(tabId);
   let last = signature(page);
   let same = 1;
-  let repeats = repeatsOf(page);
-  let progressAt = 0; // 바뀌는 것을 마지막으로 본 때
-  const dummies = new Set(); // 줄어드는 것을 본 주소
-  const done = () => {
-    page.leftover = sum(new Map([...repeatsOf(page)].filter(([url]) => dummies.has(url))));
-    return page;
-  };
   for (;;) {
-    let need = fresh && !(page.status >= 400) ? FRESH_SCANS : STEADY_SCANS;
-    if (repeats.size && !(page.status >= 400)) need = fresh || progressAt ? BUSY_SCANS : REPEAT_SCANS;
-    const waited = Date.now() - started;
-    const busy = progressAt && Date.now() - progressAt < PROGRESS_QUIET;
-    if (same >= need || waited >= SETTLE_LONG || (waited >= SETTLE_MAX && !busy)) return done();
+    const need = fresh && !(page.status >= 400) ? FRESH_SCANS : STEADY_SCANS;
+    if (same >= need || Date.now() - started >= SETTLE_MAX) return page;
     await sleep(SCAN_GAP);
     // 그사이 다른 주소로 넘어갔으면 다 뜨기를 기다리고 방금 뜬 페이지로 친다
     if ((await ensureLoaded(tabId)).fresh) fresh = true;
@@ -452,14 +424,6 @@ async function findSettled(tabId, fresh) {
     const now = signature(page);
     same = now === last ? same + 1 : 1;
     last = now;
-    const nowRepeats = repeatsOf(page);
-    for (const [url, count] of repeats) {
-      if ((nowRepeats.get(url) ?? 0) < count) {
-        dummies.add(url);
-        progressAt = Date.now();
-      }
-    }
-    repeats = nowRepeats;
   }
 }
 
@@ -664,16 +628,10 @@ async function runTab(row) {
     setState(row, progressText(job), "now");
     const done = await waitJob(job.id, (now) => setState(row, progressText(now), "now"));
     const result = resultOf(done);
-    // 끝까지 진짜 사진으로 바뀌지 않은 임시 그림이 있었으면 알리고, 탭을 닫지 않는다 (다시 받아 볼 수 있게)
-    if (page.leftover) {
-      row.review = true;
-      result.text += ` · 임시 그림 ${page.leftover}장이 덜 바뀌었을 수 있음`;
-      result.kind = "warn";
-    }
     setState(row, result.text, result.kind, `찾은 사진 ${items.length}장 · 받는 것 ${urls.length}장${skipped.length ? ` · 뺀 것: ${skipped.join(", ")}` : ""}`);
     lastDownload = done.stitch?.id ?? done.files?.shownId ?? lastDownload;
     if (!result.got) return "failed";
-    if (settings.closeTabs && !page.leftover) await chrome.tabs.remove(row.tabId).catch(() => {});
+    if (settings.closeTabs) await chrome.tabs.remove(row.tabId).catch(() => {});
     return "got";
   } catch (err) {
     const text = String(err?.message ?? err);
@@ -684,56 +642,6 @@ async function runTab(row) {
     setState(row, message, "warn");
     return "failed";
   }
-}
-
-// 크롬 다운로드 목록 정리 (history.js) ------------------------------------------
-// 지난 기록 찾기 → 몇 개를 지울지 보이기 → 지우기. 받는 대로 하는 정리는 background.js가 한다
-
-const num = (n) => n.toLocaleString("ko-KR");
-let tidyIds = []; // 지우기로 한 기록
-let tidying = false; // 찾거나 지우는 중
-
-async function tidyFind() {
-  if (running || tidying) return;
-  tidying = true;
-  tidyIds = [];
-  $("tidyRun").hidden = true;
-  $("tidyNote").textContent = "찾는 중";
-  refresh();
-  try {
-    // 확장 프로그램 창에서 누른 받기가 돌고 있으면 그 기록을 건드리지 않게 기다리라고 한다
-    if ((await send({ type: "status" }))?.job?.running) $("tidyNote").textContent = "사진을 받는 중입니다. 다 받은 뒤에 눌러 주세요.";
-    else {
-      const plan = await findTidy();
-      tidyIds = plan.erase;
-      if (!plan.total) $("tidyNote").textContent = "이 확장 프로그램이 받은 기록이 없습니다.";
-      else if (!tidyIds.length) $("tidyNote").textContent = `정리할 기록이 없습니다 (남아 있는 기록 ${num(plan.total)}개).`;
-      else {
-        $("tidyNote").textContent = `이 확장 프로그램이 받은 기록 ${num(plan.total)}개 가운데 ${num(tidyIds.length)}개를 지우고 ${num(plan.keep)}개를 남깁니다 (폴더마다 하나, 이어 붙인 그림은 그대로). 받은 파일은 지우지 않습니다.`;
-        $("tidyRun").textContent = `기록 ${num(tidyIds.length)}개 지우기`;
-        $("tidyRun").hidden = false;
-      }
-    }
-  } catch (err) {
-    $("tidyNote").textContent = `찾지 못했습니다: ${err?.message ?? err}`;
-  }
-  tidying = false;
-  refresh();
-}
-
-async function tidyRun() {
-  if (running || tidying || !tidyIds.length) return;
-  tidying = true;
-  const ids = tidyIds;
-  tidyIds = [];
-  $("tidyRun").hidden = true;
-  refresh();
-  await eraseRecords(ids, (done) => {
-    $("tidyNote").textContent = `지우는 중 ${num(done)}/${num(ids.length)}`;
-  });
-  $("tidyNote").textContent = `기록 ${num(ids.length)}개를 크롬 다운로드 목록에서 지웠습니다.`;
-  tidying = false;
-  refresh();
 }
 
 // 주소로 더하기 ---------------------------------------------------------------
@@ -847,7 +755,7 @@ async function announce(count, review) {
   }
 }
 
-// 다시 볼 줄(받지 못한 것, 임시 그림이 덜 바뀐 것)을 받기 단추 아래에 모아 보이고, 누르면 그 줄로 간다
+// 다시 볼 줄(받지 못한 것)을 받기 단추 아래에 모아 보이고, 누르면 그 줄로 간다
 function showReview(list) {
   const box = $("review");
   box.replaceChildren();
@@ -1024,8 +932,6 @@ async function init() {
   $("openFolder").addEventListener("click", () => {
     if (lastDownload != null) chrome.downloads.show(lastDownload);
   });
-  $("tidyFind").addEventListener("click", tidyFind);
-  $("tidyRun").addEventListener("click", tidyRun);
   // 받는 중에 이 탭을 닫으면 남은 탭을 받지 못한다
   window.addEventListener("beforeunload", (event) => {
     if (running) event.preventDefault();

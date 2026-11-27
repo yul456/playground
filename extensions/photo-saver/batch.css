@@ -8,7 +8,6 @@ h1 { font-size: 20px; }
 .box { margin-bottom: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; }
 .box .hint { margin: 0 0 8px; }
 .box .hint.after { margin: 10px 0 0; }
-.box.tidy { margin: 22px 0 0; }
 .box .option { margin: 0; }
 #fileNamesRow[hidden] { display: none; }
 
@@ -28,7 +27,7 @@ h1 { font-size: 20px; }
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .actions .status { margin: 0; }
-/* 다 받은 뒤 다시 볼 줄(받지 못함, 임시 그림이 덜 바뀜) 모아 보기 */
+/* 다 받은 뒤 다시 볼 줄(받지 못함) 모아 보기 */
 .review { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 8px 0 0; color: var(--warn); }
 .review[hidden] { display: none; }
 .review button { max-width: 220px; overflow: hidden; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: none; color: inherit; font: inherit; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
